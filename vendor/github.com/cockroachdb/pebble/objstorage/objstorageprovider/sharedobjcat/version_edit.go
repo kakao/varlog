@@ -11,6 +11,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/base"
+	"github.com/cockroachdb/pebble/objstorage"
+	"github.com/cockroachdb/pebble/objstorage/shared"
 )
 
 // versionEdit is a modification to the shared object state which can be encoded
@@ -19,18 +21,26 @@ import (
 // TODO(radu): consider adding creation and deletion time for debugging purposes.
 type versionEdit struct {
 	NewObjects     []SharedObjectMetadata
-	DeletedObjects []base.FileNum
-	CreatorID      CreatorID
+	DeletedObjects []base.DiskFileNum
+	CreatorID      objstorage.CreatorID
 }
 
 const (
-	// tagNewObject is followed by the FileNum, creator ID and creator FileNum.
+	// tagNewObject is followed by the FileNum, creator ID, creator FileNum,
+	// cleanup method, optional new object tags, and ending with a 0 byte.
 	tagNewObject = 1
 	// tagDeletedObject is followed by the FileNum.
 	tagDeletedObject = 2
 	// tagCreatorID is followed by the Creator ID for this store. This ID can
 	// never change.
 	tagCreatorID = 3
+	// tagNewObjectLocator is an optional tag inside the tagNewObject payload. It
+	// is followed by the encoded length of the locator string and the string.
+	tagNewObjectLocator = 4
+	// tagNewObjectCustomName is an optional tag inside the tagNewObject payload.
+	// It is followed by the encoded length of the custom object name string
+	// followed by the string.
+	tagNewObjectCustomName = 5
 )
 
 // Object type values. We don't want to encode FileType directly because it is
@@ -60,22 +70,33 @@ func fileTypeToObjType(fileType base.FileType) (uint64, error) {
 
 // Encode encodes an edit to the specified writer.
 func (v *versionEdit) Encode(w io.Writer) error {
-	buf := make([]byte, 0, binary.MaxVarintLen64*(len(v.NewObjects)*4+len(v.DeletedObjects)*2+2))
+	buf := make([]byte, 0, binary.MaxVarintLen64*(len(v.NewObjects)*10+len(v.DeletedObjects)*2+2))
 	for _, meta := range v.NewObjects {
 		objType, err := fileTypeToObjType(meta.FileType)
 		if err != nil {
 			return err
 		}
 		buf = binary.AppendUvarint(buf, uint64(tagNewObject))
-		buf = binary.AppendUvarint(buf, uint64(meta.FileNum))
+		buf = binary.AppendUvarint(buf, uint64(meta.FileNum.FileNum()))
 		buf = binary.AppendUvarint(buf, objType)
 		buf = binary.AppendUvarint(buf, uint64(meta.CreatorID))
-		buf = binary.AppendUvarint(buf, uint64(meta.CreatorFileNum))
+		buf = binary.AppendUvarint(buf, uint64(meta.CreatorFileNum.FileNum()))
+		buf = binary.AppendUvarint(buf, uint64(meta.CleanupMethod))
+		if meta.Locator != "" {
+			buf = binary.AppendUvarint(buf, uint64(tagNewObjectLocator))
+			buf = encodeString(buf, string(meta.Locator))
+		}
+		if meta.CustomObjectName != "" {
+			buf = binary.AppendUvarint(buf, uint64(tagNewObjectCustomName))
+			buf = encodeString(buf, meta.CustomObjectName)
+		}
+		// Append 0 as the terminator for optional new object tags.
+		buf = binary.AppendUvarint(buf, 0)
 	}
 
-	for _, fileNum := range v.DeletedObjects {
+	for _, dfn := range v.DeletedObjects {
 		buf = binary.AppendUvarint(buf, uint64(tagDeletedObject))
-		buf = binary.AppendUvarint(buf, uint64(fileNum))
+		buf = binary.AppendUvarint(buf, uint64(dfn.FileNum()))
 	}
 	if v.CreatorID.IsSet() {
 		buf = binary.AppendUvarint(buf, uint64(tagCreatorID))
@@ -103,7 +124,8 @@ func (v *versionEdit) Decode(r io.Reader) error {
 		err = nil
 		switch tag {
 		case tagNewObject:
-			var fileNum, creatorID, creatorFileNum uint64
+			var fileNum, creatorID, creatorFileNum, cleanupMethod uint64
+			var locator, customName string
 			var fileType base.FileType
 			fileNum, err = binary.ReadUvarint(br)
 			if err == nil {
@@ -120,11 +142,36 @@ func (v *versionEdit) Decode(r io.Reader) error {
 				creatorFileNum, err = binary.ReadUvarint(br)
 			}
 			if err == nil {
+				cleanupMethod, err = binary.ReadUvarint(br)
+			}
+			for err == nil {
+				var optionalTag uint64
+				optionalTag, err = binary.ReadUvarint(br)
+				if err != nil || optionalTag == 0 {
+					break
+				}
+
+				switch optionalTag {
+				case tagNewObjectLocator:
+					locator, err = decodeString(br)
+
+				case tagNewObjectCustomName:
+					customName, err = decodeString(br)
+
+				default:
+					err = errors.Newf("unknown newObject tag %d", optionalTag)
+				}
+			}
+
+			if err == nil {
 				v.NewObjects = append(v.NewObjects, SharedObjectMetadata{
-					FileNum:        base.FileNum(fileNum),
-					FileType:       fileType,
-					CreatorID:      CreatorID(creatorID),
-					CreatorFileNum: base.FileNum(creatorFileNum),
+					FileNum:          base.FileNum(fileNum).DiskFileNum(),
+					FileType:         fileType,
+					CreatorID:        objstorage.CreatorID(creatorID),
+					CreatorFileNum:   base.FileNum(creatorFileNum).DiskFileNum(),
+					CleanupMethod:    objstorage.SharedCleanupMethod(cleanupMethod),
+					Locator:          shared.Locator(locator),
+					CustomObjectName: customName,
 				})
 			}
 
@@ -132,19 +179,20 @@ func (v *versionEdit) Decode(r io.Reader) error {
 			var fileNum uint64
 			fileNum, err = binary.ReadUvarint(br)
 			if err == nil {
-				v.DeletedObjects = append(v.DeletedObjects, base.FileNum(fileNum))
+				v.DeletedObjects = append(v.DeletedObjects, base.FileNum(fileNum).DiskFileNum())
 			}
 
 		case tagCreatorID:
 			var id uint64
 			id, err = binary.ReadUvarint(br)
 			if err == nil {
-				v.CreatorID = CreatorID(id)
+				v.CreatorID = objstorage.CreatorID(id)
 			}
 
 		default:
-			// Ignore unknown tags.
+			err = errors.Newf("unknown tag %d", tag)
 		}
+
 		if err != nil {
 			if err == io.EOF {
 				return errCorruptCatalog
@@ -153,6 +201,27 @@ func (v *versionEdit) Decode(r io.Reader) error {
 		}
 	}
 	return nil
+}
+
+func encodeString(buf []byte, s string) []byte {
+	buf = binary.AppendUvarint(buf, uint64(len(s)))
+	buf = append(buf, []byte(s)...)
+	return buf
+}
+
+func decodeString(br io.ByteReader) (string, error) {
+	length, err := binary.ReadUvarint(br)
+	if err != nil || length == 0 {
+		return "", err
+	}
+	buf := make([]byte, length)
+	for i := range buf {
+		buf[i], err = br.ReadByte()
+		if err != nil {
+			return "", err
+		}
+	}
+	return string(buf), nil
 }
 
 var errCorruptCatalog = base.CorruptionErrorf("pebble: corrupt shared object catalog")

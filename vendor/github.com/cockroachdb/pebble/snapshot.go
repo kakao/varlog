@@ -5,10 +5,11 @@
 package pebble
 
 import (
+	"context"
 	"io"
 	"math"
 
-	"github.com/cockroachdb/pebble/internal/keyspan"
+	"github.com/cockroachdb/pebble/rangekey"
 )
 
 // Snapshot provides a read-only point-in-time view of the DB state.
@@ -44,10 +45,16 @@ func (s *Snapshot) Get(key []byte) ([]byte, io.Closer, error) {
 // return false). The iterator can be positioned via a call to SeekGE,
 // SeekLT, First or Last.
 func (s *Snapshot) NewIter(o *IterOptions) *Iterator {
+	return s.NewIterWithContext(context.Background(), o)
+}
+
+// NewIterWithContext is like NewIter, and additionally accepts a context for
+// tracing.
+func (s *Snapshot) NewIterWithContext(ctx context.Context, o *IterOptions) *Iterator {
 	if s.db == nil {
 		panic(ErrClosed)
 	}
-	return s.db.newIter(nil /* batch */, s, o)
+	return s.db.newIter(ctx, nil /* batch */, s, o)
 }
 
 // ScanInternal scans all internal keys within the specified bounds, truncating
@@ -57,22 +64,27 @@ func (s *Snapshot) NewIter(o *IterOptions) *Iterator {
 // See comment on db.ScanInternal for the behaviour that can be expected of
 // point keys deleted by range dels and keys masked by range keys.
 func (s *Snapshot) ScanInternal(
+	ctx context.Context,
 	lower, upper []byte,
 	visitPointKey func(key *InternalKey, value LazyValue) error,
 	visitRangeDel func(start, end []byte, seqNum uint64) error,
-	visitRangeKey func(start, end []byte, keys []keyspan.Key) error,
+	visitRangeKey func(start, end []byte, keys []rangekey.Key) error,
+	visitSharedFile func(sst *SharedSSTMeta) error,
 ) error {
 	if s.db == nil {
 		panic(ErrClosed)
 	}
-	iter := s.db.newInternalIter(s, &IterOptions{
-		KeyTypes:   IterKeyTypePointsAndRanges,
-		LowerBound: lower,
-		UpperBound: upper,
+	iter := s.db.newInternalIter(s, &scanInternalOptions{
+		IterOptions: IterOptions{
+			KeyTypes:   IterKeyTypePointsAndRanges,
+			LowerBound: lower,
+			UpperBound: upper,
+		},
+		skipSharedLevels: visitSharedFile != nil,
 	})
 	defer iter.close()
 
-	return scanInternalImpl(lower, iter, visitPointKey, visitRangeDel, visitRangeKey)
+	return scanInternalImpl(ctx, lower, upper, iter, visitPointKey, visitRangeDel, visitRangeKey, visitSharedFile)
 }
 
 // Close closes the snapshot, releasing its resources. Close must be called.

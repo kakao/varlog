@@ -5,6 +5,7 @@
 package pebble
 
 import (
+	"context"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -59,20 +60,20 @@ type flushableEntry struct {
 	// flushable is a memTable, when the reader refs drops to zero, the writer
 	// refs will already be zero because the memtable will have been flushed and
 	// that only occurs once the writer refs drops to zero.
-	readerRefs int32
+	readerRefs atomic.Int32
 	// Closure to invoke to release memory accounting.
 	releaseMemAccounting func()
 	// unrefFiles, if not nil, should be invoked to decrease the ref count of
 	// files which are backing the flushable.
-	unrefFiles func() []*fileMetadata
+	unrefFiles func() []*fileBacking
 	// deleteFnLocked should be called if the caller is holding DB.mu.
-	deleteFnLocked func(obsolete []*fileMetadata)
+	deleteFnLocked func(obsolete []*fileBacking)
 	// deleteFn should be called if the caller is not holding DB.mu.
-	deleteFn func(obsolete []*fileMetadata)
+	deleteFn func(obsolete []*fileBacking)
 }
 
 func (e *flushableEntry) readerRef() {
-	switch v := atomic.AddInt32(&e.readerRefs, 1); {
+	switch v := e.readerRefs.Add(1); {
 	case v <= 1:
 		panic(fmt.Sprintf("pebble: inconsistent reference count: %d", v))
 	}
@@ -89,9 +90,9 @@ func (e *flushableEntry) readerUnrefLocked(deleteFiles bool) {
 }
 
 func (e *flushableEntry) readerUnrefHelper(
-	deleteFiles bool, deleteFn func(obsolete []*manifest.FileMetadata),
+	deleteFiles bool, deleteFn func(obsolete []*fileBacking),
 ) {
-	switch v := atomic.AddInt32(&e.readerRefs, -1); {
+	switch v := e.readerRefs.Add(-1); {
 	case v < 0:
 		panic(fmt.Sprintf("pebble: inconsistent reference count: %d", v))
 	case v == 0:
@@ -115,7 +116,7 @@ type flushableList []*flushableEntry
 // ingestedFlushable is the implementation of the flushable interface for the
 // ingesting sstables which are added to the flushable list.
 type ingestedFlushable struct {
-	files            []*fileMetadata
+	files            []physicalMeta
 	cmp              Compare
 	split            Split
 	newIters         tableNewIters
@@ -135,25 +136,31 @@ func newIngestedFlushable(
 	newIters tableNewIters,
 	newRangeKeyIters keyspan.TableNewSpanIter,
 ) *ingestedFlushable {
+	var physicalFiles []physicalMeta
+	var hasRangeKeys bool
+	for _, f := range files {
+		if f.HasRangeKeys {
+			hasRangeKeys = true
+		}
+		physicalFiles = append(physicalFiles, f.PhysicalMeta())
+	}
+
 	ret := &ingestedFlushable{
-		files:            files,
+		files:            physicalFiles,
 		cmp:              cmp,
 		split:            split,
 		newIters:         newIters,
 		newRangeKeyIters: newRangeKeyIters,
 		// slice is immutable and can be set once and used many times.
-		slice: manifest.NewLevelSliceKeySorted(cmp, files),
-	}
-
-	for _, f := range files {
-		if f.HasRangeKeys {
-			ret.hasRangeKeys = true
-			break
-		}
+		slice:        manifest.NewLevelSliceKeySorted(cmp, files),
+		hasRangeKeys: hasRangeKeys,
 	}
 
 	return ret
 }
+
+// TODO(sumeer): ingestedFlushable iters also need to plumb context for
+// tracing.
 
 func (s *ingestedFlushable) newIter(o *IterOptions) internalIterator {
 	var opts IterOptions
@@ -177,11 +184,11 @@ func (s *ingestedFlushable) newFlushIter(o *IterOptions, bytesFlushed *uint64) i
 }
 
 func (s *ingestedFlushable) constructRangeDelIter(
-	file *manifest.FileMetadata, _ *keyspan.SpanIterOptions,
+	file *manifest.FileMetadata, _ keyspan.SpanIterOptions,
 ) (keyspan.FragmentIterator, error) {
 	// Note that the keyspan level iter expects a non-nil iterator to be
 	// returned even if there is an error. So, we return the emptyKeyspanIter.
-	iter, rangeDelIter, err := s.newIters(file, nil, internalIterOpts{})
+	iter, rangeDelIter, err := s.newIters(context.Background(), file, nil, internalIterOpts{})
 	if err != nil {
 		return emptyKeyspanIter, err
 	}

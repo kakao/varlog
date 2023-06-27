@@ -6,9 +6,9 @@ package pebble
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"sync"
-	"sync/atomic"
 	"unsafe"
 
 	"github.com/cockroachdb/errors"
@@ -177,6 +177,11 @@ type LazyValue = base.LazyValue
 // Next, Prev) return without advancing if the iterator has an accumulated
 // error.
 type Iterator struct {
+	// The context is stored here since (a) Iterators are expected to be
+	// short-lived (since they pin memtables and sstables), (b) plumbing a
+	// context into every method is very painful, (c) they do not (yet) respect
+	// context cancellation and are only used for tracing.
+	ctx       context.Context
 	opts      IterOptions
 	merge     Merge
 	comparer  base.Comparer
@@ -563,7 +568,10 @@ func (i *Iterator) findNextEntry(limit []byte) {
 			i.iterValidityState = IterValid
 			return
 
-		case InternalKeyKindDelete, InternalKeyKindSingleDelete:
+		case InternalKeyKindDelete, InternalKeyKindSingleDelete, InternalKeyKindDeleteSized:
+			// NB: treating InternalKeyKindSingleDelete as equivalent to DEL is not
+			// only simpler, but is also necessary for correctness due to
+			// InternalKeyKindSSTableInternalObsoleteBit.
 			i.nextUserKey()
 			continue
 
@@ -626,7 +634,10 @@ func (i *Iterator) nextPointCurrentUserKey() bool {
 		i.err = base.CorruptionErrorf("pebble: unexpected range key set mid-user key")
 		return false
 
-	case InternalKeyKindDelete, InternalKeyKindSingleDelete:
+	case InternalKeyKindDelete, InternalKeyKindSingleDelete, InternalKeyKindDeleteSized:
+		// NB: treating InternalKeyKindSingleDelete as equivalent to DEL is not
+		// only simpler, but is also necessary for correctness due to
+		// InternalKeyKindSSTableInternalObsoleteBit.
 		return false
 
 	case InternalKeyKindSet, InternalKeyKindSetWithDelete:
@@ -805,14 +816,14 @@ func (i *Iterator) sampleRead() {
 		return
 	}
 	if numOverlappingLevels >= 2 {
-		allowedSeeks := atomic.AddInt64(&topFile.Atomic.AllowedSeeks, -1)
+		allowedSeeks := topFile.AllowedSeeks.Add(-1)
 		if allowedSeeks == 0 {
 
 			// Since the compaction queue can handle duplicates, we can keep
 			// adding to the queue even once allowedSeeks hits 0.
 			// In fact, we NEED to keep adding to the queue, because the queue
 			// is small and evicts older and possibly useful compactions.
-			atomic.AddInt64(&topFile.Atomic.AllowedSeeks, topFile.InitAllowedSeeks)
+			topFile.AllowedSeeks.Add(topFile.InitAllowedSeeks)
 
 			read := readCompaction{
 				start:   topFile.SmallestPointKey.UserKey,
@@ -924,7 +935,7 @@ func (i *Iterator) findPrevEntry(limit []byte) {
 			// return the key even if the MERGE point key is deleted.
 			rangeKeyBoundary = true
 
-		case InternalKeyKindDelete, InternalKeyKindSingleDelete:
+		case InternalKeyKindDelete, InternalKeyKindSingleDelete, InternalKeyKindDeleteSized:
 			i.value = LazyValue{}
 			i.iterValidityState = IterExhausted
 			valueMerger = nil
@@ -1087,9 +1098,13 @@ func (i *Iterator) mergeNext(key InternalKey, valueMerger ValueMerger) {
 			return
 		}
 		switch key.Kind() {
-		case InternalKeyKindDelete, InternalKeyKindSingleDelete:
+		case InternalKeyKindDelete, InternalKeyKindSingleDelete, InternalKeyKindDeleteSized:
 			// We've hit a deletion tombstone. Return everything up to this
 			// point.
+			//
+			// NB: treating InternalKeyKindSingleDelete as equivalent to DEL is not
+			// only simpler, but is also necessary for correctness due to
+			// InternalKeyKindSSTableInternalObsoleteBit.
 			return
 
 		case InternalKeyKindSet, InternalKeyKindSetWithDelete:
@@ -2546,10 +2561,10 @@ func (i *Iterator) SetOptions(o *IterOptions) {
 	// Iterators created through NewExternalIter have a different iterator
 	// initialization process.
 	if i.externalReaders != nil {
-		finishInitializingExternal(i)
+		finishInitializingExternal(i.ctx, i)
 		return
 	}
-	finishInitializingIter(i.alloc)
+	finishInitializingIter(i.ctx, i.alloc)
 }
 
 func (i *Iterator) invalidate() {
@@ -2629,6 +2644,12 @@ type CloneOptions struct {
 // will cause an increase in memory and disk usage (use NewSnapshot for that
 // purpose).
 func (i *Iterator) Clone(opts CloneOptions) (*Iterator, error) {
+	return i.CloneWithContext(context.Background(), opts)
+}
+
+// CloneWithContext is like Clone, and additionally accepts a context for
+// tracing.
+func (i *Iterator) CloneWithContext(ctx context.Context, opts CloneOptions) (*Iterator, error) {
 	if opts.IterOptions == nil {
 		opts.IterOptions = &i.opts
 	}
@@ -2644,6 +2665,7 @@ func (i *Iterator) Clone(opts CloneOptions) (*Iterator, error) {
 	buf := iterAllocPool.Get().(*iterAlloc)
 	dbi := &buf.dbi
 	*dbi = Iterator{
+		ctx:                 ctx,
 		opts:                *opts.IterOptions,
 		alloc:               buf,
 		merge:               i.merge,
@@ -2666,7 +2688,7 @@ func (i *Iterator) Clone(opts CloneOptions) (*Iterator, error) {
 		dbi.batchSeqNum = (uint64(len(i.batch.data)) | base.InternalKeySeqNumBatch)
 	}
 
-	return finishInitializingIter(buf), nil
+	return finishInitializingIter(ctx, buf), nil
 }
 
 // Merge adds all of the argument's statistics to the receiver. It may be used
@@ -2701,10 +2723,11 @@ func (stats *IteratorStats) SafeFormat(s redact.SafePrinter, verb rune) {
 	}
 	if stats.InternalStats != (InternalIteratorStats{}) {
 		s.SafeString(",\n(internal-stats: ")
-		s.Printf("(block-bytes: (total %s, cached %s)), "+
+		s.Printf("(block-bytes: (total %s, cached %s, read-time %s)), "+
 			"(points: (count %s, key-bytes %s, value-bytes %s, tombstoned %s))",
 			humanize.IEC.Uint64(stats.InternalStats.BlockBytes),
 			humanize.IEC.Uint64(stats.InternalStats.BlockBytesInCache),
+			humanize.FormattedString(stats.InternalStats.BlockReadDuration.String()),
 			humanize.SI.Uint64(stats.InternalStats.PointCount),
 			humanize.SI.Uint64(stats.InternalStats.KeyBytes),
 			humanize.SI.Uint64(stats.InternalStats.ValueBytes),
