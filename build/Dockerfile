@@ -37,7 +37,7 @@ COPY . .
 RUN CGO_ENABLED=0 make build GCFLAGS=""
 
 
-FROM python:${PYTHON_VERSION}-slim AS base-cgo
+FROM python:${PYTHON_VERSION} AS base-cgo
 ARG DEBIAN_FRONTEND
 RUN groupadd -r varlog && useradd -r -g varlog varlog --home-dir=/varlog \
     && mkdir /varlog \
