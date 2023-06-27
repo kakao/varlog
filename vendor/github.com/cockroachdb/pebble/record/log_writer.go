@@ -23,7 +23,7 @@ var walSyncLabels = pprof.Labels("pebble", "wal-sync")
 
 type block struct {
 	// buf[:written] has already been filled with fragments. Updated atomically.
-	written int32
+	written atomic.Int32
 	// buf[:flushed] has already been flushed to w.
 	flushed int32
 	buf     [blockSize]byte
@@ -69,7 +69,7 @@ type syncQueue struct {
 	//
 	// The head index is stored in the most-significant bits so that we can
 	// atomically add to it and the overflow is harmless.
-	headTail uint64
+	headTail atomic.Uint64
 
 	// slots is a ring buffer of values stored in this queue. The size must be a
 	// power of 2. A slot is in use until the tail index has moved beyond it.
@@ -78,7 +78,7 @@ type syncQueue struct {
 	// blocked is an atomic boolean which indicates whether syncing is currently
 	// blocked or can proceed. It is used by the implementation of
 	// min-sync-interval to block syncing until the min interval has passed.
-	blocked uint32
+	blocked atomic.Bool
 }
 
 const dequeueBits = 32
@@ -91,7 +91,7 @@ func (q *syncQueue) unpack(ptrs uint64) (head, tail uint32) {
 }
 
 func (q *syncQueue) push(wg *sync.WaitGroup, err *error) {
-	ptrs := atomic.LoadUint64(&q.headTail)
+	ptrs := q.headTail.Load()
 	head, tail := q.unpack(ptrs)
 	if (tail+uint32(len(q.slots)))&(1<<dequeueBits-1) == head {
 		panic("pebble: queue is full")
@@ -103,15 +103,15 @@ func (q *syncQueue) push(wg *sync.WaitGroup, err *error) {
 
 	// Increment head. This passes ownership of slot to dequeue and acts as a
 	// store barrier for writing the slot.
-	atomic.AddUint64(&q.headTail, 1<<dequeueBits)
+	q.headTail.Add(1 << dequeueBits)
 }
 
 func (q *syncQueue) setBlocked() {
-	atomic.StoreUint32(&q.blocked, 1)
+	q.blocked.Store(true)
 }
 
 func (q *syncQueue) clearBlocked() {
-	atomic.StoreUint32(&q.blocked, 0)
+	q.blocked.Store(false)
 }
 
 func (q *syncQueue) empty() bool {
@@ -124,10 +124,10 @@ func (q *syncQueue) empty() bool {
 // min-sync-interval. It additionally returns the real length of this queue,
 // regardless of whether syncing is blocked.
 func (q *syncQueue) load() (head, tail, realLength uint32) {
-	ptrs := atomic.LoadUint64(&q.headTail)
+	ptrs := q.headTail.Load()
 	head, tail = q.unpack(ptrs)
 	realLength = head - tail
-	if atomic.LoadUint32(&q.blocked) == 1 {
+	if q.blocked.Load() {
 		return 0, 0, realLength
 	}
 	return head, tail, realLength
@@ -152,7 +152,7 @@ func (q *syncQueue) pop(head, tail uint32, err error, queueSemChan chan struct{}
 		// We need to bump the tail count before signalling the wait group as
 		// signalling the wait group can trigger release a blocked goroutine which
 		// will try to enqueue before we've "freed" space in the queue.
-		atomic.AddUint64(&q.headTail, 1)
+		q.headTail.Add(1)
 		wg.Done()
 		// Is always non-nil in production.
 		if queueSemChan != nil {
@@ -401,7 +401,7 @@ func (w *LogWriter) flushLoop(context.Context) {
 	//   before syncing work. The guarantee of this code is that when a sync is
 	//   requested, any previously queued flush work will be synced. This
 	//   motivates reading the syncing work (f.syncQ.load()) before picking up
-	//   the flush work (atomic.LoadInt32(&w.block.written)).
+	//   the flush work (w.block.written.Load()).
 
 	// The list of full blocks that need to be written. This is copied from
 	// f.pending on every loop iteration, though the number of elements is small
@@ -412,7 +412,7 @@ func (w *LogWriter) flushLoop(context.Context) {
 			// Grab the portion of the current block that requires flushing. Note that
 			// the current block can be added to the pending blocks list after we release
 			// the flusher lock, but it won't be part of pending.
-			written := atomic.LoadInt32(&w.block.written)
+			written := w.block.written.Load()
 			if len(f.pending) > 0 || written > w.block.flushed || !f.syncQ.empty() {
 				break
 			}
@@ -448,7 +448,7 @@ func (w *LogWriter) flushLoop(context.Context) {
 		// be ordered after we get the list of sync waiters from syncQ in order to
 		// prevent a race where a waiter adds itself to syncQ, but this thread
 		// picks up the entry in syncQ and not the buffered data.
-		written := atomic.LoadInt32(&w.block.written)
+		written := w.block.written.Load()
 		data := w.block.buf[w.block.flushed:written]
 		w.block.flushed = written
 
@@ -551,7 +551,7 @@ func (w *LogWriter) flushBlock(b *block) error {
 	if _, err := w.w.Write(b.buf[b.flushed:]); err != nil {
 		return err
 	}
-	b.written = 0
+	b.written.Store(0)
 	b.flushed = 0
 	w.free.Lock()
 	w.free.blocks = append(w.free.blocks, b)
@@ -562,7 +562,7 @@ func (w *LogWriter) flushBlock(b *block) error {
 
 // queueBlock queues the current block for writing to the underlying writer,
 // allocates a new block and reserves space for the next header.
-func (w *LogWriter) queueBlock() {
+func (w *LogWriter) queueBlock() (waitDuration time.Duration) {
 	// Allocate a new block, blocking until one is available. We do this first
 	// because w.block is protected by w.flusher.Mutex.
 	w.free.Lock()
@@ -571,9 +571,11 @@ func (w *LogWriter) queueBlock() {
 			w.free.allocated++
 			w.free.blocks = append(w.free.blocks, &block{})
 		} else {
+			now := time.Now()
 			for len(w.free.blocks) == 0 {
 				w.free.cond.Wait()
 			}
+			waitDuration = time.Since(now)
 		}
 	}
 	nextBlock := w.free.blocks[len(w.free.blocks)-1]
@@ -589,6 +591,28 @@ func (w *LogWriter) queueBlock() {
 	f.Unlock()
 
 	w.blockNum++
+	return waitDuration
+}
+
+// ReserveAllFreeBlocksForTesting is used to only for testing.
+func (w *LogWriter) ReserveAllFreeBlocksForTesting() (releaseFunc func()) {
+	w.free.Lock()
+	defer w.free.Unlock()
+	free := w.free.blocks
+	w.free.blocks = nil
+	return func() {
+		w.free.Lock()
+		defer w.free.Unlock()
+		// It is possible that someone has pushed a free block and w.free.blocks
+		// is no longer nil. That is harmless. Also, the waiter loops on the
+		// condition len(w.free.blocks) == 0, so to actually unblock it we need to
+		// give it a free block.
+		if len(free) == 0 {
+			free = append(free, &block{})
+		}
+		w.free.blocks = free
+		w.free.cond.Broadcast()
+	}
 }
 
 // Close flushes and syncs any unwritten data and closes the writer.
@@ -640,7 +664,8 @@ func (w *LogWriter) Close() error {
 // of the record.
 // External synchronisation provided by commitPipeline.mu.
 func (w *LogWriter) WriteRecord(p []byte) (int64, error) {
-	return w.SyncRecord(p, nil, nil)
+	logSize, _, err := w.SyncRecord(p, nil, nil)
+	return logSize, err
 }
 
 // SyncRecord writes a complete record. If wg!= nil the record will be
@@ -648,9 +673,11 @@ func (w *LogWriter) WriteRecord(p []byte) (int64, error) {
 // the wait group upon completion. Returns the offset just past the end of the
 // record.
 // External synchronisation provided by commitPipeline.mu.
-func (w *LogWriter) SyncRecord(p []byte, wg *sync.WaitGroup, err *error) (int64, error) {
+func (w *LogWriter) SyncRecord(
+	p []byte, wg *sync.WaitGroup, err *error,
+) (logSize int64, waitDuration time.Duration, err2 error) {
 	if w.err != nil {
-		return -1, w.err
+		return -1, 0, w.err
 	}
 
 	// The `i == 0` condition ensures we handle empty records. Such records can
@@ -658,7 +685,9 @@ func (w *LogWriter) SyncRecord(p []byte, wg *sync.WaitGroup, err *error) (int64,
 	// MANIFEST is currently written using Writer, it is good to support the same
 	// semantics with LogWriter.
 	for i := 0; i == 0 || len(p) > 0; i++ {
-		p = w.emitFragment(i, p)
+		var wd time.Duration
+		p, wd = w.emitFragment(i, p)
+		waitDuration += wd
 	}
 
 	if wg != nil {
@@ -672,35 +701,35 @@ func (w *LogWriter) SyncRecord(p []byte, wg *sync.WaitGroup, err *error) (int64,
 		f.ready.Signal()
 	}
 
-	offset := w.blockNum*blockSize + int64(w.block.written)
+	offset := w.blockNum*blockSize + int64(w.block.written.Load())
 	// Note that we don't return w.err here as a concurrent call to Close would
 	// race with our read. That's ok because the only error we could be seeing is
 	// one to syncing for which the caller can receive notification of by passing
 	// in a non-nil err argument.
-	return offset, nil
+	return offset, waitDuration, nil
 }
 
 // Size returns the current size of the file.
 // External synchronisation provided by commitPipeline.mu.
 func (w *LogWriter) Size() int64 {
-	return w.blockNum*blockSize + int64(w.block.written)
+	return w.blockNum*blockSize + int64(w.block.written.Load())
 }
 
 func (w *LogWriter) emitEOFTrailer() {
 	// Write a recyclable chunk header with a different log number.  Readers
 	// will treat the header as EOF when the log number does not match.
 	b := w.block
-	i := b.written
+	i := b.written.Load()
 	binary.LittleEndian.PutUint32(b.buf[i+0:i+4], 0) // CRC
 	binary.LittleEndian.PutUint16(b.buf[i+4:i+6], 0) // Size
 	b.buf[i+6] = recyclableFullChunkType
 	binary.LittleEndian.PutUint32(b.buf[i+7:i+11], w.logNum+1) // Log number
-	atomic.StoreInt32(&b.written, i+int32(recyclableHeaderSize))
+	b.written.Store(i + int32(recyclableHeaderSize))
 }
 
-func (w *LogWriter) emitFragment(n int, p []byte) []byte {
+func (w *LogWriter) emitFragment(n int, p []byte) (remainingP []byte, waitDuration time.Duration) {
 	b := w.block
-	i := b.written
+	i := b.written.Load()
 	first := n == 0
 	last := blockSize-i-recyclableHeaderSize >= int32(len(p))
 
@@ -724,17 +753,17 @@ func (w *LogWriter) emitFragment(n int, p []byte) []byte {
 	j := i + int32(recyclableHeaderSize+r)
 	binary.LittleEndian.PutUint32(b.buf[i+0:i+4], crc.New(b.buf[i+6:j]).Value())
 	binary.LittleEndian.PutUint16(b.buf[i+4:i+6], uint16(r))
-	atomic.StoreInt32(&b.written, j)
+	b.written.Store(j)
 
-	if blockSize-b.written < recyclableHeaderSize {
+	if blockSize-b.written.Load() < recyclableHeaderSize {
 		// There is no room for another fragment in the block, so fill the
 		// remaining bytes with zeros and queue the block for flushing.
-		for i := b.written; i < blockSize; i++ {
+		for i := b.written.Load(); i < blockSize; i++ {
 			b.buf[i] = 0
 		}
-		w.queueBlock()
+		waitDuration = w.queueBlock()
 	}
-	return p[r:]
+	return p[r:], waitDuration
 }
 
 // Metrics must be called after Close. The callee will no longer modify the

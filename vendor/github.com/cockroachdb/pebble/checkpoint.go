@@ -135,6 +135,9 @@ func mkdirAllAndSyncParents(fs vfs.FS, destDir string) (vfs.File, error) {
 // space overhead for a checkpoint if hard links are disabled. Also beware that
 // even if hard links are used, the space overhead for the checkpoint will
 // increase over time as the DB performs compactions.
+//
+// TODO(bananabrick): Test checkpointing of virtual sstables once virtual
+// sstables is running e2e.
 func (d *DB) Checkpoint(
 	destDir string, opts ...CheckpointOption,
 ) (
@@ -184,11 +187,14 @@ func (d *DB) Checkpoint(
 	// file number.
 	memQueue := d.mu.mem.queue
 	current := d.mu.versions.currentVersion()
-	formatVers := d.mu.formatVers.vers
+	formatVers := d.FormatMajorVersion()
 	manifestFileNum := d.mu.versions.manifestFileNum
 	manifestSize := d.mu.versions.manifest.Size()
 	optionsFileNum := d.optionsFileNum
-
+	virtualBackingFiles := make(map[base.DiskFileNum]struct{})
+	for diskFileNum := range d.mu.versions.fileBackingMap {
+		virtualBackingFiles[diskFileNum] = struct{}{}
+	}
 	// Release the manifest and DB.mu so we don't block other operations on
 	// the database.
 	d.mu.versions.logUnlock()
@@ -254,7 +260,9 @@ func (d *DB) Checkpoint(
 	}
 
 	var excludedFiles map[deletedFileEntry]*fileMetadata
-
+	// Set of FileBacking.DiskFileNum which will be required by virtual sstables
+	// in the checkpoint.
+	requiredVirtualBackingFiles := make(map[base.DiskFileNum]struct{})
 	// Link or copy the sstables.
 	for l := range current.Levels {
 		iter := current.Levels[l].Iter()
@@ -270,7 +278,15 @@ func (d *DB) Checkpoint(
 				continue
 			}
 
-			srcPath := base.MakeFilepath(fs, d.dirname, fileTypeTable, f.FileNum)
+			fileBacking := f.FileBacking
+			if f.Virtual {
+				if _, ok := requiredVirtualBackingFiles[fileBacking.DiskFileNum]; ok {
+					continue
+				}
+				requiredVirtualBackingFiles[fileBacking.DiskFileNum] = struct{}{}
+			}
+
+			srcPath := base.MakeFilepath(fs, d.dirname, fileTypeTable, fileBacking.DiskFileNum)
 			destPath := fs.PathJoin(destDir, fs.PathBase(srcPath))
 			ckErr = vfs.LinkOrCopy(fs, srcPath, destPath)
 			if ckErr != nil {
@@ -279,7 +295,19 @@ func (d *DB) Checkpoint(
 		}
 	}
 
-	ckErr = d.writeCheckpointManifest(fs, formatVers, destDir, dir, manifestFileNum, manifestSize, excludedFiles)
+	var removeBackingTables []base.DiskFileNum
+	for diskFileNum := range virtualBackingFiles {
+		if _, ok := requiredVirtualBackingFiles[diskFileNum]; !ok {
+			// The backing sstable associated with fileNum is no longer
+			// required.
+			removeBackingTables = append(removeBackingTables, diskFileNum)
+		}
+	}
+
+	ckErr = d.writeCheckpointManifest(
+		fs, formatVers, destDir, dir, manifestFileNum.DiskFileNum(), manifestSize,
+		excludedFiles, removeBackingTables,
+	)
 	if ckErr != nil {
 		return ckErr
 	}
@@ -292,7 +320,7 @@ func (d *DB) Checkpoint(
 		if logNum == 0 {
 			continue
 		}
-		srcPath := base.MakeFilepath(fs, d.walDirname, fileTypeLog, logNum)
+		srcPath := base.MakeFilepath(fs, d.walDirname, fileTypeLog, logNum.DiskFileNum())
 		destPath := fs.PathJoin(destDir, fs.PathBase(srcPath))
 		ckErr = vfs.Copy(fs, srcPath, destPath)
 		if ckErr != nil {
@@ -315,9 +343,10 @@ func (d *DB) writeCheckpointManifest(
 	formatVers FormatMajorVersion,
 	destDirPath string,
 	destDir vfs.File,
-	manifestFileNum FileNum,
+	manifestFileNum base.DiskFileNum,
 	manifestSize int64,
 	excludedFiles map[deletedFileEntry]*fileMetadata,
+	removeBackingTables []base.DiskFileNum,
 ) error {
 	// Copy the MANIFEST, and create a pointer to it. We copy rather
 	// than link because additional version edits added to the
@@ -342,26 +371,47 @@ func (d *DB) writeCheckpointManifest(
 		}
 		defer dst.Close()
 
-		if _, err := io.Copy(dst, &io.LimitedReader{R: src, N: manifestSize}); err != nil {
-			return err
+		// Copy all existing records. We need to copy at the record level in case we
+		// need to append another record with the excluded files (we cannot simply
+		// append a record after a raw data copy; see
+		// https://github.com/cockroachdb/cockroach/issues/100935).
+		r := record.NewReader(&io.LimitedReader{R: src, N: manifestSize}, manifestFileNum.FileNum())
+		w := record.NewWriter(dst)
+		for {
+			rr, err := r.Next()
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				return err
+			}
+
+			rw, err := w.Next()
+			if err != nil {
+				return err
+			}
+			if _, err := io.Copy(rw, rr); err != nil {
+				return err
+			}
 		}
 
 		if len(excludedFiles) > 0 {
 			// Write out an additional VersionEdit that deletes the excluded SST files.
 			ve := versionEdit{
-				DeletedFiles: excludedFiles,
+				DeletedFiles:         excludedFiles,
+				RemovedBackingTables: removeBackingTables,
 			}
-			rw := record.NewWriter(dst)
-			w, err := rw.Next()
+
+			rw, err := w.Next()
 			if err != nil {
 				return err
 			}
-			if err := ve.Encode(w); err != nil {
+			if err := ve.Encode(rw); err != nil {
 				return err
 			}
-			if err := rw.Close(); err != nil {
-				return err
-			}
+		}
+		if err := w.Close(); err != nil {
+			return err
 		}
 		return dst.Sync()
 	}(); err != nil {
@@ -378,7 +428,7 @@ func (d *DB) writeCheckpointManifest(
 	if err != nil {
 		return err
 	}
-	if err := setCurrentFunc(formatVers, manifestMarker, fs, destDirPath, destDir)(manifestFileNum); err != nil {
+	if err := setCurrentFunc(formatVers, manifestMarker, fs, destDirPath, destDir)(manifestFileNum.FileNum()); err != nil {
 		return err
 	}
 	return manifestMarker.Close()

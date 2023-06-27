@@ -12,6 +12,8 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/base"
+	"github.com/cockroachdb/pebble/objstorage"
+	"github.com/cockroachdb/pebble/objstorage/shared"
 	"github.com/cockroachdb/pebble/record"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/pebble/vfs/atomicfs"
@@ -27,8 +29,8 @@ type Catalog struct {
 	mu      struct {
 		sync.Mutex
 
-		creatorID CreatorID
-		objects   map[base.FileNum]SharedObjectMetadata
+		creatorID objstorage.CreatorID
+		objects   map[base.DiskFileNum]SharedObjectMetadata
 
 		marker *atomicfs.Marker
 
@@ -43,28 +45,25 @@ type Catalog struct {
 	}
 }
 
-// CreatorID identifies the DB instance that originally created a shared object.
-// This ID is incorporated in backing object names.
-// Must be non-zero.
-type CreatorID uint64
-
-// IsSet returns true if the CreatorID is not zero.
-func (c CreatorID) IsSet() bool { return c != 0 }
-
-func (c CreatorID) String() string { return fmt.Sprintf("%020d", c) }
-
 // SharedObjectMetadata encapsulates the data stored in the catalog file for each object.
 type SharedObjectMetadata struct {
 	// FileNum is the identifier for the object within the context of a single DB
 	// instance.
-	FileNum base.FileNum
+	FileNum base.DiskFileNum
 	// FileType is the type of the object. Only certain FileTypes are possible.
 	FileType base.FileType
 	// CreatorID identifies the DB instance that originally created the object.
-	CreatorID CreatorID
+	CreatorID objstorage.CreatorID
 	// CreatorFileNum is the identifier for the object within the context of the
 	// DB instance that originally created the object.
-	CreatorFileNum base.FileNum
+	CreatorFileNum base.DiskFileNum
+	// CleanupMethod indicates the method for cleaning up unused shared objects.
+	CleanupMethod objstorage.SharedCleanupMethod
+	// Locator identifies a shared.Storage implementation.
+	Locator shared.Locator
+	// CustomObjectName (if it is set) overrides the object name that is normally
+	// derived from the CreatorID and CreatorFileNum.
+	CustomObjectName string
 }
 
 const (
@@ -79,7 +78,7 @@ const (
 // CatalogContents contains the shared objects in the catalog.
 type CatalogContents struct {
 	// CreatorID, if it is set.
-	CreatorID CreatorID
+	CreatorID objstorage.CreatorID
 	Objects   []SharedObjectMetadata
 }
 
@@ -90,7 +89,7 @@ func Open(fs vfs.FS, dirname string) (*Catalog, CatalogContents, error) {
 		fs:      fs,
 		dirname: dirname,
 	}
-	c.mu.objects = make(map[base.FileNum]SharedObjectMetadata)
+	c.mu.objects = make(map[base.DiskFileNum]SharedObjectMetadata)
 
 	var err error
 	c.mu.marker, c.mu.catalogFilename, err = atomicfs.LocateMarker(fs, dirname, catalogMarkerName)
@@ -116,13 +115,13 @@ func Open(fs vfs.FS, dirname string) (*Catalog, CatalogContents, error) {
 	}
 	// Sort the objects so the function is deterministic.
 	sort.Slice(res.Objects, func(i, j int) bool {
-		return res.Objects[i].FileNum < res.Objects[j].FileNum
+		return res.Objects[i].FileNum.FileNum() < res.Objects[j].FileNum.FileNum()
 	})
 	return c, res, nil
 }
 
 // SetCreatorID sets the creator ID. If it is already set, it must match.
-func (c *Catalog) SetCreatorID(id CreatorID) error {
+func (c *Catalog) SetCreatorID(id objstorage.CreatorID) error {
 	if !id.IsSet() {
 		return errors.AssertionFailedf("attempt to unset CreatorID")
 	}
@@ -178,7 +177,7 @@ func (b *Batch) AddObject(meta SharedObjectMetadata) {
 }
 
 // DeleteObject adds an object removal to the batch.
-func (b *Batch) DeleteObject(fileNum base.FileNum) {
+func (b *Batch) DeleteObject(fileNum base.DiskFileNum) {
 	b.ve.DeletedObjects = append(b.ve.DeletedObjects, fileNum)
 }
 
@@ -201,7 +200,7 @@ func (b *Batch) Copy() Batch {
 		copy(res.ve.NewObjects, b.ve.NewObjects)
 	}
 	if len(b.ve.DeletedObjects) > 0 {
-		res.ve.DeletedObjects = make([]base.FileNum, len(b.ve.DeletedObjects))
+		res.ve.DeletedObjects = make([]base.DiskFileNum, len(b.ve.DeletedObjects))
 		copy(res.ve.DeletedObjects, b.ve.DeletedObjects)
 	}
 	return res
@@ -332,6 +331,7 @@ func (c *Catalog) createNewCatalogFileLocked() (outErr error) {
 	err = func() error {
 		// Create a versionEdit that gets us from an empty catalog to the current state.
 		var ve versionEdit
+		ve.CreatorID = c.mu.creatorID
 		ve.NewObjects = make([]SharedObjectMetadata, 0, len(c.mu.objects))
 		for _, meta := range c.mu.objects {
 			ve.NewObjects = append(ve.NewObjects, meta)

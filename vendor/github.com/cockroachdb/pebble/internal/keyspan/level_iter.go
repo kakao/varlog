@@ -98,7 +98,7 @@ func (l *LevelIter) Init(
 ) {
 	l.err = nil
 	l.level = level
-	l.tableOpts.RangeKeyFilters = opts.RangeKeyFilters
+	l.tableOpts = opts
 	l.cmp = cmp
 	l.iterFile = nil
 	l.newIter = newIter
@@ -179,7 +179,7 @@ func (l *LevelIter) loadFile(file *manifest.FileMetadata, dir int) loadFileRetur
 		return noFileLoaded
 	}
 	if indicator != fileAlreadyLoaded {
-		l.iter, l.err = l.newIter(file, &l.tableOpts)
+		l.iter, l.err = l.newIter(file, l.tableOpts)
 		indicator = newFileLoaded
 	}
 	if l.err != nil {
