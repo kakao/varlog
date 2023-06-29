@@ -781,6 +781,20 @@ func (mr *RaftMetadataRepository) applyReport(reports *mrpb.Reports) error {
 			if (s.Version == u.Version &&
 				s.UncommittedLLSNEnd() < u.UncommittedLLSNEnd()) ||
 				s.Version < u.Version {
+				if s.UncommittedLLSNEnd() > u.UncommittedLLSNEnd() {
+					mr.logger.Error("unexpeted report",
+						zap.Any("nodeID", reports.GetNodeID()),
+						zap.Any("sn", snID),
+						zap.Any("ls", u.GetLogStreamID()),
+						zap.Any("ver", u.GetVersion()),
+						zap.Any("off", u.GetUncommittedLLSNOffset()),
+						zap.Any("end", u.UncommittedLLSNEnd()),
+						zap.Any("cver", s.GetVersion()),
+						zap.Any("coff", s.GetUncommittedLLSNOffset()),
+						zap.Any("cend", s.UncommittedLLSNEnd()),
+					)
+					continue LS
+				}
 				mr.storage.UpdateUncommitReport(u.LogStreamID, snID, u)
 			}
 		}
@@ -901,10 +915,11 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 								reports,
 								nrCommitted, nrUncommit,
 							)
-							mr.logger.Panic(msg)
+							mr.logger.Error(msg)
+							nrUncommit = 0
+						} else {
+							nrUncommit -= nrCommitted
 						}
-
-						nrUncommit -= nrCommitted
 					}
 				}
 
