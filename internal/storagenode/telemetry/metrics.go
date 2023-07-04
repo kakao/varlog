@@ -10,9 +10,12 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/telemetry"
 )
 
 type LogStreamMetrics struct {
+	attrs attribute.Set
+
 	AppendLogs             atomic.Int64
 	AppendBytes            atomic.Int64
 	AppendDuration         atomic.Int64
@@ -47,12 +50,11 @@ type LogStreamMetrics struct {
 }
 
 type Metrics struct {
-	snid       types.StorageNodeID
 	metricsMap sync.Map
 }
 
-func RegisterMetrics(meter metric.Meter, snid types.StorageNodeID) (m *Metrics, err error) {
-	m = &Metrics{snid: snid}
+func RegisterMetrics(meter metric.Meter) (m *Metrics, err error) {
+	m = &Metrics{}
 
 	var (
 		appendLogs                    metric.Int64ObservableCounter
@@ -291,41 +293,39 @@ func RegisterMetrics(meter metric.Meter, snid types.StorageNodeID) (m *Metrics, 
 		defer mu.Unlock()
 
 		m.metricsMap.Range(func(key, value any) bool {
-			lsid := key.(types.LogStreamID)
 			lsm := value.(*LogStreamMetrics)
-			attrs := attribute.NewSet(attribute.Int("lsid", int(lsid)))
 
-			observer.ObserveInt64(appendLogs, lsm.AppendLogs.Load(), metric.WithAttributeSet(attrs))
-			observer.ObserveInt64(appendBytes, lsm.AppendBytes.Load())
-			observer.ObserveInt64(appendDuration, lsm.AppendDuration.Load())
-			observer.ObserveInt64(appendOperations, lsm.AppendOperations.Load())
-			observer.ObserveInt64(appendPreparationMicroseconds, lsm.AppendPreparationMicro.Load())
-			observer.ObserveInt64(appendBatchCommitGap, lsm.AppendBatchCommitGap.Load())
+			observer.ObserveInt64(appendLogs, lsm.AppendLogs.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(appendBytes, lsm.AppendBytes.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(appendDuration, lsm.AppendDuration.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(appendOperations, lsm.AppendOperations.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(appendPreparationMicroseconds, lsm.AppendPreparationMicro.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(appendBatchCommitGap, lsm.AppendBatchCommitGap.Load(), metric.WithAttributeSet(lsm.attrs))
 
-			observer.ObserveInt64(sequencerOperationDuration, lsm.SequencerOperationDuration.Load())
-			observer.ObserveInt64(sequencerFanoutDuration, lsm.SequencerFanoutDuration.Load())
-			observer.ObserveInt64(sequencerOperations, lsm.SequencerOperations.Load())
-			observer.ObserveInt64(sequencerInflightOperations, lsm.SequencerInflightOperations.Load())
+			observer.ObserveInt64(sequencerOperationDuration, lsm.SequencerOperationDuration.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(sequencerFanoutDuration, lsm.SequencerFanoutDuration.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(sequencerOperations, lsm.SequencerOperations.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(sequencerInflightOperations, lsm.SequencerInflightOperations.Load(), metric.WithAttributeSet(lsm.attrs))
 
-			observer.ObserveInt64(writerOperationDuration, lsm.WriterOperationDuration.Load())
-			observer.ObserveInt64(writerOperations, lsm.WriterOperations.Load())
-			observer.ObserveInt64(writerInflightOperations, lsm.WriterInflightOperations.Load())
+			observer.ObserveInt64(writerOperationDuration, lsm.WriterOperationDuration.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(writerOperations, lsm.WriterOperations.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(writerInflightOperations, lsm.WriterInflightOperations.Load(), metric.WithAttributeSet(lsm.attrs))
 
-			observer.ObserveInt64(committerOperationDuration, lsm.CommitterOperationDuration.Load())
-			observer.ObserveInt64(committerOperations, lsm.CommitterOperations.Load())
-			observer.ObserveInt64(committerLogs, lsm.CommitterLogs.Load())
+			observer.ObserveInt64(committerOperationDuration, lsm.CommitterOperationDuration.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(committerOperations, lsm.CommitterOperations.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(committerLogs, lsm.CommitterLogs.Load(), metric.WithAttributeSet(lsm.attrs))
 
-			observer.ObserveInt64(replicateClientOperationDuration, lsm.ReplicateClientOperationDuration.Load())
-			observer.ObserveInt64(replicateClientOperations, lsm.ReplicateClientOperations.Load())
-			observer.ObserveInt64(replicateClientInflightOperations, lsm.ReplicateClientInflightOperations.Load())
+			observer.ObserveInt64(replicateClientOperationDuration, lsm.ReplicateClientOperationDuration.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(replicateClientOperations, lsm.ReplicateClientOperations.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(replicateClientInflightOperations, lsm.ReplicateClientInflightOperations.Load(), metric.WithAttributeSet(lsm.attrs))
 
-			observer.ObserveInt64(replicateServerOperations, lsm.ReplicateServerOperations.Load())
+			observer.ObserveInt64(replicateServerOperations, lsm.ReplicateServerOperations.Load(), metric.WithAttributeSet(lsm.attrs))
 
-			observer.ObserveInt64(replicateLogs, lsm.ReplicateLogs.Load())
-			observer.ObserveInt64(replicateBytes, lsm.ReplicateBytes.Load())
-			observer.ObserveInt64(replicateDuration, lsm.ReplicateDuration.Load())
-			observer.ObserveInt64(replicateOperations, lsm.ReplicateOperations.Load())
-			observer.ObserveInt64(replicatePreparationMicroseconds, lsm.ReplicatePreparationMicro.Load())
+			observer.ObserveInt64(replicateLogs, lsm.ReplicateLogs.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(replicateBytes, lsm.ReplicateBytes.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(replicateDuration, lsm.ReplicateDuration.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(replicateOperations, lsm.ReplicateOperations.Load(), metric.WithAttributeSet(lsm.attrs))
+			observer.ObserveInt64(replicatePreparationMicroseconds, lsm.ReplicatePreparationMicro.Load(), metric.WithAttributeSet(lsm.attrs))
 
 			return true
 		})
@@ -346,8 +346,14 @@ func RegisterMetrics(meter metric.Meter, snid types.StorageNodeID) (m *Metrics, 
 	return m, nil
 }
 
-func RegisterLogStreamMetrics(m *Metrics, lsid types.LogStreamID) (*LogStreamMetrics, error) {
-	lsm, loaded := m.metricsMap.LoadOrStore(lsid, &LogStreamMetrics{})
+func RegisterLogStreamMetrics(m *Metrics, tpid types.TopicID, lsid types.LogStreamID) (*LogStreamMetrics, error) {
+	attrs := attribute.NewSet(
+		telemetry.TopicID(tpid),
+		telemetry.LogStreamID(lsid),
+	)
+	lsm, loaded := m.metricsMap.LoadOrStore(lsid, &LogStreamMetrics{
+		attrs: attrs,
+	})
 	if loaded {
 		return nil, fmt.Errorf("storagenode: already registered %v", lsid)
 	}

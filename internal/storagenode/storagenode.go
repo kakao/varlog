@@ -82,7 +82,7 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 		return nil, err
 	}
 
-	metrics, err := telemetry.RegisterMetrics(otel.Meter("varlogsn"), cfg.snid)
+	metrics, err := telemetry.RegisterMetrics(otel.Meter("varlogsn"))
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +334,7 @@ func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID
 		return nil, snerrors.ErrTooManyReplicas
 	}
 
-	lsm, err := telemetry.RegisterLogStreamMetrics(sn.metrics, lsid)
+	lsm, err := telemetry.RegisterLogStreamMetrics(sn.metrics, tpid, lsid)
 	if err != nil {
 		return nil, err
 	}

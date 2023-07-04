@@ -57,7 +57,7 @@ func start(c *cli.Context) error {
 
 	raftAddr := c.String(flagRaftAddr.Name)
 	nodeID := types.NewNodeIDFromURL(raftAddr)
-	meterProviderOpts, err := flags.ParseTelemetryFlags(context.Background(), c, "mr", nodeID.String())
+	meterProviderOpts, err := flags.ParseTelemetryFlags(context.Background(), c, "mr", nodeID.String(), cid)
 	if err != nil {
 		return err
 	}
