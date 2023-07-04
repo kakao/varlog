@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel"
 	"go.uber.org/goleak"
+
+	"github.com/kakao/varlog/pkg/types"
 )
 
 func TestMain(m *testing.M) {
@@ -13,17 +15,20 @@ func TestMain(m *testing.M) {
 }
 
 func TestRegisterLogStreamMetrics(t *testing.T) {
-	m, err := RegisterMetrics(otel.Meter("test"), 1)
+	const tpid = types.TopicID(1)
+	const lsid = types.LogStreamID(2)
+
+	m, err := RegisterMetrics(otel.Meter("test"))
 	assert.NoError(t, err)
 
-	_, err = RegisterLogStreamMetrics(m, 1)
+	_, err = RegisterLogStreamMetrics(m, tpid, lsid)
 	assert.NoError(t, err)
 
-	_, err = RegisterLogStreamMetrics(m, 1)
+	_, err = RegisterLogStreamMetrics(m, tpid, lsid)
 	assert.Error(t, err)
 
-	UnregisterLogStreamMetrics(m, 1)
+	UnregisterLogStreamMetrics(m, lsid)
 
-	_, err = RegisterLogStreamMetrics(m, 1)
+	_, err = RegisterLogStreamMetrics(m, tpid, lsid)
 	assert.NoError(t, err)
 }

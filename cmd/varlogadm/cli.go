@@ -93,7 +93,7 @@ func start(c *cli.Context) error {
 		_ = logger.Sync()
 	}()
 
-	meterProviderOpts, err := flags.ParseTelemetryFlags(context.Background(), c, "adm", clusterID.String())
+	meterProviderOpts, err := flags.ParseTelemetryFlags(context.Background(), c, "adm", clusterID.String(), clusterID)
 	if err != nil {
 		return err
 	}
