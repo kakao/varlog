@@ -13,9 +13,9 @@ import (
 
 	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/internal/metarepos"
+	"github.com/kakao/varlog/internal/telemetry"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/log"
-	"github.com/kakao/varlog/pkg/util/telemetry"
 	"github.com/kakao/varlog/pkg/util/units"
 )
 

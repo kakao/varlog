@@ -19,9 +19,9 @@ import (
 	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/storagenode/logstream"
+	"github.com/kakao/varlog/internal/telemetry"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/log"
-	"github.com/kakao/varlog/pkg/util/telemetry"
 	"github.com/kakao/varlog/pkg/util/units"
 )
 
