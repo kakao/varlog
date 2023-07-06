@@ -3,13 +3,13 @@ package logging
 import (
 	"context"
 	"fmt"
-	"net"
 	"time"
 
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+
+	"github.com/kakao/varlog/pkg/rpc/interceptors"
 )
 
 // UnaryServerInterceptor returns a new unary server interceptor that logs a
@@ -31,27 +31,10 @@ func UnaryServerInterceptor(logger *zap.Logger) grpc.UnaryServerInterceptor {
 				zap.Duration("duration", duration),
 				zap.Stringer("request", req.(fmt.Stringer)),
 				zap.Stringer("response", resp.(fmt.Stringer)),
-				zap.String("peer", peerAddr(ctx)),
+				zap.String("peer", interceptors.PeerAddress(ctx)),
 				zap.Error(err),
 			)
 		}
 		return resp, err
 	}
-}
-
-func peerAddr(ctx context.Context) string {
-	p, ok := peer.FromContext(ctx)
-	if !ok {
-		return ""
-	}
-
-	host, _, err := net.SplitHostPort(p.Addr.String())
-	if err != nil {
-		return ""
-	}
-
-	if host == "" {
-		return "127.0.0.1"
-	}
-	return host
 }
