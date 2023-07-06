@@ -9,9 +9,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/status"
-	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
-	grpcctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
@@ -21,6 +18,7 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kakao/varlog/internal/admin/snwatcher"
+	"github.com/kakao/varlog/pkg/rpc/interceptors/logging"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/netutil"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -72,13 +70,8 @@ func New(ctx context.Context, opts ...Option) (*Admin, error) {
 	}
 
 	grpcServer := grpc.NewServer(
-		grpcmiddleware.WithUnaryServerChain(
-			grpcctxtags.UnaryServerInterceptor(),
-			grpczap.UnaryServerInterceptor(cfg.logger, grpczap.WithDecider(
-				func(fullMethodName string, err error) bool {
-					return err != nil || !grpcHandlerLogDenyList[fullMethodName]
-				},
-			)),
+		grpc.ChainUnaryInterceptor(
+			logging.UnaryServerInterceptor(cfg.logger),
 		),
 	)
 
