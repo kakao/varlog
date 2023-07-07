@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	metricsdk "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/aggregation"
 )
 
 // StopMeterProvider is the type for stop function of meter provider.
@@ -29,10 +30,30 @@ func NewMeterProvider(opts ...MeterProviderOption) (metric.MeterProvider, StopMe
 
 	reader := metricsdk.NewPeriodicReader(cfg.exporter)
 
-	mp := metricsdk.NewMeterProvider(
+	mpOpts := []metricsdk.Option{
 		metricsdk.WithResource(cfg.resource),
 		metricsdk.WithReader(reader),
-	)
+	}
+	if cfg.runtimeInstrumentation {
+		mpOpts = append(mpOpts,
+			metricsdk.WithView(metricsdk.NewView(
+				metricsdk.Instrument{
+					Name: "process.runtime.go.gc.pause_ns",
+				},
+				metricsdk.Stream{
+					Aggregation: aggregation.ExplicitBucketHistogram{
+						// 1ns, 10ns, 100ns,
+						// 1_000ns(1us), 10_000ns(10us), 100_000ns(100us),
+						// 1_000_000ns(1ms), 10_000_000ns(10ms), 100_000_000ns(100ms)
+						// 1_000_000_000ns(1s)
+						Boundaries: []float64{1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9},
+					},
+				},
+			)),
+		)
+	}
+
+	mp := metricsdk.NewMeterProvider(mpOpts...)
 
 	if cfg.hostInstrumentation {
 		if err := initHostInstrumentation(mp); err != nil {
