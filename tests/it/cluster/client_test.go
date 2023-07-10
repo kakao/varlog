@@ -1090,6 +1090,44 @@ func TestLogStreamAppender(t *testing.T) {
 				lsa.Close()
 			},
 		},
+		{
+			name: "Manager_Clear",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				mgr := mlsa.New(vcli)
+
+				lsa, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+
+				var wg sync.WaitGroup
+				dataBatch := [][]byte{[]byte("foo")}
+				wg.Add(1)
+				err = lsa.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+				})
+				require.NoError(t, err)
+				wg.Wait()
+
+				mgr.Clear()
+				err = lsa.AppendBatch(dataBatch, func([]varlogpb.LogEntryMeta, error) {
+					assert.Fail(t, "unexpected callback")
+				})
+				require.Error(t, err)
+
+				lsa, err = mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+
+				wg.Add(1)
+				err = lsa.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+				})
+				require.NoError(t, err)
+				wg.Wait()
+
+				mgr.Clear()
+			},
+		},
 	}
 
 	for _, tc := range tcs {
