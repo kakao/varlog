@@ -47,13 +47,17 @@ type readCompactionEnv struct {
 	flushing                 bool
 }
 
-// Information about in-progress compactions provided to the compaction picker. These are used to
-// constrain the new compactions that will be picked.
+// Information about in-progress compactions provided to the compaction picker.
+// These are used to constrain the new compactions that will be picked.
 type compactionInfo struct {
-	inputs      []compactionLevel
-	outputLevel int
-	smallest    InternalKey
-	largest     InternalKey
+	// versionEditApplied is true if this compaction's version edit has already
+	// been committed. The compaction may still be in-progress deleting newly
+	// obsolete files.
+	versionEditApplied bool
+	inputs             []compactionLevel
+	outputLevel        int
+	smallest           InternalKey
+	largest            InternalKey
 }
 
 func (info compactionInfo) String() string {
@@ -670,15 +674,16 @@ type candidateLevelInfo struct {
 	file manifest.LevelFile
 }
 
+func fileCompensation(f *fileMetadata) uint64 {
+	return uint64(f.Stats.PointDeletionsBytesEstimate) + f.Stats.RangeDeletionsBytesEstimate
+}
+
 // compensatedSize returns f's file size, inflated according to compaction
 // priorities.
-func compensatedSize(f *fileMetadata, pointTombstoneWeight float64) uint64 {
-	sz := f.Size
-	// Add in the estimate of disk space that may be reclaimed by compacting
-	// the file's tombstones.
-	sz += uint64(float64(f.Stats.PointDeletionsBytesEstimate) * pointTombstoneWeight)
-	sz += f.Stats.RangeDeletionsBytesEstimate
-	return sz
+func compensatedSize(f *fileMetadata) uint64 {
+	// Add in the estimate of disk space that may be reclaimed by compacting the
+	// file's tombstones.
+	return f.Size + fileCompensation(f)
 }
 
 // compensatedSizeAnnotator implements manifest.Annotator, annotating B-Tree
@@ -687,7 +692,6 @@ func compensatedSize(f *fileMetadata, pointTombstoneWeight float64) uint64 {
 // asynchronously, so its values are marked as cacheable only if a file's
 // stats have been loaded.
 type compensatedSizeAnnotator struct {
-	pointTombstoneWeight float64
 }
 
 var _ manifest.Annotator = compensatedSizeAnnotator{}
@@ -705,8 +709,8 @@ func (a compensatedSizeAnnotator) Accumulate(
 	f *fileMetadata, dst interface{},
 ) (v interface{}, cacheOK bool) {
 	vptr := dst.(*uint64)
-	*vptr = *vptr + compensatedSize(f, a.pointTombstoneWeight)
-	return vptr, f.StatsValidLocked()
+	*vptr = *vptr + compensatedSize(f)
+	return vptr, f.StatsValid()
 }
 
 func (a compensatedSizeAnnotator) Merge(src interface{}, dst interface{}) interface{} {
@@ -720,10 +724,10 @@ func (a compensatedSizeAnnotator) Merge(src interface{}, dst interface{}) interf
 // iterator. Note that this function is linear in the files available to the
 // iterator. Use the compensatedSizeAnnotator if querying the total
 // compensated size of a level.
-func totalCompensatedSize(iter manifest.LevelIterator, pointTombstoneWeight float64) uint64 {
+func totalCompensatedSize(iter manifest.LevelIterator) uint64 {
 	var sz uint64
 	for f := iter.First(); f != nil; f = iter.Next() {
-		sz += compensatedSize(f, pointTombstoneWeight)
+		sz += compensatedSize(f)
 	}
 	return sz
 }
@@ -921,9 +925,7 @@ func (p *compactionPickerByScore) initLevelMaxBytes(inProgressCompactions []comp
 	}
 }
 
-func calculateSizeAdjust(
-	inProgressCompactions []compactionInfo, pointTombstoneWeight float64,
-) [numLevels]int64 {
+func calculateSizeAdjust(inProgressCompactions []compactionInfo) [numLevels]int64 {
 	// Compute a size adjustment for each level based on the in-progress
 	// compactions. We subtract the compensated size of start level inputs.
 	// Since compensated file sizes may be compensated because they reclaim
@@ -933,10 +935,16 @@ func calculateSizeAdjust(
 	var sizeAdjust [numLevels]int64
 	for i := range inProgressCompactions {
 		c := &inProgressCompactions[i]
+		// If this compaction's version edit has already been applied, there's
+		// no need to adjust: The LSM we'll examine will already reflect the
+		// new LSM state.
+		if c.versionEditApplied {
+			continue
+		}
 
 		for _, input := range c.inputs {
 			real := int64(input.files.SizeSum())
-			compensated := int64(totalCompensatedSize(input.files.Iter(), pointTombstoneWeight))
+			compensated := int64(totalCompensatedSize(input.files.Iter()))
 
 			if input.level != c.outputLevel {
 				sizeAdjust[input.level] -= compensated
@@ -963,10 +971,7 @@ func (p *compactionPickerByScore) calculateScores(
 	}
 	scores[0] = p.calculateL0Score(inProgressCompactions)
 
-	sizeAdjust := calculateSizeAdjust(
-		inProgressCompactions,
-		p.opts.Experimental.PointTombstoneWeight,
-	)
+	sizeAdjust := calculateSizeAdjust(inProgressCompactions)
 	for level := 1; level < numLevels; level++ {
 		levelSize := int64(levelCompensatedSize(p.vers.Levels[level])) + sizeAdjust[level]
 		scores[level].score = float64(levelSize) / float64(p.levelMaxBytes[level])
@@ -1084,14 +1089,20 @@ func (p *compactionPickerByScore) pickFile(
 
 	for f := startIter.First(); f != nil; f = startIter.Next() {
 		var overlappingBytes uint64
+		compacting := f.IsCompacting()
+		if compacting {
+			// Move on if this file is already being compacted. We'll likely
+			// still need to move past the overlapping output files regardless,
+			// but in cases where all start-level files are compacting we won't.
+			continue
+		}
 
 		// Trim any output-level files smaller than f.
-		for outputFile != nil && base.InternalCompare(cmp, outputFile.Largest, f.Smallest) < 0 {
+		for outputFile != nil && sstableKeyCompare(cmp, outputFile.Largest, f.Smallest) < 0 {
 			outputFile = outputIter.Next()
 		}
 
-		compacting := f.IsCompacting()
-		for outputFile != nil && base.InternalCompare(cmp, outputFile.Smallest, f.Largest) < 0 {
+		for outputFile != nil && sstableKeyCompare(cmp, outputFile.Smallest, f.Largest) <= 0 && !compacting {
 			overlappingBytes += outputFile.Size
 			compacting = compacting || outputFile.IsCompacting()
 
@@ -1110,7 +1121,32 @@ func (p *compactionPickerByScore) pickFile(
 			// If the file in the next level extends beyond f's largest key,
 			// break out and don't advance outputIter because f's successor
 			// might also overlap.
-			if base.InternalCompare(cmp, outputFile.Largest, f.Largest) > 0 {
+			//
+			// Note, we stop as soon as we encounter an output-level file with a
+			// largest key beyond the input-level file's largest bound. We
+			// perform a simple user key comparison here using sstableKeyCompare
+			// which handles the potential for exclusive largest key bounds.
+			// There's some subtlety when the bounds are equal (eg, equal and
+			// inclusive, or equal and exclusive). Current Pebble doesn't split
+			// user keys across sstables within a level (and in format versions
+			// FormatSplitUserKeysMarkedCompacted and later we guarantee no
+			// split user keys exist within the entire LSM). In that case, we're
+			// assured that neither the input level nor the output level's next
+			// file shares the same user key, so compaction expansion will not
+			// include them in any compaction compacting `f`.
+			//
+			// NB: If we /did/ allow split user keys, or we're running on an
+			// old database with an earlier format major version where there are
+			// existing split user keys, this logic would be incorrect. Consider
+			//    L1: [a#120,a#100] [a#80,a#60]
+			//    L2: [a#55,a#45] [a#35,a#25] [a#15,a#5]
+			// While considering the first file in L1, [a#120,a#100], we'd skip
+			// past all of the files in L2. When considering the second file in
+			// L1, we'd improperly conclude that the second file overlaps
+			// nothing in the second level and is cheap to compact, when in
+			// reality we'd need to expand the compaction to include all 5
+			// files.
+			if sstableKeyCompare(cmp, outputFile.Largest, f.Largest) > 0 {
 				break
 			}
 			outputFile = outputIter.Next()
@@ -1123,9 +1159,9 @@ func (p *compactionPickerByScore) pickFile(
 			continue
 		}
 
-		compSz := compensatedSize(f, p.opts.Experimental.PointTombstoneWeight)
+		compSz := compensatedSize(f)
 		scaledRatio := overlappingBytes * 1024 / compSz
-		if scaledRatio < smallestRatio && !f.IsCompacting() {
+		if scaledRatio < smallestRatio {
 			smallestRatio = scaledRatio
 			file = startIter.Take()
 		}
@@ -1187,7 +1223,7 @@ func (p *compactionPickerByScore) pickAuto(env compactionEnv) (pc *pickedCompact
 			fmt.Fprintf(&buf, "  %sL%d: %5.1f  %5.1f  %8s  %8s",
 				marker, info.level, info.score, info.origScore,
 				humanize.Int64(int64(totalCompensatedSize(
-					p.vers.Levels[info.level].Iter(), p.opts.Experimental.PointTombstoneWeight,
+					p.vers.Levels[info.level].Iter(),
 				))),
 				humanize.Int64(p.levelMaxBytes[info.level]),
 			)
@@ -1332,7 +1368,7 @@ func (a elisionOnlyAnnotator) Accumulate(f *fileMetadata, dst interface{}) (inte
 	if f.IsCompacting() {
 		return dst, true
 	}
-	if !f.StatsValidLocked() {
+	if !f.StatsValid() {
 		return dst, false
 	}
 	// Bottommost files are large and not worthwhile to compact just

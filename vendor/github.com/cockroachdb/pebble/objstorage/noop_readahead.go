@@ -4,26 +4,31 @@
 
 package objstorage
 
-import "io"
+import "context"
 
-// NoopReadaheadHandle can be used by Readable implementations that don't
+// NoopReadHandle can be used by Readable implementations that don't
 // support read-ahead.
-type NoopReadaheadHandle struct {
-	io.ReaderAt
+type NoopReadHandle struct {
+	readable Readable
 }
 
-// MakeNoopReadaheadHandle initializes a NoopReadaheadHandle.
-func MakeNoopReadaheadHandle(r io.ReaderAt) NoopReadaheadHandle {
-	return NoopReadaheadHandle{ReaderAt: r}
+// MakeNoopReadHandle initializes a NoopReadHandle.
+func MakeNoopReadHandle(r Readable) NoopReadHandle {
+	return NoopReadHandle{readable: r}
 }
 
-var _ ReadaheadHandle = (*NoopReadaheadHandle)(nil)
+var _ ReadHandle = (*NoopReadHandle)(nil)
 
-// Close is part of the ReadaheadHandle interface.
-func (*NoopReadaheadHandle) Close() error { return nil }
+// ReadAt is part of the ReadHandle interface.
+func (h *NoopReadHandle) ReadAt(ctx context.Context, p []byte, off int64) error {
+	return h.readable.ReadAt(ctx, p, off)
+}
 
-// MaxReadahead is part of the ReadaheadHandle interface.
-func (*NoopReadaheadHandle) MaxReadahead() {}
+// Close is part of the ReadHandle interface.
+func (*NoopReadHandle) Close() error { return nil }
 
-// RecordCacheHit is part of the ReadaheadHandle interface.
-func (*NoopReadaheadHandle) RecordCacheHit(offset, size int64) {}
+// SetupForCompaction is part of the ReadHandle interface.
+func (*NoopReadHandle) SetupForCompaction() {}
+
+// RecordCacheHit is part of the ReadHandle interface.
+func (*NoopReadHandle) RecordCacheHit(_ context.Context, offset, size int64) {}
