@@ -9,6 +9,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+
 	varlogpb "github.com/kakao/varlog/proto/varlogpb"
 )
 
