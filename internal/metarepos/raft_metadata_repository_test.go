@@ -541,6 +541,63 @@ func TestMRApplyInvalidReport(t *testing.T) {
 	})
 }
 
+func TestMRIgnoreDirtyReport(t *testing.T) {
+	Convey("Given LogStream", t, func(ctx C) {
+		rep := 2
+		clus := newMetadataRepoCluster(1, rep, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+		mr := clus.nodes[0]
+
+		tn := &varlogpb.TopicDescriptor{
+			TopicID: types.TopicID(1),
+			Status:  varlogpb.TopicStatusRunning,
+		}
+
+		err := mr.storage.registerTopic(tn)
+		So(err, ShouldBeNil)
+
+		snIDs := make([]types.StorageNodeID, rep)
+		for i := range snIDs {
+			snIDs[i] = types.MinStorageNodeID + types.StorageNodeID(i)
+
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snIDs[i],
+				},
+			}
+
+			err := mr.storage.registerStorageNode(sn)
+			So(err, ShouldBeNil)
+		}
+
+		lsID := types.MinLogStreamID
+		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
+		err = mr.storage.registerLogStream(ls)
+		So(err, ShouldBeNil)
+
+		curLen := uint64(2)
+		curVer := types.Version(1)
+
+		for _, snID := range snIDs {
+			report := makeUncommitReport(snID, curVer, types.InvalidGLSN, lsID, types.MinLLSN, curLen)
+			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
+		}
+
+		Convey("When Some LogStream reports dirty report", func(ctx C) {
+			report := makeUncommitReport(snIDs[0], curVer+1, types.InvalidGLSN, lsID, types.MinLLSN, curLen-1)
+			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
+
+			Convey("Then, it should ignored", func(ctx C) {
+				r, ok := mr.storage.LookupUncommitReport(lsID, snIDs[0])
+				So(ok, ShouldBeTrue)
+				So(r.UncommittedLLSNLength, ShouldEqual, curLen)
+			})
+		})
+	})
+}
+
 func TestMRCalculateCommit(t *testing.T) {
 	Convey("Calculate commit", t, func(ctx C) {
 		clus := newMetadataRepoCluster(1, 2, false)
