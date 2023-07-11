@@ -70,6 +70,7 @@ func start(c *cli.Context) error {
 		metarepos.WithMaxLogStreamsCountPerTopic(int32(c.Int(flagMaxLogStreamsCountPerTopic.Name))),
 		metarepos.WithTelemetryCollectorName(c.String(flagTelemetryCollectorName.Name)),
 		metarepos.WithTelemetryCollectorEndpoint(c.String(flagTelemetryCollectorEndpoint.Name)),
+		metarepos.WithCommitTick(c.Duration(flagCommitTick.Name)),
 		metarepos.WithLogger(logger),
 	}
 	if c.Bool(flagJoin.Name) {
