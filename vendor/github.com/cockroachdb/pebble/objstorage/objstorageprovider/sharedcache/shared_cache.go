@@ -19,10 +19,6 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
-const (
-	shardingBlockSize = 1024 * 1024
-)
-
 // Cache is a persistent cache backed by a local filesystem. It is intended
 // to cache data that is in slower shared storage (e.g. S3), hence the
 // package name 'sharedcache'.
@@ -30,7 +26,8 @@ type Cache struct {
 	shards []shard
 	logger base.Logger
 
-	bm blockMath
+	bm                blockMath
+	shardingBlockSize int64
 
 	// TODO(josh): Have a dedicated metrics struct. Right now, this
 	// is just for testing.
@@ -51,7 +48,18 @@ const (
 // Open opens a cache. If there is no existing cache at fsDir, a new one
 // is created.
 func Open(
-	fs vfs.FS, logger base.Logger, fsDir string, blockSize int, sizeBytes int64, numShards int,
+	fs vfs.FS,
+	logger base.Logger,
+	fsDir string,
+	blockSize int,
+	// shardingBlockSize is the size of a shard block. The cache is split into contiguous
+	// shardingBlockSize units. The units are distributed across multiple independent shards
+	// of the cache, via a hash(offset) modulo num shards operation. The cache replacement
+	// policies operate at the level of shard, not whole cache. This is done to reduce lock
+	// contention.
+	shardingBlockSize int64,
+	sizeBytes int64,
+	numShards int,
 ) (*Cache, error) {
 	min := shardingBlockSize * int64(numShards)
 	if sizeBytes < min {
@@ -59,13 +67,14 @@ func Open(
 	}
 
 	sc := &Cache{
-		logger: logger,
-		bm:     makeBlockMath(blockSize),
+		logger:            logger,
+		bm:                makeBlockMath(blockSize),
+		shardingBlockSize: shardingBlockSize,
 	}
 	sc.shards = make([]shard, numShards)
 	blocksPerShard := sizeBytes / int64(numShards) / int64(blockSize)
 	for i := range sc.shards {
-		if err := sc.shards[i].init(fs, fsDir, i, blocksPerShard, blockSize); err != nil {
+		if err := sc.shards[i].init(fs, fsDir, i, blocksPerShard, blockSize, shardingBlockSize); err != nil {
 			return nil, err
 		}
 	}
@@ -108,7 +117,7 @@ func (c *Cache) ReadAt(
 ) error {
 	if ofs >= objSize {
 		if invariants.Enabled {
-			panic("invalid ReadAt offset")
+			panic(fmt.Sprintf("invalid ReadAt offset %v %v", ofs, objSize))
 		}
 		return io.EOF
 	}
@@ -182,7 +191,7 @@ func (c *Cache) get(fileNum base.DiskFileNum, p []byte, ofs int64) (n int, _ err
 	for {
 		shard := c.getShard(fileNum, ofs+int64(n))
 		cappedLen := len(p[n:])
-		if toBoundary := int(shardingBlockSize - ((ofs + int64(n)) % shardingBlockSize)); cappedLen > toBoundary {
+		if toBoundary := int(c.shardingBlockSize - ((ofs + int64(n)) % c.shardingBlockSize)); cappedLen > toBoundary {
 			cappedLen = toBoundary
 		}
 		numRead, err := shard.get(fileNum, p[n:n+cappedLen], ofs+int64(n))
@@ -220,7 +229,7 @@ func (c *Cache) set(fileNum base.DiskFileNum, p []byte, ofs int64) error {
 	for {
 		shard := c.getShard(fileNum, ofs+int64(n))
 		cappedLen := len(p[n:])
-		if toBoundary := int(shardingBlockSize - ((ofs + int64(n)) % shardingBlockSize)); cappedLen > toBoundary {
+		if toBoundary := int(c.shardingBlockSize - ((ofs + int64(n)) % c.shardingBlockSize)); cappedLen > toBoundary {
 			cappedLen = toBoundary
 		}
 		err := shard.set(fileNum, p[n:n+cappedLen], ofs+int64(n))
@@ -239,7 +248,7 @@ func (c *Cache) set(fileNum base.DiskFileNum, p []byte, ofs int64) error {
 
 func (c *Cache) getShard(fileNum base.DiskFileNum, ofs int64) *shard {
 	const prime64 = 1099511628211
-	hash := uint64(fileNum.FileNum())*prime64 + uint64(ofs)/shardingBlockSize
+	hash := uint64(fileNum.FileNum())*prime64 + uint64(ofs/c.shardingBlockSize)
 	// TODO(josh): Instance change ops are often run in production. Such an operation
 	// updates len(c.shards); see openSharedCache. As a result, the behavior of this
 	// function changes, and the cache empties out at restart time. We may want a better
@@ -248,17 +257,34 @@ func (c *Cache) getShard(fileNum base.DiskFileNum, ofs int64) *shard {
 }
 
 type shard struct {
-	file         vfs.File
-	sizeInBlocks int64
-	bm           blockMath
-	mu           struct {
+	file              vfs.File
+	sizeInBlocks      int64
+	bm                blockMath
+	shardingBlockSize int64
+	mu                struct {
 		sync.Mutex
 		// TODO(josh): None of these datastructures are space-efficient.
 		// Focusing on correctness to start.
-		where whereMap
-		locks []lockState
-		free  []cacheBlockIndex
+		where  whereMap
+		blocks []cacheBlockState
+		// Head of LRU list (doubly-linked circular).
+		lruHead cacheBlockIndex
+		// Head of free list (singly-linked chain).
+		freeHead cacheBlockIndex
 	}
+}
+
+type cacheBlockState struct {
+	lock    lockState
+	logical logicalBlockID
+
+	// next is the next block in the LRU or free list (or invalidBlockIndex if it
+	// is the last block in the free list).
+	next cacheBlockIndex
+
+	// prev is the previous block in the LRU list. It is not used when the block
+	// is in the free list.
+	prev cacheBlockIndex
 }
 
 // Maps a logical block in an SST to an index of the cache block with the
@@ -285,15 +311,16 @@ const (
 )
 
 func (s *shard) init(
-	fs vfs.FS, fsDir string, shardIdx int, sizeInBlocks int64, blockSize int,
+	fs vfs.FS, fsDir string, shardIdx int, sizeInBlocks int64, blockSize int, shardingBlockSize int64,
 ) error {
 	*s = shard{
 		sizeInBlocks: sizeInBlocks,
 	}
-	if blockSize < 1024 || shardingBlockSize%blockSize != 0 {
+	if blockSize < 1024 || shardingBlockSize%int64(blockSize) != 0 {
 		return errors.Newf("invalid block size %d (must divide %d)", blockSize, shardingBlockSize)
 	}
 	s.bm = makeBlockMath(blockSize)
+	s.shardingBlockSize = shardingBlockSize
 	file, err := fs.OpenReadWrite(fs.PathJoin(fsDir, fmt.Sprintf("SHARED-CACHE-%03d", shardIdx)))
 	if err != nil {
 		return err
@@ -309,9 +336,11 @@ func (s *shard) init(
 	// cache contents will be over-written, since all metadata is only stored in
 	// memory.
 	s.mu.where = make(whereMap)
-	for i := int64(0); i < sizeInBlocks; i++ {
-		s.mu.locks = append(s.mu.locks, unlocked)
-		s.mu.free = append(s.mu.free, cacheBlockIndex(i))
+	s.mu.blocks = make([]cacheBlockState, sizeInBlocks)
+	s.mu.lruHead = invalidBlockIndex
+	s.mu.freeHead = invalidBlockIndex
+	for i := range s.mu.blocks {
+		s.freePush(cacheBlockIndex(i))
 	}
 
 	return nil
@@ -322,6 +351,59 @@ func (s *shard) close() error {
 		s.file = nil
 	}()
 	return s.file.Close()
+}
+
+// freePush pushes a block to the front of the free list.
+func (s *shard) freePush(index cacheBlockIndex) {
+	s.mu.blocks[index].next = s.mu.freeHead
+	s.mu.freeHead = index
+}
+
+// freePop removes the block from the front of the free list. Must not be called
+// if the list is empty (i.e. freeHead = invalidBlockIndex).
+func (s *shard) freePop() cacheBlockIndex {
+	index := s.mu.freeHead
+	s.mu.freeHead = s.mu.blocks[index].next
+	return index
+}
+
+// lruInsertFront inserts a block at the front of the LRU list.
+func (s *shard) lruInsertFront(index cacheBlockIndex) {
+	b := &s.mu.blocks[index]
+	if s.mu.lruHead == invalidBlockIndex {
+		b.next = index
+		b.prev = index
+	} else {
+		b.next = s.mu.lruHead
+		h := &s.mu.blocks[s.mu.lruHead]
+		b.prev = h.prev
+		s.mu.blocks[h.prev].next = index
+		h.prev = index
+	}
+	s.mu.lruHead = index
+}
+
+func (s *shard) lruNext(index cacheBlockIndex) cacheBlockIndex {
+	return s.mu.blocks[index].next
+}
+
+func (s *shard) lruPrev(index cacheBlockIndex) cacheBlockIndex {
+	return s.mu.blocks[index].prev
+}
+
+// lruUnlink removes a block from the LRU list.
+func (s *shard) lruUnlink(index cacheBlockIndex) {
+	b := &s.mu.blocks[index]
+	if b.next == index {
+		s.mu.lruHead = invalidBlockIndex
+	} else {
+		s.mu.blocks[b.prev].next = b.next
+		s.mu.blocks[b.next].prev = b.prev
+		if s.mu.lruHead == index {
+			s.mu.lruHead = b.next
+		}
+	}
+	b.next, b.prev = invalidBlockIndex, invalidBlockIndex
 }
 
 // get attempts to read the requested data from the shard. The data must not
@@ -340,7 +422,7 @@ func (s *shard) close() error {
 // be needed next.
 func (s *shard) get(fileNum base.DiskFileNum, p []byte, ofs int64) (n int, _ error) {
 	if invariants.Enabled {
-		if ofs/shardingBlockSize != (ofs+int64(len(p))-1)/shardingBlockSize {
+		if ofs/s.shardingBlockSize != (ofs+int64(len(p))-1)/s.shardingBlockSize {
 			panic(fmt.Sprintf("get crosses shard boundary: %v %v", ofs, len(p)))
 		}
 		s.assertShardStateIsConsistent()
@@ -365,14 +447,17 @@ func (s *shard) get(fileNum base.DiskFileNum, p []byte, ofs int64) (n int, _ err
 			s.mu.Unlock()
 			return n, nil
 		}
-		if s.mu.locks[cacheBlockIdx] == writeLockTaken {
+		if s.mu.blocks[cacheBlockIdx].lock == writeLockTaken {
 			// In practice, if we have two reads of the same SST block in close succession, we
 			// would expect the second to hit in the in-memory block cache. So it's not worth
 			// optimizing this case here.
 			s.mu.Unlock()
 			return n, nil
 		}
-		s.mu.locks[cacheBlockIdx] += readLockTakenInc
+		s.mu.blocks[cacheBlockIdx].lock += readLockTakenInc
+		// Move to front of the LRU list.
+		s.lruUnlink(cacheBlockIdx)
+		s.lruInsertFront(cacheBlockIdx)
 		s.mu.Unlock()
 
 		readAt := s.bm.BlockOffset(cacheBlockIdx)
@@ -406,7 +491,7 @@ func (s *shard) get(fileNum base.DiskFileNum, p []byte, ofs int64) (n int, _ err
 // If all of p is not written to the shard, set returns a non-nil error.
 func (s *shard) set(fileNum base.DiskFileNum, p []byte, ofs int64) error {
 	if invariants.Enabled {
-		if ofs/shardingBlockSize != (ofs+int64(len(p))-1)/shardingBlockSize {
+		if ofs/s.shardingBlockSize != (ofs+int64(len(p))-1)/s.shardingBlockSize {
 			panic(fmt.Sprintf("set crosses shard boundary: %v %v", ofs, len(p)))
 		}
 		if s.bm.Remainder(ofs) != 0 || s.bm.Remainder(int64(len(p))) != 0 {
@@ -443,43 +528,41 @@ func (s *shard) set(fileNum base.DiskFileNum, p []byte, ofs int64) error {
 
 		// Determine cache block index by looking at the free list and randomly evicting if
 		// it is empty.
-		var cacheBlockInd cacheBlockIndex
-		if len(s.mu.free) == 0 {
-			// TODO(josh): Right now, we do random eviction. Eventually, we will do something
-			// more sophisticated, e.g. leverage ClockPro.
-			foundBlockToEvict := false
-			var k logicalBlockID
-			for k1, v := range s.mu.where {
-				// This implies that hot blocks will not be evicted as often, meaning the
-				// eviction scheme is not quite random. I think that's fine for now, since we plan
-				// to leverage a more sophisticated eviction scheme eventually anyway.
-				lock := s.mu.locks[v]
-				if lock >= readLockTakenInc || lock == writeLockTaken {
-					continue
+		var cacheBlockIdx cacheBlockIndex
+		if s.mu.freeHead == invalidBlockIndex {
+			if invariants.Enabled && s.mu.lruHead == invalidBlockIndex {
+				panic("both LRU and free lists empty")
+			}
+
+			// Find the last element in the LRU list which is not locked.
+			for idx := s.lruPrev(s.mu.lruHead); ; idx = s.lruPrev(idx) {
+				if lock := s.mu.blocks[idx].lock; lock == unlocked {
+					cacheBlockIdx = idx
+					break
 				}
-				foundBlockToEvict = true
-				cacheBlockInd = v
-				k = k1
-				break
+				if idx == s.mu.lruHead {
+					// No unlocked block to evict.
+					//
+					// TODO(josh): We may want to block until a block frees up, instead of returning
+					// an error here. But I think we can do that later on, e.g. after running some production
+					// experiments.
+					s.mu.Unlock()
+					return errors.New("no block to evict so skipping write to cache")
+				}
 			}
-			// TODO(josh): We may want to block until a block frees up, instead of returning
-			// an error here. But I think we can do that later on, e.g. after running some production
-			// experiments.
-			if !foundBlockToEvict {
-				s.mu.Unlock()
-				return errors.New("no block to evict so skipping write to cache")
-			}
-			delete(s.mu.where, k)
+			s.lruUnlink(cacheBlockIdx)
+			delete(s.mu.where, s.mu.blocks[cacheBlockIdx].logical)
 		} else {
-			cacheBlockInd = s.mu.free[len(s.mu.free)-1]
-			s.mu.free = s.mu.free[:len(s.mu.free)-1]
+			cacheBlockIdx = s.freePop()
 		}
 
-		s.mu.where[k] = cacheBlockInd
-		s.mu.locks[cacheBlockInd] = writeLockTaken
+		s.lruInsertFront(cacheBlockIdx)
+		s.mu.where[k] = cacheBlockIdx
+		s.mu.blocks[cacheBlockIdx].logical = k
+		s.mu.blocks[cacheBlockIdx].lock = writeLockTaken
 		s.mu.Unlock()
 
-		writeAt := s.bm.BlockOffset(cacheBlockInd)
+		writeAt := s.bm.BlockOffset(cacheBlockIdx)
 
 		writeSize := s.bm.BlockSize()
 		if len(p[n:]) <= writeSize {
@@ -488,11 +571,16 @@ func (s *shard) set(fileNum base.DiskFileNum, p []byte, ofs int64) error {
 
 		_, err := s.file.WriteAt(p[n:n+writeSize], writeAt)
 		if err != nil {
-			s.freeBlock(k, cacheBlockInd)
+			// Free the block.
+			s.mu.Lock()
+			defer s.mu.Unlock()
+
+			delete(s.mu.where, k)
+			s.lruUnlink(cacheBlockIdx)
+			s.freePush(cacheBlockIdx)
 			return err
 		}
-		s.dropWriteLock(cacheBlockInd)
-
+		s.dropWriteLock(cacheBlockIdx)
 		n += writeSize
 	}
 }
@@ -500,11 +588,9 @@ func (s *shard) set(fileNum base.DiskFileNum, p []byte, ofs int64) error {
 // Doesn't inline currently. This might be okay, but something to keep in mind.
 func (s *shard) dropReadLock(cacheBlockInd cacheBlockIndex) {
 	s.mu.Lock()
-	s.mu.locks[cacheBlockInd] -= readLockTakenInc
-	if invariants.Enabled {
-		if s.mu.locks[cacheBlockInd] < 0 {
-			panic(fmt.Sprintf("unexpected lock state %v in dropReadLock: %v", s.mu.locks[cacheBlockInd], s.mu.locks))
-		}
+	s.mu.blocks[cacheBlockInd].lock -= readLockTakenInc
+	if invariants.Enabled && s.mu.blocks[cacheBlockInd].lock < 0 {
+		panic(fmt.Sprintf("unexpected lock state %v in dropReadLock", s.mu.blocks[cacheBlockInd].lock))
 	}
 	s.mu.Unlock()
 }
@@ -512,21 +598,10 @@ func (s *shard) dropReadLock(cacheBlockInd cacheBlockIndex) {
 // Doesn't inline currently. This might be okay, but something to keep in mind.
 func (s *shard) dropWriteLock(cacheBlockInd cacheBlockIndex) {
 	s.mu.Lock()
-	if invariants.Enabled {
-		if s.mu.locks[cacheBlockInd] != writeLockTaken {
-			panic(fmt.Sprintf("unexpected lock state %v in dropWriteLock: %v", s.mu.locks[cacheBlockInd], s.mu.locks))
-		}
+	if invariants.Enabled && s.mu.blocks[cacheBlockInd].lock != writeLockTaken {
+		panic(fmt.Sprintf("unexpected lock state %v in dropWriteLock", s.mu.blocks[cacheBlockInd].lock))
 	}
-	s.mu.locks[cacheBlockInd] = unlocked
-	s.mu.Unlock()
-}
-
-// Doesn't inline currently. This might be okay, but something to keep in mind.
-func (s *shard) freeBlock(k logicalBlockID, cacheBlockInd cacheBlockIndex) {
-	s.mu.Lock()
-	delete(s.mu.where, k)
-	s.mu.locks[cacheBlockInd] = unlocked
-	s.mu.free = append(s.mu.free, cacheBlockInd)
+	s.mu.blocks[cacheBlockInd].lock = unlocked
 	s.mu.Unlock()
 }
 
@@ -534,36 +609,42 @@ func (s *shard) assertShardStateIsConsistent() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	cacheBlockInds := make(map[cacheBlockIndex]bool)
-	for _, v := range s.mu.where {
-		if cacheBlockInds[v] {
-			panic(fmt.Sprintf("repeated cache block index (where): %v %v %v %v", v, cacheBlockInds, s.mu.where, s.mu.free))
-		}
-		cacheBlockInds[v] = true
-	}
-	for _, v := range s.mu.free {
-		if cacheBlockInds[v] {
-			panic(fmt.Sprintf("repeated cache block index (free): %v %v %v %v", v, cacheBlockInds, s.mu.where, s.mu.free))
-		}
-		cacheBlockInds[v] = true
-	}
-	for i := int64(0); i < s.sizeInBlocks; i++ {
-		if !cacheBlockInds[cacheBlockIndex(i)] {
-			panic(fmt.Sprintf("missing cache block index: %v %v %v %v", i, cacheBlockInds, s.mu.where, s.mu.free))
+	lruLen := 0
+	if s.mu.lruHead != invalidBlockIndex {
+		for b := s.mu.lruHead; ; {
+			lruLen++
+			if idx, ok := s.mu.where[s.mu.blocks[b].logical]; !ok || idx != b {
+				panic("block in LRU list with no entry in where map")
+			}
+			b = s.lruNext(b)
+			if b == s.mu.lruHead {
+				break
+			}
 		}
 	}
-	if int64(len(s.mu.locks)) != s.sizeInBlocks {
-		panic(fmt.Sprintf("lock table isn't correct size: %v %v", len(s.mu.locks), s.sizeInBlocks))
+	if lruLen != len(s.mu.where) {
+		panic(fmt.Sprintf("lru list len is %d but where map has %d entries", lruLen, len(s.mu.where)))
 	}
-	for _, ls := range s.mu.locks {
-		if ls < writeLockTaken {
-			panic(fmt.Sprintf("lock state %v is not allowed: %v", ls, s.mu.locks))
+	freeLen := 0
+	for n := s.mu.freeHead; n != invalidBlockIndex; n = s.mu.blocks[n].next {
+		freeLen++
+	}
+
+	if lruLen+freeLen != int(s.sizeInBlocks) {
+		panic(fmt.Sprintf("%d lru blocks and %d free blocks don't add up to %d", lruLen, freeLen, s.sizeInBlocks))
+	}
+	for i := range s.mu.blocks {
+		if state := s.mu.blocks[i].lock; state < writeLockTaken {
+			panic(fmt.Sprintf("lock state %v is not allowed", state))
 		}
 	}
 }
 
 // cacheBlockIndex is the index of a blockSize-aligned cache block.
 type cacheBlockIndex int64
+
+// invalidBlockIndex is used for the head of a list when the list is empty.
+const invalidBlockIndex cacheBlockIndex = -1
 
 // blockMath is a helper type for performing conversions between offsets and
 // block indexes.
