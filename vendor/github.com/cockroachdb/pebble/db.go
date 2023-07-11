@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -21,7 +22,6 @@ import (
 	"github.com/cockroachdb/pebble/internal/keyspan"
 	"github.com/cockroachdb/pebble/internal/manifest"
 	"github.com/cockroachdb/pebble/internal/manual"
-	"github.com/cockroachdb/pebble/internal/rate"
 	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/record"
@@ -307,15 +307,10 @@ type DB struct {
 	closed   *atomic.Value
 	closedCh chan struct{}
 
-	// deletionLimiter is set when TargetByteDeletionRate is set.
-	deletionLimiter *rate.Limiter
-
-	// Async deletion jobs spawned by cleaners increment this WaitGroup, and
-	// call Done when completed. Once `d.mu.cleaning` is false, the db.Close()
-	// goroutine needs to call Wait on this WaitGroup to ensure all cleaning
-	// and deleting goroutines have finished running. As deletion goroutines
-	// could grab db.mu, it must *not* be held while deleters.Wait() is called.
-	deleters sync.WaitGroup
+	cleanupManager *cleanupManager
+	// testingAlwaysWaitForCleanup is set by some tests to force waiting for
+	// obsolete file deletion (to make events deterministic).
+	testingAlwaysWaitForCleanup bool
 
 	// During an iterator close, we may asynchronously schedule read compactions.
 	// We want to wait for those goroutines to finish, before closing the DB.
@@ -448,20 +443,10 @@ type DB struct {
 			noOngoingFlushStartTime time.Time
 		}
 
-		cleaner struct {
-			// Condition variable used to signal the completion of a file cleaning
-			// operation or an increment to the value of disabled. File cleaning operations are
-			// serialized, and a caller trying to do a file cleaning operation may wait
-			// until the ongoing one is complete.
-			cond sync.Cond
-			// True when a file cleaning operation is in progress. False does not necessarily
-			// mean all cleaning jobs have completed; see the comment on d.deleters.
-			cleaning bool
-			// Non-zero when file cleaning is disabled. The disabled count acts as a
-			// reference count to prohibit file cleaning. See
-			// DB.{disable,Enable}FileDeletions().
-			disabled int
-		}
+		// Non-zero when file cleaning is disabled. The disabled count acts as a
+		// reference count to prohibit file cleaning. See
+		// DB.{disable,Enable}FileDeletions().
+		disableFileDeletions int
 
 		snapshots struct {
 			// The list of active snapshots.
@@ -516,11 +501,7 @@ var _ Writer = (*DB)(nil)
 
 // TestOnlyWaitForCleaning MUST only be used in tests.
 func (d *DB) TestOnlyWaitForCleaning() {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	for d.mu.cleaner.cleaning {
-		d.mu.cleaner.cond.Wait()
-	}
+	d.cleanupManager.Wait()
 }
 
 // Get gets the value for the given key. It returns ErrNotFound if the DB does
@@ -1182,10 +1163,12 @@ func finishInitializingIter(ctx context.Context, buf *iterAlloc) *Iterator {
 // their metadatas truncated to [lower, upper) and passed into visitSharedFile.
 // ErrInvalidSkipSharedIteration is returned if visitSharedFile is not nil and an
 // sstable in L5 or L6 is found that is not in shared storage according to
-// provider.IsShared. Examples of when this could happen could be if Pebble
-// started writing sstables before a creator ID was set (as creator IDs are
-// necessary to enable shared storage) resulting in some lower level SSTs being
-// on non-shared storage. Skip-shared iteration is invalid in those cases.
+// provider.IsShared, or an sstable in those levels contains a newer key than the
+// snapshot sequence number (only applicable for snapshot.ScanInternal). Examples
+// of when this could happen could be if Pebble started writing sstables before a
+// creator ID was set (as creator IDs are necessary to enable shared storage)
+// resulting in some lower level SSTs being on non-shared storage. Skip-shared
+// iteration is invalid in those cases.
 func (d *DB) ScanInternal(
 	ctx context.Context,
 	lower, upper []byte,
@@ -1560,20 +1543,11 @@ func (d *DB) Close() error {
 		err = firstError(err, errors.Errorf("leaked memtable reservation: %d", errors.Safe(reserved)))
 	}
 
-	// No more cleaning can start. Wait for any async cleaning to complete.
-	for d.mu.cleaner.cleaning {
-		d.mu.cleaner.cond.Wait()
-	}
-	// There may still be obsolete tables if an existing async cleaning job
-	// prevented a new cleaning job when a readState was unrefed. If needed,
-	// synchronously delete obsolete files.
-	if len(d.mu.versions.obsoleteTables) > 0 {
-		d.deleteObsoleteFiles(d.mu.nextJobID, true /* waitForOngoing */)
-	}
-	// Wait for all the deletion goroutines spawned by cleaning jobs to finish.
 	d.mu.Unlock()
-	d.deleters.Wait()
 	d.compactionSchedulers.Wait()
+
+	// Wait for all cleaning jobs to finish.
+	d.cleanupManager.Close()
 
 	// Sanity check metrics.
 	if invariants.Enabled {
@@ -1888,6 +1862,8 @@ type sstablesOptions struct {
 	// if set, return sstables that overlap the key range (end-exclusive)
 	start []byte
 	end   []byte
+
+	withApproximateSpanBytes bool
 }
 
 // SSTablesOption set optional parameter used by `DB.SSTables`.
@@ -1904,11 +1880,21 @@ func WithProperties() SSTablesOption {
 }
 
 // WithKeyRangeFilter ensures returned sstables overlap start and end (end-exclusive)
-// if start and end are both nil these properties have no effect
+// if start and end are both nil these properties have no effect.
 func WithKeyRangeFilter(start, end []byte) SSTablesOption {
 	return func(opt *sstablesOptions) {
 		opt.end = end
 		opt.start = start
+	}
+}
+
+// WithApproximateSpanBytes enables capturing the approximate number of bytes that
+// overlap the provided key span for each sstable.
+// NOTE: this option can only be used with WithKeyRangeFilter and WithProperties
+// provided.
+func WithApproximateSpanBytes() SSTablesOption {
+	return func(opt *sstablesOptions) {
+		opt.withApproximateSpanBytes = true
 	}
 }
 
@@ -1937,6 +1923,13 @@ func (d *DB) SSTables(opts ...SSTablesOption) ([][]SSTableInfo, error) {
 		fn(opt)
 	}
 
+	if opt.withApproximateSpanBytes && !opt.withProperties {
+		return nil, errors.Errorf("Cannot use WithApproximateSpanBytes without WithProperties option.")
+	}
+	if opt.withApproximateSpanBytes && (opt.start == nil || opt.end == nil) {
+		return nil, errors.Errorf("Cannot use WithApproximateSpanBytes without WithKeyRangeFilter option.")
+	}
+
 	// Grab and reference the current readState.
 	readState := d.loadReadState()
 	defer readState.unref()
@@ -1960,6 +1953,7 @@ func (d *DB) SSTables(opts ...SSTablesOption) ([][]SSTableInfo, error) {
 			if opt.start != nil && opt.end != nil && !m.Overlaps(d.opts.Comparer.Compare, opt.start, opt.end, true /* exclusive end */) {
 				continue
 			}
+
 			destTables[j] = SSTableInfo{TableInfo: m.TableInfo()}
 			if opt.withProperties {
 				p, err := d.tableCache.getTableProperties(
@@ -1972,6 +1966,20 @@ func (d *DB) SSTables(opts ...SSTablesOption) ([][]SSTableInfo, error) {
 			}
 			destTables[j].Virtual = m.Virtual
 			destTables[j].BackingSSTNum = m.FileBacking.DiskFileNum.FileNum()
+
+			if opt.withApproximateSpanBytes {
+				var spanBytes uint64
+				if m.ContainedWithinSpan(d.opts.Comparer.Compare, opt.start, opt.end) {
+					spanBytes = m.Size
+				} else {
+					size, err := d.tableCache.estimateSize(m, opt.start, opt.end)
+					if err != nil {
+						return nil, err
+					}
+					spanBytes = size
+				}
+				destTables[j].Properties.UserProperties["approximate-span-bytes"] = strconv.FormatUint(spanBytes, 10)
+			}
 			j++
 		}
 		destLevels[i] = destTables[:j]

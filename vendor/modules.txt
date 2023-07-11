@@ -39,7 +39,7 @@ github.com/cockroachdb/errors/withstack
 # github.com/cockroachdb/logtags v0.0.0-20190617123548-eb05cc24525f
 ## explicit
 github.com/cockroachdb/logtags
-# github.com/cockroachdb/pebble v0.0.0-20230622193631-b77606f72b19
+# github.com/cockroachdb/pebble v0.0.0-20230701135918-609ae80aea41
 ## explicit; go 1.19
 github.com/cockroachdb/pebble
 github.com/cockroachdb/pebble/bloom
@@ -59,7 +59,6 @@ github.com/cockroachdb/pebble/internal/manual
 github.com/cockroachdb/pebble/internal/private
 github.com/cockroachdb/pebble/internal/rangedel
 github.com/cockroachdb/pebble/internal/rangekey
-github.com/cockroachdb/pebble/internal/rate
 github.com/cockroachdb/pebble/internal/rawalloc
 github.com/cockroachdb/pebble/internal/testkeys
 github.com/cockroachdb/pebble/objstorage
