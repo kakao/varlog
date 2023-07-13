@@ -76,12 +76,12 @@ func TestStorage_New(t *testing.T) {
 		{
 			name: "NewAndCloseSeparateDB",
 			pref: func(t *testing.T, path string) {
-				s, err := New(WithPath(path), SeparateDatabase(), WithVerboseLogging(), WithMetrisLogInterval(time.Second))
+				s, err := New(WithPath(path), SeparateDatabase(), WithVerboseLogging(), WithMetricsLogInterval(time.Second))
 				require.NoError(t, err)
 				require.NoError(t, s.Close())
 			},
 			postf: func(t *testing.T, path string) {
-				s, err := New(WithPath(path), SeparateDatabase(), WithVerboseLogging(), WithMetrisLogInterval(time.Second))
+				s, err := New(WithPath(path), SeparateDatabase(), WithVerboseLogging(), WithMetricsLogInterval(time.Second))
 				require.NoError(t, err)
 				require.NoError(t, s.Close())
 			},
@@ -89,12 +89,12 @@ func TestStorage_New(t *testing.T) {
 		{
 			name: "SeparateDBNewAndCloseNotSeparateDB",
 			pref: func(t *testing.T, path string) {
-				s, err := New(WithPath(path), WithVerboseLogging(), WithMetrisLogInterval(time.Second))
+				s, err := New(WithPath(path), WithVerboseLogging(), WithMetricsLogInterval(time.Second))
 				require.NoError(t, err)
 				require.NoError(t, s.Close())
 			},
 			postf: func(t *testing.T, path string) {
-				s, err := New(WithPath(path), WithVerboseLogging(), WithMetrisLogInterval(time.Second))
+				s, err := New(WithPath(path), WithVerboseLogging(), WithMetricsLogInterval(time.Second))
 				require.NoError(t, err)
 				require.NoError(t, s.Close())
 			},

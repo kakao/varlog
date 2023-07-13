@@ -234,7 +234,7 @@ func WithVerboseLogging() Option {
 	})
 }
 
-func WithMetrisLogInterval(metricsLogInterval time.Duration) Option {
+func WithMetricsLogInterval(metricsLogInterval time.Duration) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.metricsLogInterval = metricsLogInterval
 	})
