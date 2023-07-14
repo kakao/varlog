@@ -73,6 +73,7 @@ func newStartCommand() *cli.Command {
 			flagStorageMaxConcurrentCompaction,
 			flagStorageMetricsLogInterval,
 			flagStorageVerbose.BoolFlag(),
+			flagStorageTrimDelay,
 
 			// logger options
 			flags.LogDir,

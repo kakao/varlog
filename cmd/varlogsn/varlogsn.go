@@ -277,6 +277,9 @@ func parseStorageOptions(c *cli.Context) (opts []storage.Option, err error) {
 	if c.Bool(flagStorageVerbose.Name) {
 		opts = append(opts, storage.WithVerboseLogging())
 	}
+	if name := flagStorageTrimDelay.Name; c.IsSet(name) {
+		opts = append(opts, storage.WithTrimDelay(c.Duration(name)))
+	}
 	return opts, nil
 }
 

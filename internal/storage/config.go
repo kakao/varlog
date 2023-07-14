@@ -143,6 +143,7 @@ type config struct {
 	commitDBConfig     dbConfig
 	verbose            bool
 	metricsLogInterval time.Duration
+	trimDelay          time.Duration
 	logger             *zap.Logger
 	readOnly           bool
 }
@@ -243,6 +244,15 @@ func WithMetricsLogInterval(metricsLogInterval time.Duration) Option {
 func WithLogger(logger *zap.Logger) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.logger = logger
+	})
+}
+
+// WithTrimDelay sets the delay before storage removes logs. If the value is
+// zero, Trim will delay the removal of prefix log entries until writing
+// additional log entries.
+func WithTrimDelay(trimDelay time.Duration) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.trimDelay = trimDelay
 	})
 }
 

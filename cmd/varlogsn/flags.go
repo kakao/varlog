@@ -195,4 +195,9 @@ var (
 		EnvVars: []string{"STORAGE_METRICS_LOG_INTERVAL"},
 		Value:   storage.DefaultMetricsLogInterval,
 	}
+	flagStorageTrimDelay = &cli.DurationFlag{
+		Name:    "storage-trim-delay",
+		EnvVars: []string{"STORAGE_TRIM_DELAY"},
+		Usage:   "Delay before deletion of log entries caused by Trim operation. If zero, lazy deletion waits for other log entries to be appended.",
+	}
 )
