@@ -200,4 +200,9 @@ var (
 		EnvVars: []string{"STORAGE_TRIM_DELAY"},
 		Usage:   "Delay before deletion of log entries caused by Trim operation. If zero, lazy deletion waits for other log entries to be appended.",
 	}
+	flagStorageTrimRate = &cli.StringFlag{
+		Name:    "storage-trim-rate",
+		EnvVars: []string{"STORAGE_TRIM_RATE"},
+		Usage:   "Trim deletion throttling rate in bytes per second. If zero, no throttling is applied.",
+	}
 )

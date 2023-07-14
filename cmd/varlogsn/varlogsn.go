@@ -280,6 +280,13 @@ func parseStorageOptions(c *cli.Context) (opts []storage.Option, err error) {
 	if name := flagStorageTrimDelay.Name; c.IsSet(name) {
 		opts = append(opts, storage.WithTrimDelay(c.Duration(name)))
 	}
+	if name := flagStorageTrimRate.Name; c.IsSet(name) {
+		rate, err := units.FromByteSizeString(c.String(name))
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, storage.WithTrimRateByte(int(rate)))
+	}
 	return opts, nil
 }
 

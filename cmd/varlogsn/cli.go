@@ -74,6 +74,7 @@ func newStartCommand() *cli.Command {
 			flagStorageMetricsLogInterval,
 			flagStorageVerbose.BoolFlag(),
 			flagStorageTrimDelay,
+			flagStorageTrimRate,
 
 			// logger options
 			flags.LogDir,
