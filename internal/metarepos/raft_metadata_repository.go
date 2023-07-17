@@ -64,7 +64,7 @@ type RaftMetadataRepository struct {
 	proposeC      chan *mrpb.RaftEntry
 	commitC       chan *committedEntry
 	rnConfChangeC chan raftpb.ConfChange
-	rnProposeC    chan string
+	rnProposeC    chan []byte
 	rnCommitC     chan *raftCommittedEntry
 
 	// for report
@@ -110,7 +110,7 @@ func NewRaftMetadataRepository(opts ...Option) *RaftMetadataRepository {
 		proposeC:      make(chan *mrpb.RaftEntry, 4096),
 		commitC:       make(chan *committedEntry, 4096),
 		rnConfChangeC: make(chan raftpb.ConfChange, 1),
-		rnProposeC:    make(chan string),
+		rnProposeC:    make(chan []byte),
 		reportQueue:   make([]*mrpb.Report, 0, 1024),
 		runner:        runner.New("mr", cfg.logger),
 		sw:            stopwaiter.New(),
@@ -307,7 +307,7 @@ Loop:
 			}
 
 			select {
-			case mr.rnProposeC <- string(b):
+			case mr.rnProposeC <- b:
 			case <-ctx.Done():
 				mr.sendAck(e.NodeIndex, e.RequestIndex, ctx.Err())
 			}
