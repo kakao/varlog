@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gogo/status"
 	"go.etcd.io/etcd/pkg/fileutil"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -20,8 +21,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
-
-	"github.com/gogo/status"
 
 	"github.com/kakao/varlog/internal/reportcommitter"
 	"github.com/kakao/varlog/pkg/types"
@@ -111,7 +110,7 @@ func NewRaftMetadataRepository(opts ...Option) *RaftMetadataRepository {
 		commitC:       make(chan *committedEntry, 4096),
 		rnConfChangeC: make(chan raftpb.ConfChange, 1),
 		rnProposeC:    make(chan []byte),
-		reportQueue:   make([]*mrpb.Report, 0, 1024),
+		reportQueue:   mrpb.NewReportQueue(),
 		runner:        runner.New("mr", cfg.logger),
 		sw:            stopwaiter.New(),
 		tmStub:        tmStub,
@@ -350,7 +349,7 @@ func (mr *RaftMetadataRepository) processReport(ctx context.Context) {
 			if num > 0 {
 				reports = mrpb.NewReports(mr.nodeID, time.Now())
 				reports.Reports = mr.reportQueue
-				mr.reportQueue = make([]*mrpb.Report, 0, 1024)
+				mr.reportQueue = mrpb.NewReportQueue()
 			}
 			mr.muReportQueue.Unlock()
 
