@@ -3,7 +3,7 @@ module github.com/kakao/varlog
 go 1.20
 
 require (
-	github.com/cockroachdb/pebble v0.0.0-20230701135918-609ae80aea41
+	github.com/cockroachdb/pebble v0.0.0-20230716025533-809057a10ee4
 	github.com/docker/go-units v0.5.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.1
