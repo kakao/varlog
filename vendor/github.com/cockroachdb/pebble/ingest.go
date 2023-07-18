@@ -79,11 +79,15 @@ func ingestValidateKey(opts *Options, key *InternalKey) error {
 	return nil
 }
 
-// ingestLoad1Shared loads the fileMetadata for one shared sstable. It also
-// sets the sequence numbers for a shared sstable.
+// ingestLoad1Shared loads the fileMetadata for one shared sstable owned or
+// shared by another node. It also sets the sequence numbers for a shared sstable.
 func ingestLoad1Shared(
 	opts *Options, sm SharedSSTMeta, fileNum base.DiskFileNum,
 ) (*fileMetadata, error) {
+	if sm.Size == 0 {
+		// Disallow 0 file sizes
+		return nil, errors.New("pebble: cannot ingest shared file with size 0")
+	}
 	// Don't load table stats. Doing a round trip to shared storage, one SST
 	// at a time is not worth it as it slows down ingestion.
 	meta := &fileMetadata{}
@@ -103,7 +107,9 @@ func ingestLoad1Shared(
 		meta.SmallestRangeKey = sm.SmallestRangeKey
 		meta.LargestRangeKey = sm.LargestRangeKey
 		meta.SmallestRangeKey.SetSeqNum(seqNum)
-		meta.LargestRangeKey.SetSeqNum(seqNum)
+		if !meta.LargestRangeKey.IsExclusiveSentinel() {
+			meta.LargestRangeKey.SetSeqNum(seqNum)
+		}
 		meta.SmallestSeqNum = seqNum
 		meta.LargestSeqNum = seqNum
 		// Initialize meta.{Smallest,Largest} and others by calling this.
@@ -114,7 +120,9 @@ func ingestLoad1Shared(
 		meta.SmallestPointKey = sm.SmallestPointKey
 		meta.LargestPointKey = sm.LargestPointKey
 		meta.SmallestPointKey.SetSeqNum(seqNum)
-		meta.LargestPointKey.SetSeqNum(seqNum)
+		if !meta.LargestPointKey.IsExclusiveSentinel() {
+			meta.LargestPointKey.SetSeqNum(seqNum)
+		}
 		meta.SmallestSeqNum = seqNum
 		meta.LargestSeqNum = seqNum
 		// Initialize meta.{Smallest,Largest} and others by calling this.
@@ -127,19 +135,15 @@ func ingestLoad1Shared(
 	return meta, nil
 }
 
+// ingestLoad1 creates the FileMetadata for one file. This file will be owned
+// by this store.
 func ingestLoad1(
-	opts *Options, fmv FormatMajorVersion, path string, cacheID uint64, fileNum base.DiskFileNum,
+	opts *Options,
+	fmv FormatMajorVersion,
+	readable objstorage.Readable,
+	cacheID uint64,
+	fileNum base.DiskFileNum,
 ) (*fileMetadata, error) {
-	f, err := opts.FS.Open(path)
-	if err != nil {
-		return nil, err
-	}
-
-	readable, err := sstable.NewSimpleReadable(f)
-	if err != nil {
-		return nil, err
-	}
-
 	cacheOpts := private.SSTableCacheOpts(cacheID, fileNum).(sstable.ReaderOption)
 	r, err := sstable.NewReader(readable, opts.MakeReaderOptions(), cacheOpts)
 	if err != nil {
@@ -294,7 +298,16 @@ func ingestLoad(
 	meta := make([]*fileMetadata, 0, len(paths))
 	newPaths := make([]string, 0, len(paths))
 	for i := range paths {
-		m, err := ingestLoad1(opts, fmv, paths[i], cacheID, pending[i])
+		f, err := opts.FS.Open(paths[i])
+		if err != nil {
+			return ingestLoadResult{}, err
+		}
+
+		readable, err := sstable.NewSimpleReadable(f)
+		if err != nil {
+			return ingestLoadResult{}, err
+		}
+		m, err := ingestLoad1(opts, fmv, readable, cacheID, pending[i])
 		if err != nil {
 			return ingestLoadResult{}, err
 		}
@@ -356,7 +369,7 @@ func ingestSortAndVerify(cmp Compare, lr ingestLoadResult, exciseSpan KeyRange) 
 	for i := range lr.sharedMeta {
 		f := lr.sharedMeta[i]
 		if !exciseSpan.Contains(cmp, f.Smallest) || !exciseSpan.Contains(cmp, f.Largest) {
-			return errors.AssertionFailedf("pebble: shared file outside of excise span")
+			return errors.AssertionFailedf("pebble: shared file outside of excise span, span [%s-%s), file = %s", exciseSpan.Start, exciseSpan.End, f.String())
 		}
 	}
 	if len(lr.localMeta) <= 1 || len(lr.localPaths) <= 1 {
@@ -453,6 +466,20 @@ func ingestLink(
 		return err
 	}
 	for i := range sharedObjMetas {
+		// One corner case around file sizes we need to be mindful of, is that
+		// if one of the shareObjs was initially created by us (and has boomeranged
+		// back from another node), we'll need to update the FileBacking's size
+		// to be the true underlying size. Otherwise, we could hit errors when we
+		// open the db again after a crash/restart (see checkConsistency in open.go),
+		// plus it more accurately allows us to prioritize compactions of files
+		// that were originally created by us.
+		if !objProvider.IsForeign(sharedObjMetas[i]) {
+			size, err := objProvider.Size(sharedObjMetas[i])
+			if err != nil {
+				return err
+			}
+			lr.sharedMeta[i].FileBacking.Size = uint64(size)
+		}
 		if opts.EventListener.TableCreated != nil {
 			opts.EventListener.TableCreated(TableCreateInfo{
 				JobID:   jobID,
@@ -702,7 +729,7 @@ func ingestTargetLevel(
 	// Check for overlap over the keys of L0 by iterating over the sublevels.
 	for subLevel := 0; subLevel < len(v.L0SublevelFiles); subLevel++ {
 		iter := newLevelIter(iterOps, cmp, nil /* split */, newIters,
-			v.L0Sublevels.Levels[subLevel].Iter(), manifest.Level(0), nil)
+			v.L0Sublevels.Levels[subLevel].Iter(), manifest.Level(0), internalIterOpts{})
 
 		var rangeDelIter keyspan.FragmentIterator
 		// Pass in a non-nil pointer to rangeDelIter so that levelIter.findFileGE
@@ -733,7 +760,7 @@ func ingestTargetLevel(
 	level := baseLevel
 	for ; level < numLevels; level++ {
 		levelIter := newLevelIter(iterOps, cmp, nil /* split */, newIters,
-			v.Levels[level].Iter(), manifest.Level(level), nil)
+			v.Levels[level].Iter(), manifest.Level(level), internalIterOpts{})
 		var rangeDelIter keyspan.FragmentIterator
 		// Pass in a non-nil pointer to rangeDelIter so that levelIter.findFileGE
 		// sets it up for the target file.
@@ -1085,7 +1112,6 @@ func (d *DB) ingest(
 	var mut *memTable
 	// asFlushable indicates whether the sstable was ingested as a flushable.
 	var asFlushable bool
-	var overlapWithExciseSpan bool
 	prepare := func(seqNum uint64) {
 		// Note that d.commit.mu is held by commitPipeline when calling prepare.
 
@@ -1137,7 +1163,6 @@ func (d *DB) ingest(
 					if mem == nil {
 						mem = m
 					}
-					overlapWithExciseSpan = true
 				}
 			}
 			err := iter.Close()
@@ -1170,16 +1195,16 @@ func (d *DB) ingest(
 		// The ingestion overlaps with some entry in the flushable queue.
 		if d.FormatMajorVersion() < FormatFlushableIngest ||
 			d.opts.Experimental.DisableIngestAsFlushable() ||
-			len(shared) > 0 || overlapWithExciseSpan ||
+			len(shared) > 0 || exciseSpan.Valid() ||
 			(len(d.mu.mem.queue) > d.opts.MemTableStopWritesThreshold-1) {
 			// We're not able to ingest as a flushable,
 			// so we must synchronously flush.
 			//
 			// TODO(bilal): Currently, if any of the files being ingested are shared or
-			// there's overlap between the memtable and an excise span, we cannot use
-			// flushable ingests and need to wait synchronously. Either remove this
-			// caveat by fleshing out flushable ingest logic to also account for these
-			// cases, or remove this TODO.
+			// there's an excise span present, we cannot use flushable ingests and need
+			// to wait synchronously. Either remove this caveat by fleshing out
+			// flushable ingest logic to also account for these cases, or remove this
+			// comment. Tracking issue: https://github.com/cockroachdb/pebble/issues/2676
 			if mem.flushable == d.mu.mem.mutable {
 				err = d.makeRoomForWrite(nil)
 			}
@@ -1455,6 +1480,13 @@ func (d *DB) excise(
 			if err != nil {
 				return nil, err
 			}
+			if leftFile.Size == 0 {
+				// On occasion, estimateSize gives us a low estimate, i.e. a 0 file size,
+				// such as if the excised file only has range keys/dels and no point
+				// keys. This can cause panics in places where we divide by file sizes.
+				// Correct for it here.
+				leftFile.Size = 1
+			}
 			if err := leftFile.Validate(d.cmp, d.opts.Comparer.FormatKey); err != nil {
 				return nil, err
 			}
@@ -1557,6 +1589,13 @@ func (d *DB) excise(
 		rightFile.Size, err = d.tableCache.estimateSize(m, rightFile.Smallest.UserKey, rightFile.Largest.UserKey)
 		if err != nil {
 			return nil, err
+		}
+		if rightFile.Size == 0 {
+			// On occasion, estimateSize gives us a low estimate, i.e. a 0 file size,
+			// such as if the excised file only has range keys/dels and no point keys.
+			// This can cause panics in places where we divide by file sizes. Correct
+			// for it here.
+			rightFile.Size = 1
 		}
 		ve.NewFiles = append(ve.NewFiles, newFileEntry{Level: level, Meta: rightFile})
 		if !backingTableCreated {
@@ -1693,8 +1732,10 @@ func (d *DB) ingestApply(
 		// for files, and if they are, we should signal those compactions to error
 		// out.
 		for level := range current.Levels {
-			iter := current.Levels[level].Iter()
-			for m := iter.SeekGE(d.cmp, exciseSpan.Start); m != nil && d.cmp(m.Smallest.UserKey, exciseSpan.End) < 0; m = iter.Next() {
+			overlaps := current.Overlaps(level, d.cmp, exciseSpan.Start, exciseSpan.End, true /* exclusiveEnd */)
+			iter := overlaps.Iter()
+
+			for m := iter.First(); m != nil; m = iter.Next() {
 				excised, err := d.excise(exciseSpan, m, ve, level)
 				if err != nil {
 					return nil, err
