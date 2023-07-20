@@ -53,3 +53,21 @@ func (rq *ReportQueue) Release() {
 		reportQueuePool.Put(rq)
 	}
 }
+
+var raftEntryPool = sync.Pool{
+	New: func() any {
+		return &RaftEntry{}
+	},
+}
+
+func NewRaftEntry() *RaftEntry {
+	return raftEntryPool.Get().(*RaftEntry)
+}
+
+func (re *RaftEntry) Release() {
+	if re != nil {
+		re.Request.Report.Release()
+		re.Reset()
+		raftEntryPool.Put(re)
+	}
+}
