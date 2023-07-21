@@ -1199,7 +1199,7 @@ func (rc *testReportContextPtr) saveReport(report *mrpb.StorageNodeUncommitRepor
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
-	rc.report = mrpb.NewStoragenodeUncommitReport(report.StorageNodeID)
+	rc.report = mrpb.NewStorageNodeUncommitReport(report.StorageNodeID)
 	rc.report.UncommitReports = report.UncommitReports
 }
 
