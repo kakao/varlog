@@ -646,8 +646,8 @@ func TestStorageReadLogEntryBoundaries(t *testing.T) {
 		first, last, err = stg.readLogEntryBoundaries()
 		assert.NoError(t, err)
 		// FIXME(jun): LogEntryMeta has unnecessary fields?
-		assert.Equal(t, &varlogpb.LogEntryMeta{GLSN: 1, LLSN: 1}, first)
-		assert.Equal(t, &varlogpb.LogEntryMeta{GLSN: 1, LLSN: 1}, last)
+		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, first)
+		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, last)
 
 		// two logs
 		cb, err = stg.NewCommitBatch(CommitContext{
@@ -673,8 +673,8 @@ func TestStorageReadLogEntryBoundaries(t *testing.T) {
 		first, last, err = stg.readLogEntryBoundaries()
 		assert.NoError(t, err)
 		// FIXME(jun): LogEntryMeta has unnecessary fields?
-		assert.Equal(t, &varlogpb.LogEntryMeta{GLSN: 1, LLSN: 1}, first)
-		assert.Equal(t, &varlogpb.LogEntryMeta{GLSN: 2, LLSN: 2}, last)
+		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, first)
+		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 2, LLSN: 2}, last)
 	})
 }
 
@@ -741,8 +741,8 @@ func TestStorageReadRecoveryPoints(t *testing.T) {
 			CommittedGLSNEnd:   2,
 			CommittedLLSNBegin: 1,
 		}, rp.LastCommitContext)
-		assert.Equal(t, &varlogpb.LogEntryMeta{GLSN: 1, LLSN: 1}, rp.CommittedLogEntry.First)
-		assert.Equal(t, &varlogpb.LogEntryMeta{GLSN: 1, LLSN: 1}, rp.CommittedLogEntry.Last)
+		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, rp.CommittedLogEntry.First)
+		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, rp.CommittedLogEntry.Last)
 	})
 }
 
