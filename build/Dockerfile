@@ -16,13 +16,6 @@ RUN wget -qO/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health
     && chmod +x /bin/grpc_health_probe
 
 
-FROM golang:${GO_VERSION} AS builder-debug
-ARG DEBIAN_FRONTEND
-WORKDIR /varlog
-COPY . .
-RUN make build GCFLAGS="-gcflags=all='-N -l' -race"
-
-
 FROM golang:${GO_VERSION} AS builder-cgo
 ARG DEBIAN_FRONTEND
 WORKDIR /varlog
@@ -57,70 +50,28 @@ USER varlog
 ENV PATH=/varlog/bin:$PATH
 
 
-FROM scratch AS varlogbenchmark-noncgo
+FROM scratch AS varlogbenchmark
 LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 WORKDIR /varlog
 COPY --from=builder-noncgo /varlog/bin/benchmark /varlog/bin/benchmark
 CMD ["/varlog/bin/benchmark"]
 
 
-FROM busybox:${BUSYBOX_VERSION}-glibc AS varlogctl-debug
-LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
-WORKDIR /varlog
-COPY --from=builder-debug /varlog/bin/varlogctl /varlog/bin/varlogctl
-CMD ["/varlog/bin/varlogctl"]
-
-
-FROM scratch AS varlogctl-noncgo
+FROM scratch AS varlogctl
 LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 WORKDIR /varlog
 COPY --from=builder-noncgo /varlog/bin/varlogctl /varlog/bin/varlogctl
 CMD ["/varlog/bin/varlogctl"]
 
 
-FROM busybox:${BUSYBOX_VERSION}-glibc AS varlogcli-debug
-LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
-WORKDIR /varlog
-COPY --from=builder-debug /varlog/bin/varlogcli /varlog/bin/varlogcli
-CMD ["/varlog/bin/varlogcli"]
-
-
-FROM scratch AS varlogcli-noncgo
+FROM scratch AS varlogcli
 LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 WORKDIR /varlog
 COPY --from=builder-noncgo /varlog/bin/varlogcli /varlog/bin/varlogcli
 CMD ["/varlog/bin/varlogcli"]
 
 
-FROM base-cgo AS varlogmr-debug
-LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
-EXPOSE ${VARLOGMR_RPC_PORT}
-EXPOSE ${VARLOGMR_RAFT_PORT}
-USER varlog
-WORKDIR /varlog
-COPY --from=tools /bin/grpc_health_probe /varlog/tools/grpc_health_probe
-COPY --from=builder-debug /varlog/bin/start_varlogmr.py /varlog/bin/start_varlogmr.py
-COPY --from=builder-debug /varlog/bin/vmr /varlog/bin/vmr
-COPY --from=builder-debug /varlog/bin/mrtool /varlog/bin/mrtool
-COPY --from=builder-debug /varlog/bin/varlogctl /varlog/bin/varlogctl
-COPY --from=builder-debug /varlog/pylib /varlog/pylib
-
-
-FROM base-cgo AS varlogmr-cgo
-LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
-EXPOSE ${VARLOGMR_RPC_PORT}
-EXPOSE ${VARLOGMR_RAFT_PORT}
-USER varlog
-WORKDIR /varlog
-COPY --from=tools /bin/grpc_health_probe /varlog/tools/grpc_health_probe
-COPY --from=builder-cgo /varlog/bin/start_varlogmr.py /varlog/bin/start_varlogmr.py
-COPY --from=builder-cgo /varlog/bin/vmr /varlog/bin/vmr
-COPY --from=builder-cgo /varlog/bin/mrtool /varlog/bin/mrtool
-COPY --from=builder-cgo /varlog/bin/varlogctl /varlog/bin/varlogctl
-COPY --from=builder-cgo /varlog/pylib /varlog/pylib
-
-
-FROM base-noncgo AS varlogmr-noncgo
+FROM base-noncgo AS varlogmr
 LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 EXPOSE ${VARLOGMR_RPC_PORT}
 EXPOSE ${VARLOGMR_RAFT_PORT}
@@ -134,27 +85,7 @@ COPY --from=builder-noncgo /varlog/bin/varlogctl /varlog/bin/varlogctl
 COPY --from=builder-noncgo /varlog/pylib /varlog/pylib
 
 
-FROM base-cgo AS varlogadm-debug
-LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
-EXPOSE ${VARLOGADM_RPC_PORT}
-USER varlog
-WORKDIR /varlog
-COPY --from=tools /bin/grpc_health_probe /varlog/tools/grpc_health_probe
-COPY --from=builder-debug /varlog/bin/varlogadm /varlog/bin/varlogadm
-COPY --from=builder-debug /varlog/pylib /varlog/pylib
-
-
-FROM base-cgo AS varlogadm-cgo
-LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
-EXPOSE ${VARLOGADM_RPC_PORT}
-USER varlog
-WORKDIR /varlog
-COPY --from=tools /bin/grpc_health_probe /varlog/tools/grpc_health_probe
-COPY --from=builder-cgo /varlog/bin/varlogadm /varlog/bin/varlogadm
-COPY --from=builder-cgo /varlog/pylib /varlog/pylib
-
-
-FROM base-noncgo AS varlogadm-noncgo
+FROM base-noncgo AS varlogadm
 LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 EXPOSE ${VARLOGADM_RPC_PORT}
 USER varlog
@@ -164,19 +95,7 @@ COPY --from=builder-noncgo /varlog/bin/varlogadm /varlog/bin/varlogadm
 COPY --from=builder-noncgo /varlog/pylib /varlog/pylib
 
 
-FROM base-cgo AS varlogsn-debug
-LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
-EXPOSE ${VARLOGSN_RPC_PORT}
-USER varlog
-WORKDIR /varlog
-COPY --from=tools /bin/grpc_health_probe /varlog/tools/grpc_health_probe
-COPY --from=builder-debug /varlog/bin/start_varlogsn.py /varlog/bin/start_varlogsn.py
-COPY --from=builder-debug /varlog/bin/varlogsn /varlog/bin/varlogsn
-COPY --from=builder-debug /varlog/bin/varlogctl /varlog/bin/varlogctl
-COPY --from=builder-debug /varlog/pylib /varlog/pylib
-
-
-FROM base-cgo AS varlogsn-cgo
+FROM base-cgo AS varlogsn
 LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 EXPOSE ${VARLOGSN_RPC_PORT}
 USER varlog
@@ -186,15 +105,3 @@ COPY --from=builder-cgo /varlog/bin/start_varlogsn.py /varlog/bin/start_varlogsn
 COPY --from=builder-cgo /varlog/bin/varlogsn /varlog/bin/varlogsn
 COPY --from=builder-cgo /varlog/bin/varlogctl /varlog/bin/varlogctl
 COPY --from=builder-cgo /varlog/pylib /varlog/pylib
-
-
-FROM base-noncgo AS varlogsn-noncgo
-LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
-EXPOSE ${VARLOGSN_RPC_PORT}
-USER varlog
-WORKDIR /varlog
-COPY --from=tools /bin/grpc_health_probe /varlog/tools/grpc_health_probe
-COPY --from=builder-noncgo /varlog/bin/start_varlogsn.py /varlog/bin/start_varlogsn.py
-COPY --from=builder-noncgo /varlog/bin/varlogsn /varlog/bin/varlogsn
-COPY --from=builder-noncgo /varlog/bin/varlogctl /varlog/bin/varlogctl
-COPY --from=builder-noncgo /varlog/pylib /varlog/pylib
