@@ -615,170 +615,434 @@ func TestStorageReadLastCommitContext(t *testing.T) {
 }
 
 func TestStorageReadLogEntryBoundaries(t *testing.T) {
-	testStorage(t, func(t testing.TB, stg *Storage) {
-		// no logs
-		first, last, err := stg.readLogEntryBoundaries()
-		assert.NoError(t, err)
-		assert.Nil(t, first)
-		assert.Nil(t, last)
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, stg *Storage)
+	}{
+		{
+			name: "NoLogEntry",
+			testf: func(t *testing.T, stg *Storage) {
+				first, last := stg.readLogEntryBoundaries()
+				require.Nil(t, first)
+				require.Nil(t, last)
+			},
+		},
+		{
+			name: "NoLogEntryData",
+			testf: func(t *testing.T, stg *Storage) {
+				cb, err := stg.NewCommitBatch(CommitContext{
+					Version:            1,
+					HighWatermark:      1,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   2,
+					CommittedLLSNBegin: 1,
+				})
+				require.NoError(t, err)
+				require.NoError(t, cb.Set(1, 1))
+				require.NoError(t, cb.Apply())
 
-		// single log
-		cb, err := stg.NewCommitBatch(CommitContext{
-			Version:            1,
-			HighWatermark:      1,
-			CommittedGLSNBegin: 1,
-			CommittedGLSNEnd:   2,
-			CommittedLLSNBegin: 1,
+				first, last := stg.readLogEntryBoundaries()
+				require.Nil(t, first)
+				require.Nil(t, last)
+			},
+		},
+		{
+			name: "SingleLogEntry",
+			testf: func(t *testing.T, stg *Storage) {
+				cb, err := stg.NewCommitBatch(CommitContext{
+					Version:            1,
+					HighWatermark:      1,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   2,
+					CommittedLLSNBegin: 1,
+				})
+				require.NoError(t, err)
+				require.NoError(t, cb.Set(1, 1))
+				require.NoError(t, cb.Apply())
+
+				wb := stg.NewWriteBatch()
+				require.NoError(t, wb.Set(1, nil))
+				require.NoError(t, wb.Apply())
+				require.NoError(t, wb.Close())
+
+				want := &varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}
+				first, last := stg.readLogEntryBoundaries()
+				require.Equal(t, want, first)
+				require.Equal(t, want, last)
+			},
+		},
+		{
+			name: "TwoLogEntries",
+			testf: func(t *testing.T, stg *Storage) {
+				cb, err := stg.NewCommitBatch(CommitContext{
+					Version:            1,
+					HighWatermark:      1,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   3,
+					CommittedLLSNBegin: 1,
+				})
+				require.NoError(t, err)
+				require.NoError(t, cb.Set(1, 1))
+				require.NoError(t, cb.Set(2, 2))
+				require.NoError(t, cb.Apply())
+
+				wb := stg.NewWriteBatch()
+				require.NoError(t, wb.Set(1, nil))
+				require.NoError(t, wb.Set(2, nil))
+				require.NoError(t, wb.Apply())
+				require.NoError(t, wb.Close())
+
+				first, last := stg.readLogEntryBoundaries()
+				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, first)
+				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 2, LLSN: 2}, last)
+			},
+		},
+		{
+			// data:   _ 2 3
+			// commit: 1 2 3
+			name: "NoDataAtFront",
+			testf: func(t *testing.T, stg *Storage) {
+				cb, err := stg.NewCommitBatch(CommitContext{
+					Version:            1,
+					HighWatermark:      1,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   4,
+					CommittedLLSNBegin: 1,
+				})
+				require.NoError(t, err)
+				require.NoError(t, cb.Set(1, 1))
+				require.NoError(t, cb.Set(2, 2))
+				require.NoError(t, cb.Set(3, 3))
+				require.NoError(t, cb.Apply())
+
+				wb := stg.NewWriteBatch()
+				require.NoError(t, wb.Set(2, nil))
+				require.NoError(t, wb.Set(3, nil))
+				require.NoError(t, wb.Apply())
+				require.NoError(t, wb.Close())
+
+				first, last := stg.readLogEntryBoundaries()
+				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 2, LLSN: 2}, first)
+				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 3, LLSN: 3}, last)
+			},
+		},
+		{
+			// data:   1 2 3
+			// commit: _ 2 3
+			name: "NoCommitAtFront",
+			testf: func(t *testing.T, stg *Storage) {
+				cb, err := stg.NewCommitBatch(CommitContext{
+					Version:            1,
+					HighWatermark:      1,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   4,
+					CommittedLLSNBegin: 1,
+				})
+				require.NoError(t, err)
+				require.NoError(t, cb.Set(2, 2))
+				require.NoError(t, cb.Set(3, 3))
+				require.NoError(t, cb.Apply())
+
+				wb := stg.NewWriteBatch()
+				require.NoError(t, wb.Set(1, nil))
+				require.NoError(t, wb.Set(2, nil))
+				require.NoError(t, wb.Set(3, nil))
+				require.NoError(t, wb.Apply())
+				require.NoError(t, wb.Close())
+
+				first, last := stg.readLogEntryBoundaries()
+				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 2, LLSN: 2}, first)
+				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 3, LLSN: 3}, last)
+			},
+		},
+		{
+			// data:   1 2 _
+			// commit: 1 2 3
+			name: "NoDataAtRear",
+			testf: func(t *testing.T, stg *Storage) {
+				cb, err := stg.NewCommitBatch(CommitContext{
+					Version:            1,
+					HighWatermark:      1,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   4,
+					CommittedLLSNBegin: 1,
+				})
+				require.NoError(t, err)
+				require.NoError(t, cb.Set(1, 1))
+				require.NoError(t, cb.Set(2, 2))
+				require.NoError(t, cb.Set(3, 3))
+				require.NoError(t, cb.Apply())
+
+				wb := stg.NewWriteBatch()
+				require.NoError(t, wb.Set(1, nil))
+				require.NoError(t, wb.Set(2, nil))
+				require.NoError(t, wb.Apply())
+				require.NoError(t, wb.Close())
+
+				first, last := stg.readLogEntryBoundaries()
+				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, first)
+				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 2, LLSN: 2}, last)
+			},
+		},
+		{
+			// data:   1 2 3
+			// commit: 1 2 _
+			name: "NoCommitAtRear",
+			testf: func(t *testing.T, stg *Storage) {
+				cb, err := stg.NewCommitBatch(CommitContext{
+					Version:            1,
+					HighWatermark:      1,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   4,
+					CommittedLLSNBegin: 1,
+				})
+				require.NoError(t, err)
+				require.NoError(t, cb.Set(1, 1))
+				require.NoError(t, cb.Set(2, 2))
+				require.NoError(t, cb.Apply())
+
+				wb := stg.NewWriteBatch()
+				require.NoError(t, wb.Set(1, nil))
+				require.NoError(t, wb.Set(2, nil))
+				require.NoError(t, wb.Set(3, nil))
+				require.NoError(t, wb.Apply())
+				require.NoError(t, wb.Close())
+
+				first, last := stg.readLogEntryBoundaries()
+				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, first)
+				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 2, LLSN: 2}, last)
+			},
+		},
+		{
+			// data:   _ 2 3
+			// commit: 1 2 _
+			name: "SingleLogEntryWithAnomaly",
+			testf: func(t *testing.T, stg *Storage) {
+				cb, err := stg.NewCommitBatch(CommitContext{
+					Version:            1,
+					HighWatermark:      1,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   4,
+					CommittedLLSNBegin: 1,
+				})
+				require.NoError(t, err)
+				require.NoError(t, cb.Set(1, 1))
+				require.NoError(t, cb.Set(2, 2))
+				require.NoError(t, cb.Apply())
+
+				wb := stg.NewWriteBatch()
+				require.NoError(t, wb.Set(2, nil))
+				require.NoError(t, wb.Set(3, nil))
+				require.NoError(t, wb.Apply())
+				require.NoError(t, wb.Close())
+
+				want := &varlogpb.LogSequenceNumber{LLSN: 2, GLSN: 2}
+				first, last := stg.readLogEntryBoundaries()
+				require.Equal(t, want, first)
+				require.Equal(t, want, last)
+			},
+		},
+		{
+			// data:   1 2 3 _
+			// commit: _ 2 3 4
+			name: "TwoLogEntriesWithAnomaly",
+			testf: func(t *testing.T, stg *Storage) {
+				cb, err := stg.NewCommitBatch(CommitContext{
+					Version:            1,
+					HighWatermark:      1,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   5,
+					CommittedLLSNBegin: 1,
+				})
+				require.NoError(t, err)
+				require.NoError(t, cb.Set(2, 2))
+				require.NoError(t, cb.Set(3, 3))
+				require.NoError(t, cb.Set(4, 4))
+				require.NoError(t, cb.Apply())
+
+				wb := stg.NewWriteBatch()
+				require.NoError(t, wb.Set(1, nil))
+				require.NoError(t, wb.Set(2, nil))
+				require.NoError(t, wb.Set(3, nil))
+				require.NoError(t, wb.Apply())
+				require.NoError(t, wb.Close())
+
+				first, last := stg.readLogEntryBoundaries()
+				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 2, LLSN: 2}, first)
+				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 3, LLSN: 3}, last)
+			},
+		},
+		{
+			// data:   1 2 _
+			// commit: _ _ 3
+			name: "NoCommittedLogEntry",
+			testf: func(t *testing.T, stg *Storage) {
+				cb, err := stg.NewCommitBatch(CommitContext{
+					Version:            1,
+					HighWatermark:      1,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   11,
+					CommittedLLSNBegin: 1,
+				})
+				require.NoError(t, err)
+				require.NoError(t, cb.Set(3, 3))
+				require.NoError(t, cb.Apply())
+
+				wb := stg.NewWriteBatch()
+				require.NoError(t, wb.Set(1, nil))
+				require.NoError(t, wb.Set(2, nil))
+				require.NoError(t, wb.Apply())
+				require.NoError(t, wb.Close())
+
+				first, last := stg.readLogEntryBoundaries()
+				require.Nil(t, first)
+				require.Nil(t, last)
+			},
+		},
+		{
+			// data:   _ _ 3
+			// commit: 1 2 _
+			name: "NoLCommittedogEntry",
+			testf: func(t *testing.T, stg *Storage) {
+				cb, err := stg.NewCommitBatch(CommitContext{
+					Version:            1,
+					HighWatermark:      1,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   11,
+					CommittedLLSNBegin: 1,
+				})
+				require.NoError(t, err)
+				require.NoError(t, cb.Set(1, 1))
+				require.NoError(t, cb.Set(2, 2))
+				require.NoError(t, cb.Apply())
+
+				wb := stg.NewWriteBatch()
+				require.NoError(t, wb.Set(3, nil))
+				require.NoError(t, wb.Apply())
+				require.NoError(t, wb.Close())
+
+				first, last := stg.readLogEntryBoundaries()
+				require.Nil(t, first)
+				require.Nil(t, last)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			stg := TestNewStorage(t)
+			defer func() {
+				err := stg.Close()
+				require.NoError(t, err)
+			}()
+			tc.testf(t, stg)
 		})
-		assert.NoError(t, err)
-		assert.NoError(t, cb.Set(1, 1))
-		assert.NoError(t, cb.Apply())
-
-		// no data corresponded to the commit
-		_, _, err = stg.readLogEntryBoundaries()
-		assert.Error(t, err)
-
-		wb := stg.NewWriteBatch()
-		assert.NoError(t, wb.Set(1, nil))
-		assert.NoError(t, wb.Apply())
-		assert.NoError(t, wb.Close())
-
-		first, last, err = stg.readLogEntryBoundaries()
-		assert.NoError(t, err)
-		// FIXME(jun): LogEntryMeta has unnecessary fields?
-		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, first)
-		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, last)
-
-		// two logs
-		cb, err = stg.NewCommitBatch(CommitContext{
-			Version:            1,
-			HighWatermark:      1,
-			CommittedGLSNBegin: 2,
-			CommittedGLSNEnd:   3,
-			CommittedLLSNBegin: 2,
-		})
-		assert.NoError(t, err)
-		assert.NoError(t, cb.Set(2, 2))
-		assert.NoError(t, cb.Apply())
-
-		// no data corresponded to the commit
-		_, _, err = stg.readLogEntryBoundaries()
-		assert.Error(t, err)
-
-		wb = stg.NewWriteBatch()
-		assert.NoError(t, wb.Set(2, nil))
-		assert.NoError(t, wb.Apply())
-		assert.NoError(t, wb.Close())
-
-		first, last, err = stg.readLogEntryBoundaries()
-		assert.NoError(t, err)
-		// FIXME(jun): LogEntryMeta has unnecessary fields?
-		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, first)
-		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 2, LLSN: 2}, last)
-	})
+	}
 }
 
 func TestStorageReadRecoveryPoints(t *testing.T) {
-	testStorage(t, func(t testing.TB, stg *Storage) {
-		rp, err := stg.ReadRecoveryPoints()
-		assert.NoError(t, err)
-		assert.Nil(t, rp.LastCommitContext)
-		assert.Nil(t, rp.CommittedLogEntry.First)
-		assert.Nil(t, rp.CommittedLogEntry.Last)
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, stg *Storage)
+	}{
+		{
+			name: "NoLogEntry",
+			testf: func(t *testing.T, stg *Storage) {
+				rp, err := stg.ReadRecoveryPoints()
+				require.NoError(t, err)
+				require.Nil(t, rp.LastCommitContext)
+				require.Nil(t, rp.CommittedLogEntry.First)
+				require.Nil(t, rp.CommittedLogEntry.Last)
+			},
+		},
+		{
+			name: "EmptyCommitContext",
+			testf: func(t *testing.T, stg *Storage) {
+				cc := CommitContext{
+					Version:            1,
+					HighWatermark:      1,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   1,
+					CommittedLLSNBegin: 1,
+				}
 
-		// empty cc
-		cb, err := stg.NewCommitBatch(CommitContext{
-			Version:            1,
-			HighWatermark:      1,
-			CommittedGLSNBegin: 1,
-			CommittedGLSNEnd:   1,
-			CommittedLLSNBegin: 1,
+				cb, err := stg.NewCommitBatch(cc)
+				require.NoError(t, err)
+				require.NoError(t, cb.Apply())
+				require.NoError(t, cb.Close())
+
+				rp, err := stg.ReadRecoveryPoints()
+				require.NoError(t, err)
+				require.Equal(t, &cc, rp.LastCommitContext)
+				require.Zero(t, rp.CommittedLogEntry)
+			},
+		},
+		{
+			name: "NoData",
+			testf: func(t *testing.T, stg *Storage) {
+				cc := CommitContext{
+					Version:            1,
+					HighWatermark:      1,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   2,
+					CommittedLLSNBegin: 1,
+				}
+
+				cb, err := stg.NewCommitBatch(cc)
+				require.NoError(t, err)
+				require.NoError(t, cb.Set(1, 1))
+				require.NoError(t, cb.Apply())
+				require.NoError(t, cb.Close())
+
+				rp, err := stg.ReadRecoveryPoints()
+				require.NoError(t, err)
+				require.Equal(t, &cc, rp.LastCommitContext)
+				require.Zero(t, rp.CommittedLogEntry)
+			},
+		},
+		{
+			name: "SingleLogEntry",
+			testf: func(t *testing.T, stg *Storage) {
+				cc := CommitContext{
+					Version:            1,
+					HighWatermark:      1,
+					CommittedGLSNBegin: 1,
+					CommittedGLSNEnd:   2,
+					CommittedLLSNBegin: 1,
+				}
+
+				cb, err := stg.NewCommitBatch(cc)
+				require.NoError(t, err)
+				require.NoError(t, cb.Set(1, 1))
+				require.NoError(t, cb.Apply())
+				require.NoError(t, cb.Close())
+
+				wb := stg.NewWriteBatch()
+				require.NoError(t, wb.Set(1, nil))
+				require.NoError(t, wb.Apply())
+				require.NoError(t, wb.Close())
+
+				rp, err := stg.ReadRecoveryPoints()
+				require.NoError(t, err)
+				require.Equal(t, &cc, rp.LastCommitContext)
+				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, rp.CommittedLogEntry.First)
+				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, rp.CommittedLogEntry.Last)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			stg := TestNewStorage(t)
+			defer func() {
+				err := stg.Close()
+				require.NoError(t, err)
+			}()
+			tc.testf(t, stg)
 		})
-		assert.NoError(t, err)
-		assert.NoError(t, cb.Apply())
-		assert.NoError(t, cb.Close())
-
-		rp, err = stg.ReadRecoveryPoints()
-		assert.NoError(t, err)
-		assert.Equal(t, &CommitContext{
-			Version:            1,
-			HighWatermark:      1,
-			CommittedGLSNBegin: 1,
-			CommittedGLSNEnd:   1,
-			CommittedLLSNBegin: 1,
-		}, rp.LastCommitContext)
-		assert.Nil(t, rp.CommittedLogEntry.First)
-		assert.Nil(t, rp.CommittedLogEntry.Last)
-
-		// nonempty cc
-		cb, err = stg.NewCommitBatch(CommitContext{
-			Version:            2,
-			HighWatermark:      2,
-			CommittedGLSNBegin: 1,
-			CommittedGLSNEnd:   2,
-			CommittedLLSNBegin: 1,
-		})
-		assert.NoError(t, err)
-		assert.NoError(t, cb.Set(1, 1))
-		assert.NoError(t, cb.Apply())
-		assert.NoError(t, cb.Close())
-
-		// no data corresponded to the commit
-		_, err = stg.ReadRecoveryPoints()
-		assert.Error(t, err)
-
-		wb := stg.NewWriteBatch()
-		assert.NoError(t, wb.Set(1, nil))
-		assert.NoError(t, wb.Apply())
-		assert.NoError(t, wb.Close())
-
-		rp, err = stg.ReadRecoveryPoints()
-		assert.NoError(t, err)
-		assert.Equal(t, &CommitContext{
-			Version:            2,
-			HighWatermark:      2,
-			CommittedGLSNBegin: 1,
-			CommittedGLSNEnd:   2,
-			CommittedLLSNBegin: 1,
-		}, rp.LastCommitContext)
-		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, rp.CommittedLogEntry.First)
-		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, rp.CommittedLogEntry.Last)
-	})
-}
-
-func TestStorageReadRecoveryPoints_InconsistentWriteCommit(t *testing.T) {
-	t.Skip("Storage will not consider the consistency of committed logs.")
-	testStorage(t, func(t testing.TB, stg *Storage) {
-		ck := make([]byte, commitKeyLength)
-		dk := make([]byte, dataKeyLength)
-
-		// committed log: llsn = 1, glsn = 1
-		err := stg.commitDB.Set(encodeCommitKeyInternal(1, ck), encodeDataKeyInternal(1, dk), pebble.Sync)
-		assert.NoError(t, err)
-
-		err = stg.dataDB.Set(encodeDataKeyInternal(1, dk), nil, pebble.Sync)
-		assert.NoError(t, err)
-
-		// A committed log exists, but no commit context for that.
-		_, err = stg.ReadRecoveryPoints()
-		assert.Error(t, err)
-
-		// nonempty cc: llsn = 1, glsn = 2
-		cb, err := stg.NewCommitBatch(CommitContext{
-			Version:            1,
-			HighWatermark:      1,
-			CommittedGLSNBegin: 2,
-			CommittedGLSNEnd:   3,
-			CommittedLLSNBegin: 1,
-		})
-		assert.NoError(t, err)
-		assert.NoError(t, cb.Apply())
-		assert.NoError(t, cb.Close())
-
-		// Committed log and commit context exist, but they are inconsistent.
-		_, err = stg.ReadRecoveryPoints()
-		assert.Error(t, err)
-	})
+	}
 }
 
 func TestStorage_TrimWhenNoLogEntry(t *testing.T) {
