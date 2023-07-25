@@ -1,6 +1,3 @@
-ARG GO_VERSION=1.20
-ARG PYTHON_VERSION=3.9
-ARG BUSYBOX_VERSION=stable
 ARG GRPC_HEALTH_PROBE_VERSION=v0.4.11
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -10,27 +7,27 @@ ARG VARLOGADM_RPC_PORT=9093
 ARG VARLOGSN_RPC_PORT=9091
 
 
-FROM busybox:${BUSYBOX_VERSION} AS tools
+FROM busybox:1.36.1 AS tools
 ARG GRPC_HEALTH_PROBE_VERSION
 RUN wget -qO/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-linux-amd64 \
     && chmod +x /bin/grpc_health_probe
 
 
-FROM golang:${GO_VERSION} AS builder-cgo
+FROM golang:1.20 AS builder-cgo
 ARG DEBIAN_FRONTEND
 WORKDIR /varlog
 COPY . .
 RUN make build GCFLAGS=""
 
 
-FROM golang:${GO_VERSION} AS builder-noncgo
+FROM golang:1.20 AS builder-noncgo
 ARG DEBIAN_FRONTEND
 WORKDIR /varlog
 COPY . .
 RUN CGO_ENABLED=0 make build GCFLAGS=""
 
 
-FROM python:${PYTHON_VERSION} AS base-cgo
+FROM python:3.9 AS base-cgo
 ARG DEBIAN_FRONTEND
 RUN groupadd -r varlog && useradd -r -g varlog varlog --home-dir=/varlog \
     && mkdir /varlog \
@@ -40,7 +37,7 @@ USER varlog
 ENV PATH=/varlog/bin:$PATH
 
 
-FROM python:${PYTHON_VERSION}-alpine AS base-noncgo
+FROM python:3.9-alpine AS base-noncgo
 RUN addgroup -S -g 1000 varlog \
     && adduser -H -S -D -h /varlog -G varlog -u 999 -s /bin/sh varlog \
     && mkdir /varlog \
