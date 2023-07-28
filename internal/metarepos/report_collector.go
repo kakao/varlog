@@ -647,7 +647,7 @@ func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
 }
 
 func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse) *mrpb.StorageNodeUncommitReport {
-	report := mrpb.NewStoragenodeUncommitReport(response.StorageNodeID)
+	report := mrpb.NewStorageNodeUncommitReport(response.StorageNodeID)
 	report.UncommitReports = response.UncommitReports
 
 	if report.Len() == 0 {
@@ -662,7 +662,7 @@ func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse
 		return report
 	}
 
-	diff := mrpb.NewStoragenodeUncommitReport(report.StorageNodeID)
+	diff := mrpb.NewStorageNodeUncommitReport(report.StorageNodeID)
 	diff.UncommitReports = make([]snpb.LogStreamUncommitReport, 0, len(report.UncommitReports))
 	defer report.Release()
 
@@ -917,7 +917,7 @@ func (rc *reportContext) saveReport(report *mrpb.StorageNodeUncommitReport) {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
-	rc.report = mrpb.NewStoragenodeUncommitReport(report.StorageNodeID)
+	rc.report = mrpb.NewStorageNodeUncommitReport(report.StorageNodeID)
 	rc.report.UncommitReports = report.UncommitReports
 }
 
@@ -931,7 +931,7 @@ func (rc *reportContext) swapReport(newReport *mrpb.StorageNodeUncommitReport) (
 		rc.report.Release()
 	}
 
-	rc.report = mrpb.NewStoragenodeUncommitReport(newReport.StorageNodeID)
+	rc.report = mrpb.NewStorageNodeUncommitReport(newReport.StorageNodeID)
 	rc.report.UncommitReports = newReport.UncommitReports
 
 	return old, ok
