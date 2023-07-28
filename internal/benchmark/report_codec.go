@@ -28,50 +28,42 @@ func (se StringEncoder) Encode(trs TargetReports) ([]byte, error) {
 	//  slps: subscribed logs per second
 	//  sbps: subscribed megabytes per second
 	// eelat: end-to-end latency in milliseconds
-	fmt.Fprintf(&buf, "___tgt")  //  6 spaces
-	fmt.Fprintf(&buf, "__arpsR") //  7 spaces
-	fmt.Fprintf(&buf, "__arpsT") //  7 spaces
+	fmt.Fprintf(&buf, "target")                 //  6 spaces
+	fmt.Fprintf(&buf, "_____arps(now,tot)")     // 18 spaces
+	fmt.Fprintf(&buf, "_________abps(now,tot)") // 22 spaces
+	fmt.Fprintf(&buf, "_adur(now,tot)")         // 14 spaces
 
-	fmt.Fprintf(&buf, "_______abpsR") // 12 spaces
-	fmt.Fprintf(&buf, "_______abpsT") // 12 spaces
+	fmt.Fprintf(&buf, "_____slps(now,tot)")     // 18 spaces
+	fmt.Fprintf(&buf, "_________sbps(now,tot)") // 22 spaces
+	fmt.Fprintf(&buf, "__eelat(now,tot)")       // 16 spaces
+	fmt.Fprintf(&buf, "\n")
 
-	fmt.Fprintf(&buf, "__adurR") //  7 spaces
-	fmt.Fprintf(&buf, "__adurT") //  7 spaces
-
-	fmt.Fprintf(&buf, "__slpsR") //  7 spaces
-	fmt.Fprintf(&buf, "__slpsT") //  7 spaces
-
-	fmt.Fprintf(&buf, "_______sbpsR") // 12 spaces
-	fmt.Fprintf(&buf, "_______sbpsT") // 12 spaces
-
-	fmt.Fprintf(&buf, "__eelatR")   //  8 spaces
-	fmt.Fprintf(&buf, "__eelatT\n") //  8 spaces
 	for idx, rpt := range trs.Reports {
 		fmt.Fprintf(&buf, "%6s", rpt.Target)
 
 		// arps
-		fmt.Fprintf(&buf, "%7.1f", rpt.Recent.AppendReport.RequestsPerSecond)
-		fmt.Fprintf(&buf, "%7.1f", rpt.Total.AppendReport.RequestsPerSecond)
+		fmt.Fprintf(&buf, "%7s/s", units.ToHumanSizeStringWithoutUnit(rpt.Recent.AppendReport.RequestsPerSecond, 4))
+		fmt.Fprintf(&buf, "%7s/s", units.ToHumanSizeStringWithoutUnit(rpt.Total.AppendReport.RequestsPerSecond, 4))
 
 		// abps
-		fmt.Fprintf(&buf, "%10s/s", units.ToByteSizeString(rpt.Recent.AppendReport.BytesPerSecond))
-		fmt.Fprintf(&buf, "%10s/s", units.ToByteSizeString(rpt.Total.AppendReport.BytesPerSecond))
+		fmt.Fprintf(&buf, "%9s/s", units.ToByteSizeString(rpt.Recent.AppendReport.BytesPerSecond))
+		fmt.Fprintf(&buf, "%9s/s", units.ToByteSizeString(rpt.Total.AppendReport.BytesPerSecond))
 
 		// adur
-		fmt.Fprintf(&buf, "%7.1f", rpt.Recent.AppendReport.Duration)
-		fmt.Fprintf(&buf, "%7.1f", rpt.Total.AppendReport.Duration)
+		fmt.Fprintf(&buf, "%5.1fms", rpt.Recent.AppendReport.Duration)
+		fmt.Fprintf(&buf, "%5.1fms", rpt.Total.AppendReport.Duration)
 
 		// slps
-		fmt.Fprintf(&buf, "%7.1f", rpt.Recent.SubscribeReport.LogsPerSecond)
-		fmt.Fprintf(&buf, "%7.1f", rpt.Total.SubscribeReport.LogsPerSecond)
+		fmt.Fprintf(&buf, "%7s/s", units.ToHumanSizeStringWithoutUnit(rpt.Recent.SubscribeReport.LogsPerSecond, 4))
+		fmt.Fprintf(&buf, "%7s/s", units.ToHumanSizeStringWithoutUnit(rpt.Total.SubscribeReport.LogsPerSecond, 4))
 
 		// sbps
-		fmt.Fprintf(&buf, "%10s/s", units.ToByteSizeString(rpt.Recent.SubscribeReport.BytesPerSecond))
-		fmt.Fprintf(&buf, "%10s/s", units.ToByteSizeString(rpt.Total.SubscribeReport.BytesPerSecond))
+		fmt.Fprintf(&buf, "%9s/s", units.ToByteSizeString(rpt.Recent.SubscribeReport.BytesPerSecond))
+		fmt.Fprintf(&buf, "%9s/s", units.ToByteSizeString(rpt.Total.SubscribeReport.BytesPerSecond))
 
 		// eelat
-		fmt.Fprintf(&buf, "%8.1f", rpt.Recent.EndToEndReport.Latency)
-		fmt.Fprintf(&buf, "%8.1f", rpt.Total.EndToEndReport.Latency)
+		fmt.Fprintf(&buf, "%6.1fms", rpt.Recent.EndToEndReport.Latency)
+		fmt.Fprintf(&buf, "%6.1fms", rpt.Total.EndToEndReport.Latency)
 
 		if idx < len(trs.Reports)-1 {
 			fmt.Fprint(&buf, "\n")

@@ -31,6 +31,15 @@ func TestGetUnderlyingDB(tb testing.TB, stg *Storage) (dataDB, commitDB *pebble.
 	return stg.dataDB, stg.commitDB
 }
 
+// TestWriteLogEntry stores data located by the llsn. The data is not committed
+// because it does not store commits.
+func TestWriteLogEntry(tb testing.TB, stg *Storage, llsn types.LLSN, data []byte) {
+	batch := stg.NewWriteBatch()
+	require.NoError(tb, batch.Set(llsn, data))
+	require.NoError(tb, batch.Apply())
+	require.NoError(tb, batch.Close())
+}
+
 // TestAppendLogEntryWithoutCommitContext stores log entries without commit
 // context.
 func TestAppendLogEntryWithoutCommitContext(tb testing.TB, stg *Storage, llsn types.LLSN, glsn types.GLSN, data []byte) {

@@ -647,7 +647,7 @@ func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
 }
 
 func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse) *mrpb.StorageNodeUncommitReport {
-	report := mrpb.NewStoragenodeUncommitReport(response.StorageNodeID)
+	report := mrpb.NewStorageNodeUncommitReport(response.StorageNodeID)
 	report.UncommitReports = response.UncommitReports
 
 	if report.Len() == 0 {
@@ -656,14 +656,13 @@ func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse
 
 	report.Sort()
 
-	prevReport := rce.reportCtx.getReport()
-	rce.reportCtx.saveReport(report)
-	if prevReport == nil || rce.reportCtx.isExpire() {
+	prevReport, ok := rce.reportCtx.swapReport(report)
+	if !ok || rce.reportCtx.isExpire() {
 		rce.reportCtx.reload()
 		return report
 	}
 
-	diff := mrpb.NewStoragenodeUncommitReport(report.StorageNodeID)
+	diff := mrpb.NewStorageNodeUncommitReport(report.StorageNodeID)
 	diff.UncommitReports = make([]snpb.LogStreamUncommitReport, 0, len(report.UncommitReports))
 	defer report.Release()
 
@@ -746,8 +745,8 @@ func (rce *reportCollectExecutor) getClient(ctx context.Context) (reportcommitte
 }
 
 func (rce *reportCollectExecutor) getReportedVersion(lsID types.LogStreamID) (types.Version, bool) {
-	report := rce.reportCtx.getReport()
-	if report == nil {
+	report, ok := rce.reportCtx.getReport()
+	if !ok {
 		return types.InvalidVersion, false
 	}
 
@@ -918,15 +917,36 @@ func (rc *reportContext) saveReport(report *mrpb.StorageNodeUncommitReport) {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
-	rc.report = mrpb.NewStoragenodeUncommitReport(report.StorageNodeID)
+	rc.report = mrpb.NewStorageNodeUncommitReport(report.StorageNodeID)
 	rc.report.UncommitReports = report.UncommitReports
 }
 
-func (rc *reportContext) getReport() *mrpb.StorageNodeUncommitReport {
+func (rc *reportContext) swapReport(newReport *mrpb.StorageNodeUncommitReport) (old mrpb.StorageNodeUncommitReport, ok bool) {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+
+	if rc.report != nil {
+		old = *rc.report
+		ok = true
+		rc.report.Release()
+	}
+
+	rc.report = mrpb.NewStorageNodeUncommitReport(newReport.StorageNodeID)
+	rc.report.UncommitReports = newReport.UncommitReports
+
+	return old, ok
+}
+
+func (rc *reportContext) getReport() (report mrpb.StorageNodeUncommitReport, ok bool) {
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 
-	return rc.report
+	if rc.report != nil {
+		report = *rc.report
+		ok = true
+	}
+
+	return report, ok
 }
 
 func (rc *reportContext) reload() {

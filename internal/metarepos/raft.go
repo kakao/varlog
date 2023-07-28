@@ -33,7 +33,7 @@ import (
 type raftNode struct {
 	raftConfig
 
-	proposeC    chan string              // proposed messages from app
+	proposeC    chan []byte              // proposed messages from app
 	confChangeC chan raftpb.ConfChange   // proposed cluster config changes
 	commitC     chan *raftCommittedEntry // entries committed to app
 	snapshotC   chan struct{}            // snapshot trigger
@@ -98,7 +98,7 @@ var purgeInterval = 30 * time.Second
 // current), then new log entries.
 func newRaftNode(cfg raftConfig,
 	snapshotGetter SnapshotGetter,
-	proposeC chan string,
+	proposeC chan []byte,
 	confChangeC chan raftpb.ConfChange,
 	tmStub *telemetryStub,
 	logger *zap.Logger) *raftNode {
@@ -707,7 +707,7 @@ Loop:
 
 			// blocks until accepted by raft state machine
 			// TODO:: handle dropped proposal
-			err := rc.node.Propose(context.TODO(), []byte(prop))
+			err := rc.node.Propose(context.TODO(), prop)
 			if err != nil {
 				rc.logger.Warn("proposal fail", zap.String("err", err.Error()))
 			}

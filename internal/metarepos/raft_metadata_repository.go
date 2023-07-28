@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gogo/status"
 	"go.etcd.io/etcd/pkg/fileutil"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -20,8 +21,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
-
-	"github.com/gogo/status"
 
 	"github.com/kakao/varlog/internal/reportcommitter"
 	"github.com/kakao/varlog/pkg/types"
@@ -64,7 +63,7 @@ type RaftMetadataRepository struct {
 	proposeC      chan *mrpb.RaftEntry
 	commitC       chan *committedEntry
 	rnConfChangeC chan raftpb.ConfChange
-	rnProposeC    chan string
+	rnProposeC    chan []byte
 	rnCommitC     chan *raftCommittedEntry
 
 	// for report
@@ -110,8 +109,8 @@ func NewRaftMetadataRepository(opts ...Option) *RaftMetadataRepository {
 		proposeC:      make(chan *mrpb.RaftEntry, 4096),
 		commitC:       make(chan *committedEntry, 4096),
 		rnConfChangeC: make(chan raftpb.ConfChange, 1),
-		rnProposeC:    make(chan string),
-		reportQueue:   make([]*mrpb.Report, 0, 1024),
+		rnProposeC:    make(chan []byte),
+		reportQueue:   mrpb.NewReportQueue(),
 		runner:        runner.New("mr", cfg.logger),
 		sw:            stopwaiter.New(),
 		tmStub:        tmStub,
@@ -303,13 +302,16 @@ Loop:
 			b, err := e.Marshal()
 			if err != nil {
 				mr.logger.Error(err.Error())
+				e.Release()
 				continue
 			}
+			nodeIndex, requestIndex := e.NodeIndex, e.RequestIndex
+			e.Release()
 
 			select {
-			case mr.rnProposeC <- string(b):
+			case mr.rnProposeC <- b:
 			case <-ctx.Done():
-				mr.sendAck(e.NodeIndex, e.RequestIndex, ctx.Err())
+				mr.sendAck(nodeIndex, requestIndex, ctx.Err())
 			}
 		case <-ctx.Done():
 			break Loop
@@ -346,12 +348,9 @@ func (mr *RaftMetadataRepository) processReport(ctx context.Context) {
 			mr.muReportQueue.Lock()
 			num := len(mr.reportQueue)
 			if num > 0 {
-				reports = &mrpb.Reports{
-					NodeID:      mr.nodeID,
-					CreatedTime: time.Now(),
-				}
+				reports = mrpb.NewReports(mr.nodeID, time.Now())
 				reports.Reports = mr.reportQueue
-				mr.reportQueue = make([]*mrpb.Report, 0, 1024)
+				mr.reportQueue = mrpb.NewReportQueue()
 			}
 			mr.muReportQueue.Unlock()
 
@@ -1152,53 +1151,69 @@ func (mr *RaftMetadataRepository) proposeReport(snID types.StorageNodeID, ur []s
 	return nil
 }
 
-func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, guarantee bool) error {
-	e := &mrpb.RaftEntry{}
-	e.Request.SetValue(r)
-	e.NodeIndex = uint64(mr.nodeID)
-	e.RequestIndex = UnusedRequestIndex
+func (mr *RaftMetadataRepository) leaseRaftEntry(request any, requestIndex uint64) *mrpb.RaftEntry {
+	re := mrpb.NewRaftEntry()
+	re.Request.SetValue(request)
+	re.NodeIndex = uint64(mr.nodeID)
+	re.RequestIndex = requestIndex
+	return re
+}
 
-	if guarantee {
-		c := make(chan error, 1)
-		rIdx := mr.requestNum.Add(1)
+func (mr *RaftMetadataRepository) proposeWithoutGuarantee(ctx context.Context, request any) (err error) {
+	re := mr.leaseRaftEntry(request, UnusedRequestIndex)
+	select {
+	case mr.proposeC <- re:
+		return nil
+	case <-ctx.Done():
+		err = ctx.Err()
+	default:
+		err = verrors.ErrIgnore
+	}
+	if err != nil {
+		re.Release()
+	}
+	return err
+}
 
-		e.RequestIndex = rIdx
-		mr.requestMap.Store(rIdx, c)
-		defer mr.requestMap.Delete(rIdx)
+func (mr *RaftMetadataRepository) proposeWithGuarantee(ctx context.Context, request any) error {
+	rIdx := mr.requestNum.Add(1)
+	c := make(chan error, 1)
+	mr.requestMap.Store(rIdx, c)
+	defer mr.requestMap.Delete(rIdx)
 
-		t := time.NewTimer(mr.raftProposeTimeout)
-		defer t.Stop()
+	t := time.NewTimer(mr.raftProposeTimeout)
+	defer t.Stop()
 
-	PROPOSE:
-		select {
-		case mr.proposeC <- e:
-		case <-t.C:
-			t.Reset(mr.raftProposeTimeout)
-			goto PROPOSE
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+	re := mr.leaseRaftEntry(request, rIdx)
 
-		select {
-		case err := <-c:
-			return err
-		case <-t.C:
-			t.Reset(mr.raftProposeTimeout)
-			goto PROPOSE
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	} else {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case mr.proposeC <- e:
-		default:
-			return verrors.ErrIgnore
-		}
+Propose:
+	select {
+	case mr.proposeC <- re:
+	case <-t.C:
+		t.Reset(mr.raftProposeTimeout)
+		goto Propose
+	case <-ctx.Done():
+		re.Release()
+		return ctx.Err()
 	}
 
-	return nil
+	select {
+	case err := <-c:
+		return err
+	case <-t.C:
+		t.Reset(mr.raftProposeTimeout)
+		re = mr.leaseRaftEntry(request, rIdx)
+		goto Propose
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (mr *RaftMetadataRepository) propose(ctx context.Context, request interface{}, guarantee bool) error {
+	if !guarantee {
+		return mr.proposeWithoutGuarantee(ctx, request)
+	}
+	return mr.proposeWithGuarantee(ctx, request)
 }
 
 func (mr *RaftMetadataRepository) proposeConfChange(ctx context.Context, r raftpb.ConfChange) error {

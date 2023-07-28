@@ -2,17 +2,23 @@ package storage
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/cockroachdb/pebble"
 
+	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 type RecoveryPoints struct {
 	LastCommitContext *CommitContext
 	CommittedLogEntry struct {
-		First *varlogpb.LogEntryMeta
-		Last  *varlogpb.LogEntryMeta
+		First *varlogpb.LogSequenceNumber
+		Last  *varlogpb.LogSequenceNumber
+	}
+	UncommittedLLSN struct {
+		Begin types.LLSN
+		End   types.LLSN
 	}
 }
 
@@ -31,6 +37,16 @@ func (s *Storage) ReadRecoveryPoints() (rp RecoveryPoints, err error) {
 	if err != nil {
 		return
 	}
+
+	uncommittedBegin := types.MinLLSN
+	if cc := rp.LastCommitContext; cc != nil {
+		uncommittedBegin = cc.CommittedLLSNBegin + types.LLSN(cc.CommittedGLSNEnd-cc.CommittedGLSNBegin)
+	}
+	rp.UncommittedLLSN.Begin, rp.UncommittedLLSN.End, err = s.readUncommittedLogEntryBoundaries(uncommittedBegin)
+	if err != nil {
+		return
+	}
+
 	return rp, nil
 }
 
@@ -47,7 +63,7 @@ func (s *Storage) readLastCommitContext() (*CommitContext, error) {
 	return &cc, nil
 }
 
-func (s *Storage) readLogEntryBoundaries() (first, last *varlogpb.LogEntryMeta, err error) {
+func (s *Storage) readLogEntryBoundaries() (first, last *varlogpb.LogSequenceNumber, err error) {
 	it := s.commitDB.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitKeyPrefix},
 		UpperBound: []byte{commitKeySentinelPrefix},
@@ -59,12 +75,16 @@ func (s *Storage) readLogEntryBoundaries() (first, last *varlogpb.LogEntryMeta, 
 	if !it.First() {
 		return nil, nil, nil
 	}
+
 	firstGLSN := decodeCommitKey(it.Key())
 	firstLE, err := s.readGLSN(firstGLSN)
 	if err != nil {
 		return nil, nil, err
 	}
-	first = &firstLE.LogEntryMeta
+	first = &varlogpb.LogSequenceNumber{
+		LLSN: firstLE.LLSN,
+		GLSN: firstLE.GLSN,
+	}
 
 	_ = it.Last()
 	lastGLSN := decodeCommitKey(it.Key())
@@ -72,5 +92,36 @@ func (s *Storage) readLogEntryBoundaries() (first, last *varlogpb.LogEntryMeta, 
 	if err != nil {
 		return first, nil, err
 	}
-	return first, &lastLE.LogEntryMeta, nil
+	last = &varlogpb.LogSequenceNumber{
+		LLSN: lastLE.LLSN,
+		GLSN: lastLE.GLSN,
+	}
+
+	return first, last, nil
+}
+
+func (s *Storage) readUncommittedLogEntryBoundaries(uncommittedBegin types.LLSN) (begin, end types.LLSN, err error) {
+	dk := make([]byte, dataKeyLength)
+	dk = encodeDataKeyInternal(uncommittedBegin, dk)
+	it := s.dataDB.NewIter(&pebble.IterOptions{
+		LowerBound: dk,
+		UpperBound: []byte{dataKeySentinelPrefix},
+	})
+	defer func() {
+		_ = it.Close()
+	}()
+
+	if !it.First() {
+		return types.InvalidLLSN, types.InvalidLLSN, nil
+	}
+
+	begin = decodeDataKey(it.Key())
+	if begin != uncommittedBegin {
+		err = fmt.Errorf("unexpected uncommitted begin, expected %v but got %v", uncommittedBegin, begin)
+		return types.InvalidLLSN, types.InvalidLLSN, err
+	}
+	_ = it.Last()
+	end = decodeDataKey(it.Key()) + 1
+
+	return begin, end, nil
 }

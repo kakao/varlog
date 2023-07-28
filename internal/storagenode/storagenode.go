@@ -3,7 +3,6 @@ package storagenode
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -13,7 +12,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/gogo/status"
 	"github.com/puzpuzpuz/xsync/v2"
 	"github.com/soheilhy/cmux"
 	"go.opentelemetry.io/otel"
@@ -32,6 +30,7 @@ import (
 	"github.com/kakao/varlog/internal/storagenode/pprof"
 	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/internal/storagenode/volume"
+	"github.com/kakao/varlog/pkg/rpc/interceptors/logging"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/fputil"
 	"github.com/kakao/varlog/pkg/util/netutil"
@@ -82,7 +81,7 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 		return nil, err
 	}
 
-	metrics, err := telemetry.RegisterMetrics(otel.Meter("varlogsn"), cfg.snid)
+	metrics, err := telemetry.RegisterMetrics(otel.Meter("varlogsn"))
 	if err != nil {
 		return nil, err
 	}
@@ -105,21 +104,8 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 		grpc.ReadBufferSize(int(cfg.grpcServerReadBufferSize)),
 		grpc.WriteBufferSize(int(cfg.grpcServerWriteBufferSize)),
 		grpc.MaxRecvMsgSize(int(cfg.grpcServerMaxRecvMsgSize)),
-		grpc.UnaryInterceptor(
-			func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-				start := time.Now()
-				resp, err := handler(ctx, req)
-				if err != nil {
-					duration := time.Since(start)
-					cfg.logger.Error(info.FullMethod,
-						zap.Stringer("code", status.Code(err)),
-						zap.Int64("duration", duration.Microseconds()),
-						zap.Stringer("request", req.(fmt.Stringer)),
-						zap.Error(err),
-					)
-				}
-				return resp, err
-			},
+		grpc.ChainUnaryInterceptor(
+			logging.UnaryServerInterceptor(cfg.logger),
 		),
 	}
 	if opt := cfg.grpcServerInitialConnWindowSize; opt.set {
@@ -334,7 +320,7 @@ func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID
 		return nil, snerrors.ErrTooManyReplicas
 	}
 
-	lsm, err := telemetry.RegisterLogStreamMetrics(sn.metrics, lsid)
+	lsm, err := telemetry.RegisterLogStreamMetrics(sn.metrics, tpid, lsid)
 	if err != nil {
 		return nil, err
 	}

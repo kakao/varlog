@@ -94,7 +94,7 @@ func start(c *cli.Context) error {
 
 	logger = logger.Named("sn").With(zap.Uint32("cid", uint32(clusterID)), zap.Int32("snid", int32(storageNodeID)))
 
-	meterProviderOpts, err := flags.ParseTelemetryFlags(context.Background(), c, "sn", storageNodeID.String())
+	meterProviderOpts, err := flags.ParseTelemetryFlags(context.Background(), c, "sn", storageNodeID.String(), clusterID)
 	if err != nil {
 		return err
 	}
@@ -260,7 +260,7 @@ func parseStorageOptions(c *cli.Context) (opts []storage.Option, err error) {
 
 	opts = []storage.Option{
 		storage.WithDataDBOptions(getStorageDBOptions(0)...),
-		storage.WithMetrisLogInterval(c.Duration(flagStorageMetricsLogInterval.Name)),
+		storage.WithMetricsLogInterval(c.Duration(flagStorageMetricsLogInterval.Name)),
 	}
 	if c.Bool(flagExperimentalStorageSeparateDB.Name) {
 		opts = append(opts,
@@ -276,6 +276,16 @@ func parseStorageOptions(c *cli.Context) (opts []storage.Option, err error) {
 	}
 	if c.Bool(flagStorageVerbose.Name) {
 		opts = append(opts, storage.WithVerboseLogging())
+	}
+	if name := flagStorageTrimDelay.Name; c.IsSet(name) {
+		opts = append(opts, storage.WithTrimDelay(c.Duration(name)))
+	}
+	if name := flagStorageTrimRate.Name; c.IsSet(name) {
+		rate, err := units.FromByteSizeString(c.String(name))
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, storage.WithTrimRateByte(int(rate)))
 	}
 	return opts, nil
 }

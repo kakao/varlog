@@ -38,7 +38,7 @@ type LoaderMetrics struct {
 type AppendMetrics struct {
 	requests   int64
 	bytes      int64
-	durationMS int64
+	durationMS float64
 }
 
 type SubscribeMetrics struct {

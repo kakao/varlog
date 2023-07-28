@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.20.0"
 
+	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/telemetry"
 )
 
@@ -88,16 +89,18 @@ var (
 	}
 )
 
-func ParseTelemetryFlags(ctx context.Context, c *cli.Context, serviceName, serviceInstanceID string) (opts []telemetry.MeterProviderOption, err error) {
+func ParseTelemetryFlags(ctx context.Context, c *cli.Context, serviceName, serviceInstanceID string, cid types.ClusterID) (opts []telemetry.MeterProviderOption, err error) {
 	const serviceNamespace = "varlog"
 
 	res, err := resource.New(ctx,
 		resource.WithFromEnv(),
 		resource.WithHost(),
+		resource.WithTelemetrySDK(),
 		resource.WithAttributes(
 			semconv.ServiceName(serviceName),
 			semconv.ServiceNamespace(serviceNamespace),
 			semconv.ServiceInstanceID(serviceInstanceID),
+			telemetry.ClusterID(cid),
 		))
 	if err != nil {
 		return nil, err

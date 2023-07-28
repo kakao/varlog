@@ -143,6 +143,8 @@ type config struct {
 	commitDBConfig     dbConfig
 	verbose            bool
 	metricsLogInterval time.Duration
+	trimDelay          time.Duration
+	trimRateByte       int
 	logger             *zap.Logger
 	readOnly           bool
 }
@@ -234,7 +236,7 @@ func WithVerboseLogging() Option {
 	})
 }
 
-func WithMetrisLogInterval(metricsLogInterval time.Duration) Option {
+func WithMetricsLogInterval(metricsLogInterval time.Duration) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.metricsLogInterval = metricsLogInterval
 	})
@@ -243,6 +245,23 @@ func WithMetrisLogInterval(metricsLogInterval time.Duration) Option {
 func WithLogger(logger *zap.Logger) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.logger = logger
+	})
+}
+
+// WithTrimDelay sets the delay before storage removes logs. If the value is
+// zero, Trim will delay the removal of prefix log entries until writing
+// additional log entries.
+func WithTrimDelay(trimDelay time.Duration) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.trimDelay = trimDelay
+	})
+}
+
+// WithTrimRateByte is the Trim deletion speed in bytes per second. If the
+// value is zero, Trim removes the log entries without throttling.
+func WithTrimRateByte(trimRateByte int) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.trimRateByte = trimRateByte
 	})
 }
 

@@ -82,7 +82,7 @@ var storageNodeUncommitReportPool = sync.Pool{
 	},
 }
 
-func NewStoragenodeUncommitReport(snid types.StorageNodeID) *StorageNodeUncommitReport {
+func NewStorageNodeUncommitReport(snid types.StorageNodeID) *StorageNodeUncommitReport {
 	r := storageNodeUncommitReportPool.Get().(*StorageNodeUncommitReport)
 	r.StorageNodeID = snid
 	return r

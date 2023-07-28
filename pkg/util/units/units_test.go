@@ -36,6 +36,39 @@ func TestToByteSizeString(t *testing.T) {
 	require.EqualValues(t, sizeInBytes, size)
 }
 
+func TestToHumanSizeStringWithoutUnit(t *testing.T) {
+	tcs := []struct {
+		size      float64
+		precision int
+		want      string
+	}{
+		{size: 0, precision: 0, want: "0"},
+		{size: 0, precision: 1, want: "0"},
+		{size: 1.49, precision: 0, want: "1"},
+		{size: 1.49, precision: 1, want: "1"},
+		{size: 1.49, precision: 2, want: "1.5"},
+		{size: 1.44, precision: 2, want: "1.4"},
+		{size: 1.50, precision: 1, want: "2"},
+		{size: 1.50, precision: 2, want: "1.5"},
+		{size: 1 << 10, precision: 1, want: "1k"},
+		{size: 10 << 10, precision: 1, want: "1e+01k"},
+		{size: 10 << 10, precision: 2, want: "10k"},
+		{size: 1 << 20, precision: 1, want: "1M"},
+		{size: 1 << 30, precision: 1, want: "1G"},
+		{size: 1 << 40, precision: 1, want: "1T"},
+		{size: 1 << 50, precision: 1, want: "1P"},
+		{size: 123456.78, precision: 6, want: "123.457k"},
+	}
+
+	for _, tc := range tcs {
+		tc := tc
+		t.Run(tc.want, func(t *testing.T) {
+			got := ToHumanSizeStringWithoutUnit(tc.size, tc.precision)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
