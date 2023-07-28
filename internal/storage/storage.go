@@ -112,6 +112,7 @@ func (s *Storage) newDB(path string, cfg *dbConfig) (*pebble.DB, error) {
 		MaxConcurrentCompactions:    func() int { return cfg.maxConcurrentCompaction },
 		Levels:                      make([]pebble.LevelOptions, 7),
 		ErrorIfExists:               false,
+		FlushDelayDeleteRange:       s.trimDelay,
 	}
 	pebbleOpts.Levels[0].TargetFileSize = cfg.l0TargetFileSize
 	for i := 0; i < len(pebbleOpts.Levels); i++ {
