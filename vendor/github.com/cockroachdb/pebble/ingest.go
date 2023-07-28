@@ -449,19 +449,19 @@ func ingestLink(
 			})
 		}
 	}
-	sharedObjs := make([]objstorage.SharedObjectToAttach, 0, len(shared))
+	sharedObjs := make([]objstorage.RemoteObjectToAttach, 0, len(shared))
 	for i := range shared {
 		backing, err := shared[i].Backing.Get()
 		if err != nil {
 			return err
 		}
-		sharedObjs = append(sharedObjs, objstorage.SharedObjectToAttach{
+		sharedObjs = append(sharedObjs, objstorage.RemoteObjectToAttach{
 			FileNum:  lr.sharedMeta[i].FileBacking.DiskFileNum,
 			FileType: fileTypeTable,
 			Backing:  backing,
 		})
 	}
-	sharedObjMetas, err := objProvider.AttachSharedObjects(sharedObjs)
+	sharedObjMetas, err := objProvider.AttachRemoteObjects(sharedObjs)
 	if err != nil {
 		return err
 	}
@@ -473,7 +473,7 @@ func ingestLink(
 		// open the db again after a crash/restart (see checkConsistency in open.go),
 		// plus it more accurately allows us to prioritize compactions of files
 		// that were originally created by us.
-		if !objProvider.IsForeign(sharedObjMetas[i]) {
+		if sharedObjMetas[i].IsShared() && !objProvider.IsForeign(sharedObjMetas[i]) {
 			size, err := objProvider.Size(sharedObjMetas[i])
 			if err != nil {
 				return err
@@ -827,7 +827,7 @@ func ingestTargetLevel(
 //
 // Two types of sstables are accepted for ingestion(s): one is sstables present
 // in the instance's vfs.FS and can be referenced locally. The other is sstables
-// present in shared.Storage, referred to as shared or foreign sstables. These
+// present in remote.Storage, referred to as shared or foreign sstables. These
 // shared sstables can be linked through objstorageprovider.Provider, and do not
 // need to already be present on the local vfs.FS. Foreign sstables must all fit
 // in an excise span, and are destined for a level specified in SharedSSTMeta.
@@ -858,7 +858,7 @@ func ingestTargetLevel(
 //     local sstables. This is the step where overlap with memtables is
 //     determined. If there is overlap, we remember the most recent memtable
 //     that overlaps.
-//  6. Update the sequence number in the ingested local sstables. (Shared
+//  6. Update the sequence number in the ingested local sstables. (Remote
 //     sstables get fixed sequence numbers that were determined at load time.)
 //  7. Wait for the most recent memtable that overlaps to flush (if any).
 //  8. Add the ingested sstables to the version (DB.ingestApply).
@@ -914,14 +914,14 @@ func (d *DB) IngestWithStats(paths []string) (IngestOperationStats, error) {
 }
 
 // IngestAndExcise does the same as IngestWithStats, and additionally accepts a
-// list of shared files to ingest that can be read from a shared.Storage through
+// list of shared files to ingest that can be read from a remote.Storage through
 // a Provider. All the shared files must live within exciseSpan, and any existing
 // keys in exciseSpan are deleted by turning existing sstables into virtual
 // sstables (if not virtual already) and shrinking their spans to exclude
 // exciseSpan. See the comment at Ingest for a more complete picture of the
 // ingestion process.
 //
-// Panics if this DB instance was not instantiated with a shared.Storage and
+// Panics if this DB instance was not instantiated with a remote.Storage and
 // shared sstables are present.
 func (d *DB) IngestAndExcise(
 	paths []string, shared []SharedSSTMeta, exciseSpan KeyRange,
@@ -1049,7 +1049,7 @@ func (d *DB) ingest(
 	shared []SharedSSTMeta,
 	exciseSpan KeyRange,
 ) (IngestOperationStats, error) {
-	if len(shared) > 0 && d.opts.Experimental.SharedStorage == nil {
+	if len(shared) > 0 && d.opts.Experimental.RemoteStorage == nil {
 		panic("cannot ingest shared sstables with nil SharedStorage")
 	}
 	if (exciseSpan.Valid() || len(shared) > 0) && d.opts.FormatMajorVersion < ExperimentalFormatVirtualSSTables {
@@ -1295,7 +1295,7 @@ func (d *DB) ingest(
 		}
 	}
 
-	// NB: Shared-sstable-only ingestions do not assign a sequence number to
+	// NB: Remote-sstable-only ingestions do not assign a sequence number to
 	// any sstables.
 	globalSeqNum := uint64(0)
 	if len(loadResult.localMeta) > 0 {
