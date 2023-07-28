@@ -99,14 +99,6 @@ func RegisterMetrics(meter metric.Meter) (m *Metrics, err error) {
 	if err != nil {
 		return nil, err
 	}
-
-	appendLogs, err = meter.Int64ObservableCounter(
-		"sn.append.logs",
-		metric.WithDescription("Number of logs appended to the log stream"),
-	)
-	if err != nil {
-		return nil, err
-	}
 	appendBytes, err = meter.Int64ObservableCounter(
 		"sn.append.bytes",
 		metric.WithDescription("Bytes appended to the log stream"),
