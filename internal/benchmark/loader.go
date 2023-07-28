@@ -145,7 +145,7 @@ func (loader *Loader) makeAppendFunc(ctx context.Context, c varlog.Log, am *Appe
 	recordMetrics := func(dur time.Duration) {
 		am.bytes += int64(loader.BatchSize * loader.MessageSize)
 		am.requests++
-		am.durationMS += dur.Milliseconds()
+		am.durationMS = float64(dur.Nanoseconds()) / float64(time.Millisecond)
 		if loader.metrics.ReportAppendMetrics(*am) {
 			*am = AppendMetrics{}
 		}
