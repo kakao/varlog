@@ -33,8 +33,24 @@ func NewMeterProvider(opts ...MeterProviderOption) (metric.MeterProvider, StopMe
 	mpOpts := []metricsdk.Option{
 		metricsdk.WithResource(cfg.resource),
 		metricsdk.WithReader(reader),
+		metricsdk.WithView(metricsdk.NewView(
+			// It customizes the bucket size of the rpc.server.duration.
+			metricsdk.Instrument{
+				Name: "rpc.server.duration",
+			},
+			metricsdk.Stream{
+				Aggregation: aggregation.ExplicitBucketHistogram{
+					// 50us, 100us,
+					// 1_000us(1ms), 2_000us(2ms), 4_000us(4ms),
+					// 8_000us(8ms), 16_000us(16ms), 32_000us(32ms),
+					// 1_000_000us(1s), 5_000_000us(5s), 10_000_000us(10s),
+					Boundaries: []float64{50, 100, 1e3, 2e3, 4e3, 8e3, 16e3, 32e3, 1e6, 5e6, 1e7},
+				},
+			},
+		)),
 	}
 	if cfg.runtimeInstrumentation {
+		// It customizes the bucket size of the process.runtime.go.gc.pause_ns.
 		mpOpts = append(mpOpts,
 			metricsdk.WithView(metricsdk.NewView(
 				metricsdk.Instrument{
