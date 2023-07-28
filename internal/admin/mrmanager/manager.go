@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/mrc/mrconnector"
@@ -88,6 +89,7 @@ type mrManager struct {
 	mu        sync.RWMutex
 	connector mrconnector.Connector
 
+	sfg     singleflight.Group
 	dirty   bool
 	updated time.Time
 	meta    *varlogpb.MetadataDescriptor
@@ -401,19 +403,37 @@ func (mrm *mrManager) RemovePeer(ctx context.Context, nodeID types.NodeID) error
 }
 
 func (mrm *mrManager) ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
-	mrm.mu.Lock()
-	defer mrm.mu.Unlock()
+	// fail-fast
+	if err := ctx.Err(); err != nil {
+		return nil, ctx.Err()
+	}
 
-	if mrm.dirty || time.Since(mrm.updated) > ReloadInterval {
+	// fast path
+	mrm.mu.RLock()
+	if !mrm.dirty && time.Since(mrm.updated) <= ReloadInterval {
+		meta := mrm.meta
+		mrm.mu.RUnlock()
+		return meta, nil
+	}
+	mrm.mu.RUnlock()
+
+	// slow path
+	md, err, _ := mrm.sfg.Do("cluster_metadata", func() (interface{}, error) {
 		meta, err := mrm.clusterMetadata(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("cluster metadata: %w", err)
 		}
+		mrm.mu.Lock()
 		mrm.meta = meta
 		mrm.dirty = false
 		mrm.updated = time.Now()
+		mrm.mu.Unlock()
+		return meta, nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return mrm.meta, nil
+	return md.(*varlogpb.MetadataDescriptor), nil
 }
 
 func (mrm *mrManager) StorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*varlogpb.StorageNodeDescriptor, error) {
