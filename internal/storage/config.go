@@ -144,6 +144,7 @@ type config struct {
 	verbose            bool
 	metricsLogInterval time.Duration
 	trimDelay          time.Duration
+	trimRateByte       int
 	logger             *zap.Logger
 	readOnly           bool
 }
@@ -253,6 +254,14 @@ func WithLogger(logger *zap.Logger) Option {
 func WithTrimDelay(trimDelay time.Duration) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.trimDelay = trimDelay
+	})
+}
+
+// WithTrimRateByte is the Trim deletion speed in bytes per second. If the
+// value is zero, Trim removes the log entries without throttling.
+func WithTrimRateByte(trimRateByte int) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.trimRateByte = trimRateByte
 	})
 }
 
