@@ -2,6 +2,7 @@ package benchmark
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -21,6 +22,7 @@ type loaderConfig struct {
 	mraddrs             []string
 	metrics             *LoaderMetrics
 	singleConnPerTarget bool
+	stopC               <-chan struct{}
 }
 
 type Loader struct {
@@ -95,12 +97,10 @@ func NewLoader(cfg loaderConfig) (loader *Loader, err error) {
 func (loader *Loader) Run(ctx context.Context) (err error) {
 	loader.metrics.Reset(time.Now())
 
-	ctx, cancel := context.WithCancel(ctx)
 	g, ctx := errgroup.WithContext(ctx)
 
 	defer func() {
 		err = multierr.Append(err, g.Wait())
-		cancel()
 	}()
 
 	for i := 0; i < len(loader.apps); i++ {
@@ -137,7 +137,7 @@ func (loader *Loader) Close() error {
 	return err
 }
 
-func (loader *Loader) makeAppendFunc(ctx context.Context, c varlog.Log, am *AppendMetrics) (appendFunc func(), closeFunc func()) {
+func (loader *Loader) makeAppendFunc(ctx context.Context, c varlog.Log, am *AppendMetrics) (appendFunc func() error, closeFunc func(), err error) {
 	begin := true
 	notifyBegin := func(meta varlogpb.LogEntryMeta) {
 		loader.begin.ch <- varlogpb.LogSequenceNumber{
@@ -172,11 +172,11 @@ func (loader *Loader) makeAppendFunc(ctx context.Context, c varlog.Log, am *Appe
 
 	closeFunc = func() {}
 	if lsid.Invalid() {
-		return func() {
+		appendFunc = func() error {
 			ts := time.Now()
 			res := c.Append(ctx, loader.TopicID, loader.batch)
 			if res.Err != nil {
-				panic(res.Err)
+				return res.Err
 			}
 			dur := time.Since(ts)
 			recordMetrics(dur)
@@ -184,15 +184,17 @@ func (loader *Loader) makeAppendFunc(ctx context.Context, c varlog.Log, am *Appe
 				notifyBegin(res.Metadata[0])
 			}
 			debugLog(res.Metadata)
-		}, closeFunc
+			return nil
+		}
+		return appendFunc, closeFunc, nil
 	}
 
 	if loader.PipelineSize == 0 {
-		return func() {
+		appendFunc = func() error {
 			ts := time.Now()
 			res := c.AppendTo(ctx, tpid, lsid, loader.batch)
 			if res.Err != nil {
-				panic(res.Err)
+				return res.Err
 			}
 			dur := time.Since(ts)
 			recordMetrics(dur)
@@ -200,21 +202,29 @@ func (loader *Loader) makeAppendFunc(ctx context.Context, c varlog.Log, am *Appe
 				notifyBegin(res.Metadata[0])
 			}
 			debugLog(res.Metadata)
-		}, closeFunc
+			return nil
+		}
+		return appendFunc, closeFunc, nil
 	}
 
 	lsa, err := c.NewLogStreamAppender(loader.TopicID, loader.LogStreamID,
 		varlog.WithPipelineSize(loader.PipelineSize),
 	)
 	if err != nil {
-		panic(err)
+		return nil, nil, err
 	}
 	closeFunc = lsa.Close
-	return func() {
+
+	appendFunc = func() error {
 		ts := time.Now()
 		err := lsa.AppendBatch(loader.batch, func(lem []varlogpb.LogEntryMeta, err error) {
 			if err != nil {
-				panic(err)
+				if errors.Is(err, varlog.ErrClosed) {
+					loader.logger.Debug("closed client", err, slog.Any("tpid", tpid), slog.Any("lsid", lsid))
+				} else {
+					loader.logger.Error("could not append", err, slog.Any("tpid", tpid), slog.Any("lsid", lsid))
+				}
+				return
 			}
 			dur := time.Since(ts)
 			recordMetrics(dur)
@@ -223,23 +233,29 @@ func (loader *Loader) makeAppendFunc(ctx context.Context, c varlog.Log, am *Appe
 			}
 			debugLog(lem)
 		})
-		if err != nil {
-			panic(err)
-		}
-	}, closeFunc
+		return err
+	}
+	return appendFunc, closeFunc, nil
 }
 
 func (loader *Loader) appendLoop(ctx context.Context, c varlog.Log) error {
 	var am AppendMetrics
-	appendFunc, closeFunc := loader.makeAppendFunc(ctx, c, &am)
+	appendFunc, closeFunc, err := loader.makeAppendFunc(ctx, c, &am)
+	if err != nil {
+		return err
+	}
 	defer closeFunc()
 
 	for {
 		select {
+		case <-loader.stopC:
+			return nil
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			appendFunc()
+			if err := appendFunc(); err != nil {
+				return err
+			}
 		}
 	}
 }
@@ -268,6 +284,8 @@ func (loader *Loader) subscribeLoop(ctx context.Context, c varlog.Log) error {
 		defer closer()
 
 		select {
+		case <-loader.stopC:
+			return nil
 		case <-stop:
 			if subErr != nil {
 				return fmt.Errorf("subscribe: %w", subErr)
@@ -284,6 +302,8 @@ func (loader *Loader) subscribeLoop(ctx context.Context, c varlog.Log) error {
 	}()
 	for {
 		select {
+		case <-loader.stopC:
+			return nil
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
@@ -308,6 +328,8 @@ func (loader *Loader) setBeginLSN(ctx context.Context) error {
 	}
 	for i := uint(0); i < loader.AppendersCount; i++ {
 		select {
+		case <-loader.stopC:
+			return nil
 		case lsn := <-loader.begin.ch:
 			if lsn.GLSN < beginLSN.GLSN {
 				beginLSN = lsn
