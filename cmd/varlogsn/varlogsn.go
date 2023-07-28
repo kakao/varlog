@@ -260,7 +260,7 @@ func parseStorageOptions(c *cli.Context) (opts []storage.Option, err error) {
 
 	opts = []storage.Option{
 		storage.WithDataDBOptions(getStorageDBOptions(0)...),
-		storage.WithMetrisLogInterval(c.Duration(flagStorageMetricsLogInterval.Name)),
+		storage.WithMetricsLogInterval(c.Duration(flagStorageMetricsLogInterval.Name)),
 	}
 	if c.Bool(flagExperimentalStorageSeparateDB.Name) {
 		opts = append(opts,
