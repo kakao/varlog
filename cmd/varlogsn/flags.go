@@ -207,11 +207,6 @@ var (
 		Usage: "timeout for stopping exporter",
 		Envs:  []string{"EXPORTER_STOP_TIMEOUT"},
 	}
-	flagStdoutExporterPrettyPrint = flags.FlagDesc{
-		Name:  "exporter-pretty-print",
-		Usage: "pretty print when using stdout exporter",
-		Envs:  []string{"EXPORTER_PRETTY_PRINT"},
-	}
 	flagOTLPExporterInsecure = flags.FlagDesc{
 		Name:  "exporter-otlp-insecure",
 		Usage: "disable client transport security for the OTLP exporter",

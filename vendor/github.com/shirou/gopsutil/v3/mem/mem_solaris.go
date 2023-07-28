@@ -1,3 +1,4 @@
+//go:build solaris
 // +build solaris
 
 package mem
@@ -6,12 +7,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/shirou/gopsutil/v3/internal/common"
+	"github.com/tklauser/go-sysconf"
 )
 
 // VirtualMemory for Solaris is a minimal implementation which only returns
@@ -34,6 +35,13 @@ func VirtualMemoryWithContext(ctx context.Context) (*VirtualMemoryStat, error) {
 			return nil, err
 		}
 		result.Total = cap
+		freemem, err := globalZoneFreeMemory(ctx)
+		if err != nil {
+			return nil, err
+		}
+		result.Available = freemem
+		result.Free = freemem
+		result.Used = result.Total - result.Free
 	} else {
 		cap, err := nonGlobalZoneMemoryCapacity()
 		if err != nil {
@@ -54,13 +62,8 @@ func SwapMemoryWithContext(ctx context.Context) (*SwapMemoryStat, error) {
 }
 
 func zoneName() (string, error) {
-	zonename, err := exec.LookPath("zonename")
-	if err != nil {
-		return "", err
-	}
-
 	ctx := context.Background()
-	out, err := invoke.CommandWithContext(ctx, zonename)
+	out, err := invoke.CommandWithContext(ctx, "zonename")
 	if err != nil {
 		return "", err
 	}
@@ -68,23 +71,18 @@ func zoneName() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-var globalZoneMemoryCapacityMatch = regexp.MustCompile(`memory size: ([\d]+) Megabytes`)
+var globalZoneMemoryCapacityMatch = regexp.MustCompile(`[Mm]emory size: (\d+) Megabytes`)
 
 func globalZoneMemoryCapacity() (uint64, error) {
-	prtconf, err := exec.LookPath("prtconf")
-	if err != nil {
-		return 0, err
-	}
-
 	ctx := context.Background()
-	out, err := invoke.CommandWithContext(ctx, prtconf)
+	out, err := invoke.CommandWithContext(ctx, "prtconf")
 	if err != nil {
 		return 0, err
 	}
 
 	match := globalZoneMemoryCapacityMatch.FindAllStringSubmatch(string(out), -1)
 	if len(match) != 1 {
-		return 0, errors.New("memory size not contained in output of /usr/sbin/prtconf")
+		return 0, errors.New("memory size not contained in output of prtconf")
 	}
 
 	totalMB, err := strconv.ParseUint(match[0][1], 10, 64)
@@ -95,16 +93,30 @@ func globalZoneMemoryCapacity() (uint64, error) {
 	return totalMB * 1024 * 1024, nil
 }
 
-var kstatMatch = regexp.MustCompile(`([^\s]+)[\s]+([^\s]*)`)
-
-func nonGlobalZoneMemoryCapacity() (uint64, error) {
-	kstat, err := exec.LookPath("kstat")
+func globalZoneFreeMemory(ctx context.Context) (uint64, error) {
+	output, err := invoke.CommandWithContext(ctx, "pagesize")
 	if err != nil {
 		return 0, err
 	}
 
+	pagesize, err := strconv.ParseUint(strings.TrimSpace(string(output)), 10, 64)
+	if err != nil {
+		return 0, err
+	}
+
+	free, err := sysconf.Sysconf(sysconf.SC_AVPHYS_PAGES)
+	if err != nil {
+		return 0, err
+	}
+
+	return uint64(free) * pagesize, nil
+}
+
+var kstatMatch = regexp.MustCompile(`(\S+)\s+(\S*)`)
+
+func nonGlobalZoneMemoryCapacity() (uint64, error) {
 	ctx := context.Background()
-	out, err := invoke.CommandWithContext(ctx, kstat, "-p", "-c", "zone_memory_cap", "memory_cap:*:*:physcap")
+	out, err := invoke.CommandWithContext(ctx, "kstat", "-p", "-c", "zone_memory_cap", "memory_cap:*:*:physcap")
 	if err != nil {
 		return 0, err
 	}
@@ -122,7 +134,7 @@ func nonGlobalZoneMemoryCapacity() (uint64, error) {
 	return memSizeBytes, nil
 }
 
-const swapsCommand = "swap"
+const swapCommand = "swap"
 
 // The blockSize as reported by `swap -l`. See https://docs.oracle.com/cd/E23824_01/html/821-1459/fsswap-52195.html
 const blockSize = 512
@@ -141,13 +153,9 @@ func SwapDevices() ([]*SwapDevice, error) {
 }
 
 func SwapDevicesWithContext(ctx context.Context) ([]*SwapDevice, error) {
-	swapsCommandPath, err := exec.LookPath(swapsCommand)
+	output, err := invoke.CommandWithContext(ctx, swapCommand, "-l")
 	if err != nil {
-		return nil, fmt.Errorf("could not find command %q: %w", swapCommand, err)
-	}
-	output, err := invoke.CommandWithContext(swapsCommandPath, "-l")
-	if err != nil {
-		return nil, fmt.Errorf("could not execute %q: %w", swapsCommand, err)
+		return nil, fmt.Errorf("could not execute %q: %w", swapCommand, err)
 	}
 
 	return parseSwapsCommandOutput(string(output))
@@ -156,22 +164,22 @@ func SwapDevicesWithContext(ctx context.Context) ([]*SwapDevice, error) {
 func parseSwapsCommandOutput(output string) ([]*SwapDevice, error) {
 	lines := strings.Split(output, "\n")
 	if len(lines) == 0 {
-		return nil, fmt.Errorf("could not parse output of %q: no lines in %q", swapsCommand, output)
+		return nil, fmt.Errorf("could not parse output of %q: no lines in %q", swapCommand, output)
 	}
 
 	// Check header headerFields are as expected.
 	headerFields := strings.Fields(lines[0])
 	if len(headerFields) < freeBlocksCol {
-		return nil, fmt.Errorf("couldn't parse %q: too few fields in header %q", swapsCommand, lines[0])
+		return nil, fmt.Errorf("couldn't parse %q: too few fields in header %q", swapCommand, lines[0])
 	}
 	if headerFields[nameCol] != "swapfile" {
-		return nil, fmt.Errorf("couldn't parse %q: expected %q to be %q", swapsCommand, headerFields[nameCol], "swapfile")
+		return nil, fmt.Errorf("couldn't parse %q: expected %q to be %q", swapCommand, headerFields[nameCol], "swapfile")
 	}
 	if headerFields[totalBlocksCol] != "blocks" {
-		return nil, fmt.Errorf("couldn't parse %q: expected %q to be %q", swapsCommand, headerFields[totalBlocksCol], "blocks")
+		return nil, fmt.Errorf("couldn't parse %q: expected %q to be %q", swapCommand, headerFields[totalBlocksCol], "blocks")
 	}
 	if headerFields[freeBlocksCol] != "free" {
-		return nil, fmt.Errorf("couldn't parse %q: expected %q to be %q", swapsCommand, headerFields[freeBlocksCol], "free")
+		return nil, fmt.Errorf("couldn't parse %q: expected %q to be %q", swapCommand, headerFields[freeBlocksCol], "free")
 	}
 
 	var swapDevices []*SwapDevice
@@ -181,17 +189,17 @@ func parseSwapsCommandOutput(output string) ([]*SwapDevice, error) {
 		}
 		fields := strings.Fields(line)
 		if len(fields) < freeBlocksCol {
-			return nil, fmt.Errorf("couldn't parse %q: too few fields", swapsCommand)
+			return nil, fmt.Errorf("couldn't parse %q: too few fields", swapCommand)
 		}
 
 		totalBlocks, err := strconv.ParseUint(fields[totalBlocksCol], 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("couldn't parse 'Size' column in %q: %w", swapsCommand, err)
+			return nil, fmt.Errorf("couldn't parse 'Size' column in %q: %w", swapCommand, err)
 		}
 
 		freeBlocks, err := strconv.ParseUint(fields[freeBlocksCol], 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("couldn't parse 'Used' column in %q: %w", swapsCommand, err)
+			return nil, fmt.Errorf("couldn't parse 'Used' column in %q: %w", swapCommand, err)
 		}
 
 		swapDevices = append(swapDevices, &SwapDevice{

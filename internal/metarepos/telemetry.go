@@ -5,11 +5,10 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
-	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
 	"go.opentelemetry.io/otel/metric"
-	metricsdk "go.opentelemetry.io/otel/sdk/export/metric"
+	metricsdk "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.20.0"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/telemetry"
@@ -27,9 +26,9 @@ func newTelemetryStub(ctx context.Context, name string, nodeID types.NodeID, end
 		resource.WithFromEnv(),
 		resource.WithHost(),
 		resource.WithAttributes(
-			semconv.ServiceNameKey.String("mr"),
-			semconv.ServiceNamespaceKey.String("varlog"),
-			semconv.ServiceInstanceIDKey.String(nodeID.String()),
+			semconv.ServiceName("mr"),
+			semconv.ServiceNamespace("varlog"),
+			semconv.ServiceInstanceID(nodeID.String()),
 		))
 	if err != nil {
 		return nil, err
@@ -47,7 +46,7 @@ func newTelemetryStub(ctx context.Context, name string, nodeID types.NodeID, end
 
 	switch strings.ToLower(name) {
 	case "stdout":
-		exporter, shutdown, err = telemetry.NewStdoutExporter(stdoutmetric.WithPrettyPrint())
+		exporter, shutdown, err = telemetry.NewStdoutExporter()
 	case "otlp":
 		exporter, shutdown, err = telemetry.NewOLTPExporter(ctx, otlpmetricgrpc.WithInsecure(), otlpmetricgrpc.WithEndpoint(endpoint))
 	}
