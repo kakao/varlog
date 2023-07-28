@@ -2,18 +2,18 @@
 // of this source code is governed by a BSD-style license that can be found in
 // the LICENSE file.
 
-package shared
+package remote
 
 import (
 	"context"
 	"io"
 )
 
-// Locator is an opaque string identifying a shared.Storage implementation.
+// Locator is an opaque string identifying a remote.Storage implementation.
 //
 // The Locator must not contain secrets (like authentication keys). Locators are
 // stored on disk in the shared object catalog and are passed around as part of
-// SharedObjectBacking; they can also appear in error messages.
+// RemoteObjectBacking; they can also appear in error messages.
 type Locator string
 
 // StorageFactory is used to return Storage implementations based on locators. A

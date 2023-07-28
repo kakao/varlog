@@ -12,8 +12,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/objstorage"
-	"github.com/cockroachdb/pebble/objstorage/objstorageprovider/sharedobjcat"
-	"github.com/cockroachdb/pebble/objstorage/shared"
+	"github.com/cockroachdb/pebble/objstorage/objstorageprovider/remoteobjcat"
+	"github.com/cockroachdb/pebble/objstorage/remote"
 )
 
 const (
@@ -26,7 +26,7 @@ const (
 	// allows the "target" provider to check that the "source" provider kept its
 	// reference on the object alive.
 	tagRefCheckID = 4
-	// tagLocator encodes the shared.Locator; if absent the locator is "". It is
+	// tagLocator encodes the remote.Locator; if absent the locator is "". It is
 	// followed by the locator string length and the locator string.
 	tagLocator = 5
 	// tagLocator encodes a custom object name (if present). It is followed by the
@@ -41,100 +41,100 @@ const (
 	tagNotSafeToIgnoreMask = 64
 )
 
-func (p *provider) encodeSharedObjectBacking(
+func (p *provider) encodeRemoteObjectBacking(
 	meta *objstorage.ObjectMetadata,
-) (objstorage.SharedObjectBacking, error) {
-	if !meta.IsShared() {
-		return nil, errors.AssertionFailedf("object %s not on shared storage", meta.DiskFileNum)
+) (objstorage.RemoteObjectBacking, error) {
+	if !meta.IsRemote() {
+		return nil, errors.AssertionFailedf("object %s not on remote storage", meta.DiskFileNum)
 	}
 
 	buf := make([]byte, 0, binary.MaxVarintLen64*4)
 	buf = binary.AppendUvarint(buf, tagCreatorID)
-	buf = binary.AppendUvarint(buf, uint64(meta.Shared.CreatorID))
+	buf = binary.AppendUvarint(buf, uint64(meta.Remote.CreatorID))
 	// TODO(radu): encode file type as well?
 	buf = binary.AppendUvarint(buf, tagCreatorFileNum)
-	buf = binary.AppendUvarint(buf, uint64(meta.Shared.CreatorFileNum.FileNum()))
+	buf = binary.AppendUvarint(buf, uint64(meta.Remote.CreatorFileNum.FileNum()))
 	buf = binary.AppendUvarint(buf, tagCleanupMethod)
-	buf = binary.AppendUvarint(buf, uint64(meta.Shared.CleanupMethod))
-	if meta.Shared.CleanupMethod == objstorage.SharedRefTracking {
+	buf = binary.AppendUvarint(buf, uint64(meta.Remote.CleanupMethod))
+	if meta.Remote.CleanupMethod == objstorage.SharedRefTracking {
 		buf = binary.AppendUvarint(buf, tagRefCheckID)
-		buf = binary.AppendUvarint(buf, uint64(p.shared.creatorID))
+		buf = binary.AppendUvarint(buf, uint64(p.remote.shared.creatorID))
 		buf = binary.AppendUvarint(buf, uint64(meta.DiskFileNum.FileNum()))
 	}
-	if meta.Shared.Locator != "" {
+	if meta.Remote.Locator != "" {
 		buf = binary.AppendUvarint(buf, tagLocator)
-		buf = encodeString(buf, string(meta.Shared.Locator))
+		buf = encodeString(buf, string(meta.Remote.Locator))
 	}
-	if meta.Shared.CustomObjectName != "" {
+	if meta.Remote.CustomObjectName != "" {
 		buf = binary.AppendUvarint(buf, tagCustomObjectName)
-		buf = encodeString(buf, meta.Shared.CustomObjectName)
+		buf = encodeString(buf, meta.Remote.CustomObjectName)
 	}
 	return buf, nil
 }
 
-type sharedObjectBackingHandle struct {
-	backing objstorage.SharedObjectBacking
+type remoteObjectBackingHandle struct {
+	backing objstorage.RemoteObjectBacking
 	fileNum base.DiskFileNum
 	p       *provider
 }
 
-func (s *sharedObjectBackingHandle) Get() (objstorage.SharedObjectBacking, error) {
+func (s *remoteObjectBackingHandle) Get() (objstorage.RemoteObjectBacking, error) {
 	if s.backing == nil {
-		return nil, errors.Errorf("SharedObjectBackingHandle.Get() called after Close()")
+		return nil, errors.Errorf("RemoteObjectBackingHandle.Get() called after Close()")
 	}
 	return s.backing, nil
 }
 
-func (s *sharedObjectBackingHandle) Close() {
+func (s *remoteObjectBackingHandle) Close() {
 	if s.backing != nil {
 		s.backing = nil
 		s.p.unprotectObject(s.fileNum)
 	}
 }
 
-var _ objstorage.SharedObjectBackingHandle = (*sharedObjectBackingHandle)(nil)
+var _ objstorage.RemoteObjectBackingHandle = (*remoteObjectBackingHandle)(nil)
 
-// SharedObjectBacking is part of the objstorage.Provider interface.
-func (p *provider) SharedObjectBacking(
+// RemoteObjectBacking is part of the objstorage.Provider interface.
+func (p *provider) RemoteObjectBacking(
 	meta *objstorage.ObjectMetadata,
-) (objstorage.SharedObjectBackingHandle, error) {
-	backing, err := p.encodeSharedObjectBacking(meta)
+) (objstorage.RemoteObjectBackingHandle, error) {
+	backing, err := p.encodeRemoteObjectBacking(meta)
 	if err != nil {
 		return nil, err
 	}
 	p.protectObject(meta.DiskFileNum)
-	return &sharedObjectBackingHandle{
+	return &remoteObjectBackingHandle{
 		backing: backing,
 		fileNum: meta.DiskFileNum,
 		p:       p,
 	}, nil
 }
 
-// CreateSharedObjectBacking is part of the objstorage.Provider interface.
-func (p *provider) CreateSharedObjectBacking(
-	locator shared.Locator, objName string,
-) (objstorage.SharedObjectBacking, error) {
+// CreateExternalObjectBacking is part of the objstorage.Provider interface.
+func (p *provider) CreateExternalObjectBacking(
+	locator remote.Locator, objName string,
+) (objstorage.RemoteObjectBacking, error) {
 	var meta objstorage.ObjectMetadata
-	meta.Shared.Locator = locator
-	meta.Shared.CustomObjectName = objName
-	meta.Shared.CleanupMethod = objstorage.SharedNoCleanup
-	return p.encodeSharedObjectBacking(&meta)
+	meta.Remote.Locator = locator
+	meta.Remote.CustomObjectName = objName
+	meta.Remote.CleanupMethod = objstorage.SharedNoCleanup
+	return p.encodeRemoteObjectBacking(&meta)
 }
 
 type decodedBacking struct {
 	meta objstorage.ObjectMetadata
-	// refToCheck is set only when meta.Shared.CleanupMethod is RefTracking
+	// refToCheck is set only when meta.Remote.CleanupMethod is RefTracking
 	refToCheck struct {
 		creatorID objstorage.CreatorID
 		fileNum   base.DiskFileNum
 	}
 }
 
-// decodeSharedObjectBacking decodes the shared object metadata.
+// decodeRemoteObjectBacking decodes the remote object metadata.
 //
-// Note that the meta.Shared.Storage field is not set.
-func decodeSharedObjectBacking(
-	fileType base.FileType, fileNum base.DiskFileNum, buf objstorage.SharedObjectBacking,
+// Note that the meta.Remote.Storage field is not set.
+func decodeRemoteObjectBacking(
+	fileType base.FileType, fileNum base.DiskFileNum, buf objstorage.RemoteObjectBacking,
 ) (decodedBacking, error) {
 	var creatorID, creatorFileNum, cleanupMethod, refCheckCreatorID, refCheckFileNum uint64
 	var locator, customObjName string
@@ -186,27 +186,27 @@ func decodeSharedObjectBacking(
 	}
 	if customObjName == "" {
 		if creatorID == 0 {
-			return decodedBacking{}, errors.Newf("shared object backing missing creator ID")
+			return decodedBacking{}, errors.Newf("remote object backing missing creator ID")
 		}
 		if creatorFileNum == 0 {
-			return decodedBacking{}, errors.Newf("shared object backing missing creator file num")
+			return decodedBacking{}, errors.Newf("remote object backing missing creator file num")
 		}
 	}
 	var res decodedBacking
 	res.meta.DiskFileNum = fileNum
 	res.meta.FileType = fileType
-	res.meta.Shared.CreatorID = objstorage.CreatorID(creatorID)
-	res.meta.Shared.CreatorFileNum = base.FileNum(creatorFileNum).DiskFileNum()
-	res.meta.Shared.CleanupMethod = objstorage.SharedCleanupMethod(cleanupMethod)
-	if res.meta.Shared.CleanupMethod == objstorage.SharedRefTracking {
+	res.meta.Remote.CreatorID = objstorage.CreatorID(creatorID)
+	res.meta.Remote.CreatorFileNum = base.FileNum(creatorFileNum).DiskFileNum()
+	res.meta.Remote.CleanupMethod = objstorage.SharedCleanupMethod(cleanupMethod)
+	if res.meta.Remote.CleanupMethod == objstorage.SharedRefTracking {
 		if refCheckCreatorID == 0 || refCheckFileNum == 0 {
-			return decodedBacking{}, errors.Newf("shared object backing missing ref to check")
+			return decodedBacking{}, errors.Newf("remote object backing missing ref to check")
 		}
 		res.refToCheck.creatorID = objstorage.CreatorID(refCheckCreatorID)
 		res.refToCheck.fileNum = base.FileNum(refCheckFileNum).DiskFileNum()
 	}
-	res.meta.Shared.Locator = shared.Locator(locator)
-	res.meta.Shared.CustomObjectName = customObjName
+	res.meta.Remote.Locator = remote.Locator(locator)
+	res.meta.Remote.CustomObjectName = customObjName
 	return res, nil
 }
 
@@ -231,18 +231,18 @@ func decodeString(br io.ByteReader) (string, error) {
 	return string(buf), nil
 }
 
-// AttachSharedObjects is part of the objstorage.Provider interface.
-func (p *provider) AttachSharedObjects(
-	objs []objstorage.SharedObjectToAttach,
+// AttachRemoteObjects is part of the objstorage.Provider interface.
+func (p *provider) AttachRemoteObjects(
+	objs []objstorage.RemoteObjectToAttach,
 ) ([]objstorage.ObjectMetadata, error) {
 	decoded := make([]decodedBacking, len(objs))
 	for i, o := range objs {
 		var err error
-		decoded[i], err = decodeSharedObjectBacking(o.FileType, o.FileNum, o.Backing)
+		decoded[i], err = decodeRemoteObjectBacking(o.FileType, o.FileNum, o.Backing)
 		if err != nil {
 			return nil, err
 		}
-		decoded[i].meta.Shared.Storage, err = p.ensureStorage(decoded[i].meta.Shared.Locator)
+		decoded[i].meta.Remote.Storage, err = p.ensureStorage(decoded[i].meta.Remote.Locator)
 		if err != nil {
 			return nil, err
 		}
@@ -251,7 +251,7 @@ func (p *provider) AttachSharedObjects(
 	// Create the reference marker objects.
 	// TODO(radu): parallelize this.
 	for _, d := range decoded {
-		if d.meta.Shared.CleanupMethod != objstorage.SharedRefTracking {
+		if d.meta.Remote.CleanupMethod != objstorage.SharedRefTracking {
 			continue
 		}
 		if err := p.sharedCreateRef(d.meta); err != nil {
@@ -260,10 +260,10 @@ func (p *provider) AttachSharedObjects(
 		}
 		// Check the "origin"'s reference.
 		refName := sharedObjectRefName(d.meta, d.refToCheck.creatorID, d.refToCheck.fileNum)
-		if _, err := d.meta.Shared.Storage.Size(refName); err != nil {
+		if _, err := d.meta.Remote.Storage.Size(refName); err != nil {
 			_ = p.sharedUnref(d.meta)
 			// TODO(radu): clean up references previously created in this loop.
-			if d.meta.Shared.Storage.IsNotExistError(err) {
+			if d.meta.Remote.Storage.IsNotExistError(err) {
 				return nil, errors.Errorf("origin marker object %q does not exist;"+
 					" object probably removed from the provider which created the backing", refName)
 			}
@@ -275,13 +275,13 @@ func (p *provider) AttachSharedObjects(
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		for _, d := range decoded {
-			p.mu.shared.catalogBatch.AddObject(sharedobjcat.SharedObjectMetadata{
+			p.mu.remote.catalogBatch.AddObject(remoteobjcat.RemoteObjectMetadata{
 				FileNum:        d.meta.DiskFileNum,
 				FileType:       d.meta.FileType,
-				CreatorID:      d.meta.Shared.CreatorID,
-				CreatorFileNum: d.meta.Shared.CreatorFileNum,
-				CleanupMethod:  d.meta.Shared.CleanupMethod,
-				Locator:        d.meta.Shared.Locator,
+				CreatorID:      d.meta.Remote.CreatorID,
+				CreatorFileNum: d.meta.Remote.CreatorFileNum,
+				CleanupMethod:  d.meta.Remote.CleanupMethod,
+				Locator:        d.meta.Remote.Locator,
 			})
 		}
 	}()
