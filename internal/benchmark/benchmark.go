@@ -47,10 +47,11 @@ func New(opts ...Option) (bm *Benchmark, err error) {
 		target := bm.targets[idx]
 		loaderMetrics := &LoaderMetrics{tgt: target}
 		loader, err = NewLoader(loaderConfig{
-			Target:  target,
-			cid:     bm.cid,
-			mraddrs: bm.mraddrs,
-			metrics: loaderMetrics,
+			Target:              target,
+			cid:                 bm.cid,
+			mraddrs:             bm.mraddrs,
+			metrics:             loaderMetrics,
+			singleConnPerTarget: bm.singleConnPerTarget,
 		})
 		if err != nil {
 			return bm, err

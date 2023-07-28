@@ -17,9 +17,10 @@ import (
 
 type loaderConfig struct {
 	Target
-	cid     types.ClusterID
-	mraddrs []string
-	metrics *LoaderMetrics
+	cid                 types.ClusterID
+	mraddrs             []string
+	metrics             *LoaderMetrics
+	singleConnPerTarget bool
 }
 
 type Loader struct {
@@ -47,9 +48,25 @@ func NewLoader(cfg loaderConfig) (loader *Loader, err error) {
 		}
 	}()
 
+	var scli varlog.Log
+	getClient := func() (varlog.Log, error) {
+		if loader.singleConnPerTarget {
+			if scli != nil {
+				return scli, nil
+			}
+			cli, err := varlog.Open(context.TODO(), loader.cid, loader.mraddrs)
+			if err != nil {
+				return nil, err
+			}
+			scli = cli
+			return scli, nil
+		}
+		return varlog.Open(context.TODO(), loader.cid, loader.mraddrs)
+	}
+
 	var c varlog.Log
 	for i := uint(0); i < loader.AppendersCount; i++ {
-		c, err = varlog.Open(context.TODO(), loader.cid, loader.mraddrs)
+		c, err = getClient()
 		if err != nil {
 			return loader, err
 		}
@@ -57,7 +74,7 @@ func NewLoader(cfg loaderConfig) (loader *Loader, err error) {
 	}
 
 	for i := uint(0); i < loader.SubscribersCount; i++ {
-		c, err = varlog.Open(context.TODO(), loader.cid, loader.mraddrs)
+		c, err = getClient()
 		if err != nil {
 			return loader, err
 		}

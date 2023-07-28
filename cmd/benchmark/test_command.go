@@ -65,6 +65,10 @@ var (
 		Usage: "Pipeline size, no pipelined requests if zero. Not support per-target pipeline size yet.",
 		Value: 0,
 	}
+	flagSingleConnPerTarget = &cli.BoolFlag{
+		Name:  "single-conn-per-target",
+		Usage: "Use single connection shared by appenders in a target. Each target uses different connection.",
+	}
 )
 
 func newCommandTest() *cli.Command {
@@ -83,6 +87,7 @@ func newCommandTest() *cli.Command {
 			flagReportInterval,
 			flagPrintJSON,
 			flagPipelineSize,
+			flagSingleConnPerTarget,
 		},
 		Action: runCommandTest,
 	}
@@ -145,14 +150,18 @@ func runCommandTest(c *cli.Context) error {
 		enc = benchmark.StringEncoder{}
 	}
 
-	bm, err := benchmark.New(
+	opts := []benchmark.Option{
 		benchmark.WithClusterID(clusterID),
 		benchmark.WithTargets(targets...),
 		benchmark.WithMetadataRepository(c.StringSlice(flagMRAddrs.Name)),
 		benchmark.WithDuration(duration),
 		benchmark.WithReportInterval(reportInterval),
 		benchmark.WithReportEncoder(enc),
-	)
+	}
+	if c.Bool(flagSingleConnPerTarget.Name) {
+		opts = append(opts, benchmark.WithSingleConnPerTarget())
+	}
+	bm, err := benchmark.New(opts...)
 	if err != nil {
 		return err
 	}
