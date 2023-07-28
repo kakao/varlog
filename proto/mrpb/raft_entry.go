@@ -22,7 +22,34 @@ func NewReports(nodeID types.NodeID, ts time.Time) *Reports {
 
 func (rs *Reports) Release() {
 	if rs != nil {
+		rq := (ReportQueue)(rs.Reports)
+		rq.Release()
 		*rs = Reports{}
 		reportsPool.Put(rs)
+	}
+}
+
+const (
+	reportQueueSize = 1024
+)
+
+type ReportQueue []*Report
+
+var reportQueuePool = sync.Pool{
+	New: func() any {
+		q := make(ReportQueue, 0, reportQueueSize)
+		return &q
+	},
+}
+
+func NewReportQueue() ReportQueue {
+	rq := reportQueuePool.Get().(*ReportQueue)
+	return *rq
+}
+
+func (rq *ReportQueue) Release() {
+	if rq != nil {
+		*rq = (*rq)[0:0:reportQueueSize]
+		reportQueuePool.Put(rq)
 	}
 }
