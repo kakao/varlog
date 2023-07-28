@@ -305,6 +305,8 @@ Loop:
 				mr.logger.Error(err.Error())
 				continue
 			}
+			// Release *mrpb.Reports only if e contains Reports.
+			e.GetRequest().Report.Release()
 
 			select {
 			case mr.rnProposeC <- b:
@@ -346,10 +348,7 @@ func (mr *RaftMetadataRepository) processReport(ctx context.Context) {
 			mr.muReportQueue.Lock()
 			num := len(mr.reportQueue)
 			if num > 0 {
-				reports = &mrpb.Reports{
-					NodeID:      mr.nodeID,
-					CreatedTime: time.Now(),
-				}
+				reports = mrpb.NewReports(mr.nodeID, time.Now())
 				reports.Reports = mr.reportQueue
 				mr.reportQueue = make([]*mrpb.Report, 0, 1024)
 			}
