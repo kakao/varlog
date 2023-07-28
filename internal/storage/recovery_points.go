@@ -13,8 +13,8 @@ import (
 type RecoveryPoints struct {
 	LastCommitContext *CommitContext
 	CommittedLogEntry struct {
-		First *varlogpb.LogEntryMeta
-		Last  *varlogpb.LogEntryMeta
+		First *varlogpb.LogSequenceNumber
+		Last  *varlogpb.LogSequenceNumber
 	}
 	UncommittedLLSN struct {
 		Begin types.LLSN
@@ -63,7 +63,7 @@ func (s *Storage) readLastCommitContext() (*CommitContext, error) {
 	return &cc, nil
 }
 
-func (s *Storage) readLogEntryBoundaries() (first, last *varlogpb.LogEntryMeta, err error) {
+func (s *Storage) readLogEntryBoundaries() (first, last *varlogpb.LogSequenceNumber, err error) {
 	it := s.commitDB.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitKeyPrefix},
 		UpperBound: []byte{commitKeySentinelPrefix},
@@ -75,12 +75,16 @@ func (s *Storage) readLogEntryBoundaries() (first, last *varlogpb.LogEntryMeta, 
 	if !it.First() {
 		return nil, nil, nil
 	}
+
 	firstGLSN := decodeCommitKey(it.Key())
 	firstLE, err := s.readGLSN(firstGLSN)
 	if err != nil {
 		return nil, nil, err
 	}
-	first = &firstLE.LogEntryMeta
+	first = &varlogpb.LogSequenceNumber{
+		LLSN: firstLE.LLSN,
+		GLSN: firstLE.GLSN,
+	}
 
 	_ = it.Last()
 	lastGLSN := decodeCommitKey(it.Key())
@@ -88,7 +92,12 @@ func (s *Storage) readLogEntryBoundaries() (first, last *varlogpb.LogEntryMeta, 
 	if err != nil {
 		return first, nil, err
 	}
-	return first, &lastLE.LogEntryMeta, nil
+	last = &varlogpb.LogSequenceNumber{
+		LLSN: lastLE.LLSN,
+		GLSN: lastLE.GLSN,
+	}
+
+	return first, last, nil
 }
 
 func (s *Storage) readUncommittedLogEntryBoundaries(uncommittedBegin types.LLSN) (begin, end types.LLSN, err error) {
