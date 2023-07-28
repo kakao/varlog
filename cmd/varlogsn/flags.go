@@ -195,26 +195,4 @@ var (
 		EnvVars: []string{"STORAGE_METRICS_LOG_INTERVAL"},
 		Value:   storage.DefaultMetricsLogInterval,
 	}
-
-	// flags for telemetry.
-	flagExporterType = flags.FlagDesc{
-		Name:  "exporter-type",
-		Usage: "exporter type: stdout, otlp or noop",
-		Envs:  []string{"EXPORTER_TYPE"},
-	}
-	flagExporterStopTimeout = flags.FlagDesc{
-		Name:  "expoter-stop-timeout",
-		Usage: "timeout for stopping exporter",
-		Envs:  []string{"EXPORTER_STOP_TIMEOUT"},
-	}
-	flagOTLPExporterInsecure = flags.FlagDesc{
-		Name:  "exporter-otlp-insecure",
-		Usage: "disable client transport security for the OTLP exporter",
-		Envs:  []string{"EXPORTER_OTLP_INSECURE"},
-	}
-	flagOTLPExporterEndpoint = flags.FlagDesc{
-		Name:  "exporter-otlp-endpoint",
-		Usage: "the endpoint that exporter connects",
-		Envs:  []string{"EXPORTER_OTLP_ENDPOINT"},
-	}
 )

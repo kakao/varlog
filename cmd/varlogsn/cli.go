@@ -1,8 +1,6 @@
 package main
 
 import (
-	"time"
-
 	"github.com/urfave/cli/v2"
 
 	"github.com/kakao/varlog/internal/flags"
@@ -87,10 +85,13 @@ func newStartCommand() *cli.Command {
 			flags.LogHumanReadable,
 			flags.LogLevel,
 
-			flagExporterType.StringFlag(false, "noop"),
-			flagExporterStopTimeout.DurationFlag(false, 5*time.Second),
-			flagOTLPExporterInsecure.BoolFlag(),
-			flagOTLPExporterEndpoint.StringFlag(false, ""),
+			// telemetry
+			flags.TelemetryExporter,
+			flags.TelemetryExporterStopTimeout,
+			flags.TelemetryOTLPEndpoint,
+			flags.TelemetryOTLPInsecure,
+			flags.TelemetryHost,
+			flags.TelemetryRuntime,
 		},
 	}
 }

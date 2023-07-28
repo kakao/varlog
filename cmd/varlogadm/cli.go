@@ -13,6 +13,7 @@ import (
 	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/log"
+	"github.com/kakao/varlog/pkg/util/telemetry"
 )
 
 func newAdminApp() *cli.App {
@@ -60,6 +61,14 @@ func newStartCommand() *cli.Command {
 			flags.LogFileCompression,
 			flags.LogHumanReadable,
 			flags.LogLevel,
+
+			// telemetry
+			flags.TelemetryExporter,
+			flags.TelemetryExporterStopTimeout,
+			flags.TelemetryOTLPEndpoint,
+			flags.TelemetryOTLPInsecure,
+			flags.TelemetryHost,
+			flags.TelemetryRuntime,
 		},
 	}
 }
@@ -82,6 +91,21 @@ func start(c *cli.Context) error {
 	logger = logger.Named("adm").With(zap.Uint32("cid", uint32(clusterID)))
 	defer func() {
 		_ = logger.Sync()
+	}()
+
+	meterProviderOpts, err := flags.ParseTelemetryFlags(context.Background(), c, "adm", clusterID.String())
+	if err != nil {
+		return err
+	}
+	mp, stop, err := telemetry.NewMeterProvider(meterProviderOpts...)
+	if err != nil {
+		return err
+	}
+	telemetry.SetGlobalMeterProvider(mp)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), c.Duration(flags.TelemetryExporterStopTimeout.Name))
+		defer cancel()
+		_ = stop(ctx)
 	}()
 
 	mrMgr, err := mrmanager.New(context.TODO(),
