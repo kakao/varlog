@@ -14,13 +14,6 @@ type ClusterID uint32
 
 var _ fmt.Stringer = (*ClusterID)(nil)
 
-func NewClusterIDFromUint(u uint) (ClusterID, error) {
-	if u > math.MaxUint32 {
-		return 0, fmt.Errorf("cluster id overflow %v", u)
-	}
-	return ClusterID(u), nil
-}
-
 func ParseClusterID(s string) (ClusterID, error) {
 	id, err := strconv.ParseUint(s, 10, 32)
 	return ClusterID(id), err
