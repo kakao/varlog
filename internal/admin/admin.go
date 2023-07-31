@@ -337,13 +337,33 @@ func (adm *Admin) addStorageNode(ctx context.Context, snid types.StorageNodeID, 
 		return nil, status.Errorf(status.Code(err), "add storage node: %s", err.Error())
 	}
 
-	adm.snmgr.AddStorageNode(ctx, snmd.StorageNode.StorageNodeID, addr)
-	adm.statRepository.Report(ctx, snmd, now)
-	snm, ok := adm.statRepository.GetStorageNode(snid)
-	if !ok {
-		return nil, status.Error(codes.Unavailable, "add storage node: call again")
+	confirm := func() *admpb.StorageNodeMetadata {
+		adm.snmgr.AddStorageNode(ctx, snmd.StorageNode.StorageNodeID, addr)
+		_, _ = adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx) // Fetch new cluster metadata.
+		adm.statRepository.Report(ctx, snmd, now)
+		if snm, ok := adm.statRepository.GetStorageNode(snid); ok {
+			return snm
+		}
+		return nil
 	}
-	return snm, nil
+
+	if snm := confirm(); snm != nil {
+		return snm, nil
+	}
+
+	const interval = 100 * time.Millisecond
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if snm := confirm(); snm != nil {
+				return snm, nil
+			}
+		case <-ctx.Done():
+			return nil, status.Error(codes.Unavailable, "add storage node: call again")
+		}
+	}
 }
 
 func (adm *Admin) unregisterStorageNode(ctx context.Context, snid types.StorageNodeID) error {
