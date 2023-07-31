@@ -108,6 +108,8 @@ func start(c *cli.Context) error {
 		_ = stop(ctx)
 	}()
 
+	repfactor := c.Int(flagReplicationFactor.Name)
+
 	mrMgr, err := mrmanager.New(context.TODO(),
 		mrmanager.WithAddresses(c.StringSlice(flagMetadataRepository.Name)...),
 		mrmanager.WithInitialMRConnRetryCount(c.Int(flagInitMRConnRetryCount.Name)),
@@ -115,6 +117,7 @@ func start(c *cli.Context) error {
 		mrmanager.WithMRManagerConnTimeout(c.Duration(flagMRConnTimeout.Name)),
 		mrmanager.WithMRManagerCallTimeout(c.Duration(flagMRCallTimeout.Name)),
 		mrmanager.WithClusterID(clusterID),
+		mrmanager.WithReplicationFactor(repfactor),
 		mrmanager.WithLogger(logger),
 	)
 	if err != nil {
@@ -130,7 +133,6 @@ func start(c *cli.Context) error {
 		return err
 	}
 
-	repfactor := c.Int(flagReplicationFactor.Name)
 	repsel, err := admin.NewReplicaSelector(c.String(flagReplicaSelector.Name), mrMgr.ClusterMetadataView(), repfactor)
 	if err != nil {
 		return err
