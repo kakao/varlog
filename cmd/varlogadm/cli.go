@@ -36,7 +36,7 @@ func newStartCommand() *cli.Command {
 		Flags: []cli.Flag{
 			flagClusterID.StringFlag(false, types.ClusterID(1).String()),
 			flagListen.StringFlag(false, admin.DefaultListenAddress),
-			flagReplicationFactor.UintFlag(false, admin.DefaultReplicationFactor),
+			flagReplicationFactor,
 			flagLogStreamGCTimeout.DurationFlag(false, admin.DefaultLogStreamGCTimeout),
 			flagDisableAutoLogStreamSync.BoolFlag(),
 			flagAutoUnseal.BoolFlag(),
@@ -130,8 +130,8 @@ func start(c *cli.Context) error {
 		return err
 	}
 
-	repfactor := c.Uint(flagReplicationFactor.Name)
-	repsel, err := admin.NewReplicaSelector(c.String(flagReplicaSelector.Name), mrMgr.ClusterMetadataView(), int(repfactor))
+	repfactor := c.Int(flagReplicationFactor.Name)
+	repsel, err := admin.NewReplicaSelector(c.String(flagReplicaSelector.Name), mrMgr.ClusterMetadataView(), repfactor)
 	if err != nil {
 		return err
 	}

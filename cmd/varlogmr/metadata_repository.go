@@ -125,7 +125,7 @@ func initCLI() *cli.App {
 				flagRPCAddr.StringFlag(false, metarepos.DefaultRPCBindAddress),
 				flagRaftAddr.StringFlag(false, metarepos.DefaultRaftAddress),
 				flagDebugAddr.StringFlag(false, metarepos.DefaultDebugAddress),
-				flagReplicationFactor.IntFlag(false, metarepos.DefaultLogReplicationFactor),
+				flagReplicationFactor,
 				flagRaftProposeTimeout.DurationFlag(false, metarepos.DefaultProposeTimeout),
 				flagRPCTimeout.DurationFlag(false, metarepos.DefaultRPCTimeout),
 				flagCommitTick.DurationFlag(false, metarepos.DefaultCommitTick),

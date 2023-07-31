@@ -11,20 +11,21 @@ import (
 	"github.com/kakao/varlog/internal/admin/snmanager"
 	"github.com/kakao/varlog/internal/admin/snwatcher"
 	"github.com/kakao/varlog/internal/admin/stats"
+	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/pkg/types"
 )
 
 const (
 	DefaultClusterID          = types.ClusterID(1)
 	DefaultListenAddress      = "127.0.0.1:9090"
-	DefaultReplicationFactor  = 1
+	DefaultReplicationFactor  = flags.DefaultReplicationFactor
 	DefaultLogStreamGCTimeout = 24 * time.Hour
 )
 
 type config struct {
 	cid                      types.ClusterID
 	listenAddress            string
-	replicationFactor        uint
+	replicationFactor        int
 	logStreamGCTimeout       time.Duration
 	disableAutoLogStreamSync bool
 	enableAutoUnseal         bool
@@ -123,7 +124,7 @@ func WithListenAddress(listen string) Option {
 	})
 }
 
-func WithReplicationFactor(replicationFactor uint) Option {
+func WithReplicationFactor(replicationFactor int) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.replicationFactor = replicationFactor
 	})

@@ -138,7 +138,7 @@ func (adm *Admin) Serve() error {
 	if ce := adm.logger.Check(zap.InfoLevel, "starting"); ce != nil {
 		ce.Write(
 			zap.String("address", adm.serverAddr),
-			zap.Uint("replicationFactor", adm.replicationFactor),
+			zap.Int("replicationFactor", adm.replicationFactor),
 			zap.String("replicationSelector", adm.snSelector.Name()),
 			zap.Duration("logStreamGCTimeout", adm.logStreamGCTimeout),
 		)
@@ -695,7 +695,7 @@ func (adm *Admin) addLogStreamInternal(ctx context.Context, tpid types.TopicID, 
 func (adm *Admin) verifyLogStream(clusmeta *varlogpb.MetadataDescriptor, lsdesc *varlogpb.LogStreamDescriptor) error {
 	replicas := lsdesc.GetReplicas()
 	// the number of logstream replica
-	if uint(len(replicas)) != adm.replicationFactor {
+	if len(replicas) != adm.replicationFactor {
 		return status.Errorf(codes.FailedPrecondition, "add log stream: invalid number of log stream replicas: expected %d, actual %d", adm.replicationFactor, len(replicas))
 	}
 	// storagenode existence

@@ -17,11 +17,7 @@ var (
 		Aliases: []string{"listen-address", "rpc-bind-address"},
 		Envs:    []string{"LISTEN", "LISTEN_ADDRESS", "RPC_BIND_ADDRESS"},
 	}
-	flagReplicationFactor = flags.FlagDesc{
-		Name:  "replication-factor",
-		Usage: "replication factor",
-		Envs:  []string{"REPLICATION_FACTOR"},
-	}
+	flagReplicationFactor  = flags.ReplicationFactor
 	flagLogStreamGCTimeout = flags.FlagDesc{
 		Name: "log-stream-gc-timeout",
 		Envs: []string{"LOG_STREAM_GC_TIMEOUT"},
