@@ -147,6 +147,9 @@ func (awg *appendWaitGroup) wait(ctx context.Context) error {
 	if awg == nil {
 		return nil
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	err := awg.wwg.wait(ctx)
 	if err != nil {
 		return err
