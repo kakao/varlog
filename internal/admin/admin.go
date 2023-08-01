@@ -38,14 +38,14 @@ const numLogStreamMutex = 512
 type Admin struct {
 	config
 
-	closed       bool
-	lis          net.Listener
 	server       *grpc.Server
-	serverAddr   string
 	healthServer *health.Server
 
-	// single large lock
-	mu                sync.RWMutex
+	mu         sync.Mutex
+	closed     bool
+	lis        net.Listener
+	serverAddr string
+
 	sfg               singleflight.Group
 	muLogStreamStatus [numLogStreamMutex]sync.Mutex
 
@@ -102,22 +102,39 @@ func New(ctx context.Context, opts ...Option) (*Admin, error) {
 
 // Address returns the bound address of the admin server.
 func (adm *Admin) Address() string {
-	adm.mu.RLock()
-	defer adm.mu.RUnlock()
+	adm.mu.Lock()
+	defer adm.mu.Unlock()
 	return adm.serverAddr
 }
 
 // Serve accepts incoming RPC calls on the server.
 // This method blocks calling goroutine.
 func (adm *Admin) Serve() error {
+	if err := adm.prepareServing(); err != nil {
+		return err
+	}
+
+	if ce := adm.logger.Check(zap.InfoLevel, "starting"); ce != nil {
+		ce.Write(
+			zap.String("address", adm.serverAddr),
+			zap.Int("replicationFactor", adm.replicationFactor),
+			zap.String("replicationSelector", adm.snSelector.Name()),
+			zap.Duration("logStreamGCTimeout", adm.logStreamGCTimeout),
+		)
+	}
+
+	return adm.server.Serve(adm.lis)
+}
+
+func (adm *Admin) prepareServing() error {
 	adm.mu.Lock()
+	defer adm.mu.Unlock()
+
 	if adm.lis != nil {
-		adm.mu.Unlock()
 		return errors.New("admin: already serving")
 	}
 	lis, err := net.Listen("tcp", adm.listenAddress)
 	if err != nil {
-		adm.mu.Unlock()
 		return errors.WithStack(err)
 	}
 	adm.lis = lis
@@ -130,21 +147,9 @@ func (adm *Admin) Serve() error {
 
 	// SN Watcher
 	if err := adm.snw.Start(); err != nil {
-		adm.mu.Unlock()
 		return err
 	}
-	adm.mu.Unlock()
-
-	if ce := adm.logger.Check(zap.InfoLevel, "starting"); ce != nil {
-		ce.Write(
-			zap.String("address", adm.serverAddr),
-			zap.Int("replicationFactor", adm.replicationFactor),
-			zap.String("replicationSelector", adm.snSelector.Name()),
-			zap.Duration("logStreamGCTimeout", adm.logStreamGCTimeout),
-		)
-	}
-
-	return adm.server.Serve(lis)
+	return nil
 }
 
 // Close closes the admin.
@@ -170,16 +175,10 @@ func (adm *Admin) Close() (err error) {
 //
 // Deprecated: Only integration test code calls this method, but they are not allowed call this method directly.
 func (adm *Admin) Metadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
-	adm.mu.RLock()
-	defer adm.mu.RUnlock()
-
 	return adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 }
 
 func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) (*admpb.StorageNodeMetadata, error) {
-	adm.mu.RLock()
-	defer adm.mu.RUnlock()
-
 	snm, err, _ := adm.sfg.Do(sfgkey.GetStorageNodeKey(snid), func() (interface{}, error) {
 		return adm.getStorageNodeInternal(ctx, snid)
 	})
@@ -233,9 +232,6 @@ func (adm *Admin) getStorageNodeInternal(ctx context.Context, snid types.Storage
 }
 
 func (adm *Admin) listStorageNodes(ctx context.Context) ([]admpb.StorageNodeMetadata, error) {
-	adm.mu.RLock()
-	defer adm.mu.RUnlock()
-
 	snms, err, _ := adm.sfg.Do(sfgkey.ListStorageNodesKey(), func() (interface{}, error) {
 		return adm.listStorageNodesInternal(ctx)
 	})
@@ -314,9 +310,6 @@ func (adm *Admin) listStorageNodesInternal(ctx context.Context) ([]admpb.Storage
 //   - It could not fetch metadata from the storage node.
 //   - It is rejected by the metadata repository.
 func (adm *Admin) addStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) (*admpb.StorageNodeMetadata, error) {
-	adm.mu.Lock()
-	defer adm.mu.Unlock()
-
 	// If there is a storage node whose ID and address are the same as the
 	// arguments snid and addr, it will succeed. If only one of them is the
 	// same, it will fail by the metadata repository.
@@ -368,9 +361,6 @@ func (adm *Admin) addStorageNode(ctx context.Context, snid types.StorageNodeID, 
 }
 
 func (adm *Admin) unregisterStorageNode(ctx context.Context, snid types.StorageNodeID) error {
-	adm.mu.Lock()
-	defer adm.mu.Unlock()
-
 	clusmeta, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "unregister storage node: %s", err.Error())
@@ -399,9 +389,6 @@ func (adm *Admin) unregisterStorageNode(ctx context.Context, snid types.StorageN
 }
 
 func (adm *Admin) getTopic(ctx context.Context, tpid types.TopicID) (*varlogpb.TopicDescriptor, error) {
-	adm.mu.RLock()
-	defer adm.mu.RUnlock()
-
 	td, err, _ := adm.sfg.Do(sfgkey.GetTopicKey(tpid), func() (interface{}, error) {
 		return adm.getTopicInternal(ctx, tpid)
 	})
@@ -424,9 +411,6 @@ func (adm *Admin) getTopicInternal(ctx context.Context, tpid types.TopicID) (*va
 }
 
 func (adm *Admin) listTopics(ctx context.Context) ([]varlogpb.TopicDescriptor, error) {
-	adm.mu.RLock()
-	defer adm.mu.RUnlock()
-
 	tds, err, _ := adm.sfg.Do(sfgkey.ListTopicsKey(), func() (interface{}, error) {
 		return adm.listTopicsInternal(ctx)
 	})
@@ -450,9 +434,6 @@ func (adm *Admin) listTopicsInternal(ctx context.Context) ([]varlogpb.TopicDescr
 }
 
 func (adm *Admin) addTopic(ctx context.Context) (*varlogpb.TopicDescriptor, error) {
-	adm.mu.Lock()
-	defer adm.mu.Unlock()
-
 	topicID := adm.tpidGen.Generate()
 	// Note that the metadata repository accepts redundant RegisterTopic
 	// RPC only if the topic has no log streams.
@@ -464,9 +445,6 @@ func (adm *Admin) addTopic(ctx context.Context) (*varlogpb.TopicDescriptor, erro
 }
 
 func (adm *Admin) unregisterTopic(ctx context.Context, tpid types.TopicID) error {
-	adm.mu.Lock()
-	defer adm.mu.Unlock()
-
 	clusmeta, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return status.Errorf(codes.Unavailable, "unregister topic: %s", err.Error())
@@ -490,9 +468,6 @@ func (adm *Admin) unregisterTopic(ctx context.Context, tpid types.TopicID) error
 }
 
 func (adm *Admin) getLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
-	adm.mu.RLock()
-	defer adm.mu.RUnlock()
-
 	lsd, err, _ := adm.sfg.Do(sfgkey.GetLogStreamKey(tpid, lsid), func() (interface{}, error) {
 		return adm.getLogStreamInternal(ctx, tpid, lsid)
 	})
@@ -525,9 +500,6 @@ func (adm *Admin) getLogStreamInternal(ctx context.Context, tpid types.TopicID, 
 }
 
 func (adm *Admin) listLogStreams(ctx context.Context, tpid types.TopicID) ([]varlogpb.LogStreamDescriptor, error) {
-	adm.mu.RLock()
-	defer adm.mu.RUnlock()
-
 	lsds, err, _ := adm.sfg.Do(sfgkey.ListLogStreamsKey(tpid), func() (interface{}, error) {
 		return adm.listLogStreamsInternal(ctx, tpid)
 	})
@@ -561,9 +533,6 @@ func (adm *Admin) listLogStreamsInternal(ctx context.Context, tpid types.TopicID
 }
 
 func (adm *Admin) describeTopic(ctx context.Context, tpid types.TopicID) (td varlogpb.TopicDescriptor, lsds []varlogpb.LogStreamDescriptor, err error) {
-	adm.mu.RLock()
-	defer adm.mu.RUnlock()
-
 	type result struct {
 		td   varlogpb.TopicDescriptor
 		lsds []varlogpb.LogStreamDescriptor
@@ -649,9 +618,6 @@ func (adm *Admin) addLogStream(ctx context.Context, tpid types.TopicID, replicas
 }
 
 func (adm *Admin) addLogStreamInternal(ctx context.Context, tpid types.TopicID, replicas []*varlogpb.ReplicaDescriptor) (*varlogpb.LogStreamDescriptor, error) {
-	adm.mu.Lock()
-	defer adm.mu.Unlock()
-
 	var err error
 
 	if len(replicas) == 0 {
@@ -762,8 +728,6 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 		}
 		return nil, status.Errorf(codes.InvalidArgument, "update log stream: the same replica")
 	}
-	adm.mu.Lock()
-	defer adm.mu.Unlock()
 
 	adm.lockLogStreamStatus(lsid)
 	defer adm.unlockLogStreamStatus(lsid)
@@ -862,9 +826,6 @@ func (adm *Admin) hasSealedReplica(ctx context.Context, lsdesc *varlogpb.LogStre
 }
 
 func (adm *Admin) unregisterLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) error {
-	adm.mu.Lock()
-	defer adm.mu.Unlock()
-
 	adm.lockLogStreamStatus(lsid)
 	defer adm.unlockLogStreamStatus(lsid)
 
@@ -891,9 +852,6 @@ func (adm *Admin) unregisterLogStream(ctx context.Context, tpid types.TopicID, l
 }
 
 func (adm *Admin) removeLogStreamReplica(ctx context.Context, snid types.StorageNodeID, tpid types.TopicID, lsid types.LogStreamID) error {
-	adm.mu.Lock()
-	defer adm.mu.Unlock()
-
 	adm.lockLogStreamStatus(lsid)
 	defer adm.unlockLogStreamStatus(lsid)
 
@@ -1023,9 +981,6 @@ func (adm *Admin) syncInternal(ctx context.Context, tpid types.TopicID, lsid typ
 // The argument tpid is the topic ID of the topic to be trimmed.
 // The argument lastGLSN is the last global sequence number of the log stream to be trimmed.
 func (adm *Admin) trim(ctx context.Context, tpid types.TopicID, lastGLSN types.GLSN) ([]admpb.TrimResult, error) {
-	adm.mu.Lock()
-	defer adm.mu.Unlock()
-
 	return adm.snmgr.Trim(ctx, tpid, lastGLSN)
 }
 
@@ -1066,9 +1021,6 @@ func (adm *Admin) listMetadataRepositoryNodes(ctx context.Context) ([]varlogpb.M
 }
 
 func (adm *Admin) mrInfos(ctx context.Context) (*mrpb.ClusterInfo, error) {
-	adm.mu.RLock()
-	defer adm.mu.RUnlock()
-
 	return adm.mrmgr.GetClusterInfo(ctx)
 }
 
@@ -1100,9 +1052,6 @@ func (adm *Admin) addMRPeer(ctx context.Context, raftURL, rpcAddr string) (types
 		return nodeID, errors.Wrap(verrors.ErrInvalid, "raft address")
 	}
 
-	adm.mu.RLock()
-	defer adm.mu.RUnlock()
-
 	err := adm.mrmgr.AddPeer(ctx, nodeID, raftURL, rpcAddr)
 	if err != nil {
 		if !errors.Is(err, verrors.ErrAlreadyExists) {
@@ -1133,9 +1082,6 @@ func (adm *Admin) removeMRPeer(ctx context.Context, raftURL string) error {
 	if nodeID == types.InvalidNodeID {
 		return errors.Wrap(verrors.ErrInvalid, "raft address")
 	}
-
-	adm.mu.RLock()
-	defer adm.mu.RUnlock()
 
 	err := adm.mrmgr.RemovePeer(ctx, nodeID)
 	if err != nil {
