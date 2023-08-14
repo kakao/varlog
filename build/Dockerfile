@@ -13,14 +13,14 @@ RUN wget -qO/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health
     && chmod +x /bin/grpc_health_probe
 
 
-FROM golang:1.20 AS builder-cgo
+FROM golang:1.21 AS builder-cgo
 ARG DEBIAN_FRONTEND
 WORKDIR /varlog
 COPY . .
 RUN make build GCFLAGS=""
 
 
-FROM golang:1.20 AS builder-noncgo
+FROM golang:1.21 AS builder-noncgo
 ARG DEBIAN_FRONTEND
 WORKDIR /varlog
 COPY . .
