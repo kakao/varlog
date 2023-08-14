@@ -21,10 +21,10 @@ type committer struct {
 	committerConfig
 
 	commitWaitQ        *commitWaitQueue
-	inflightCommitWait int64
+	inflightCommitWait atomic.Int64
 
 	commitQueue    chan *commitTask
-	inflightCommit int64
+	inflightCommit atomic.Int64
 
 	runner *runner.Runner
 }
@@ -50,7 +50,7 @@ func newCommitter(cfg committerConfig) (*committer, error) {
 // The commit wait task is pushed into commitWaitQ in the committer.
 // The writer calls this method internally to push commit wait tasks to the committer.
 // If the input list of commit wait tasks are nil or empty, it panics.
-func (cm *committer) sendCommitWaitTask(_ context.Context, cwts *listQueue) (err error) {
+func (cm *committer) sendCommitWaitTask(_ context.Context, cwts *listQueue, ignoreSealing bool) (err error) {
 	if cwts == nil {
 		panic("log stream: committer: commit wait task list is nil")
 	}
@@ -59,19 +59,25 @@ func (cm *committer) sendCommitWaitTask(_ context.Context, cwts *listQueue) (err
 		panic("log stream: committer: commit wait task list is empty")
 	}
 
-	inflight := atomic.AddInt64(&cm.inflightCommitWait, int64(cnt))
+	inflight := cm.inflightCommitWait.Add(int64(cnt))
 	defer func() {
 		if err != nil {
-			inflight = atomic.AddInt64(&cm.inflightCommitWait, -int64(cnt))
+			inflight = cm.inflightCommitWait.Add(-int64(cnt))
 		}
-		cm.logger.Debug("send committer commit wait tasks",
-			zap.Int64("inflight", inflight),
-			zap.Error(err),
-		)
+		if ce := cm.logger.Check(zap.DebugLevel, "send committer commit wait tasks"); ce != nil {
+			ce.Write(
+				zap.Int64("inflight", inflight),
+				zap.Error(err),
+			)
+		}
 	}()
 
 	switch cm.lse.esm.load() {
-	case executorStateSealing, executorStateSealed, executorStateLearning:
+	case executorStateSealing:
+		if !ignoreSealing {
+			err = verrors.ErrSealed
+		}
+	case executorStateSealed, executorStateLearning:
 		err = verrors.ErrSealed
 	case executorStateClosed:
 		err = verrors.ErrClosed
@@ -88,10 +94,10 @@ func (cm *committer) sendCommitWaitTask(_ context.Context, cwts *listQueue) (err
 // The commit task is pushed into commitQueue in the committer.
 // The Commit RPC handler calls this method to push commit request to the committer.
 func (cm *committer) sendCommitTask(ctx context.Context, ct *commitTask) (err error) {
-	atomic.AddInt64(&cm.inflightCommit, 1)
+	cm.inflightCommit.Add(1)
 	defer func() {
 		if err != nil {
-			atomic.AddInt64(&cm.inflightCommit, -1)
+			cm.inflightCommit.Add(-1)
 		}
 	}()
 
@@ -137,23 +143,27 @@ func (cm *committer) commitLoop(ctx context.Context) {
 func (cm *committer) commitLoopInternal(ctx context.Context, ct *commitTask) {
 	defer func() {
 		ct.release()
-		atomic.AddInt64(&cm.inflightCommit, -1)
+		cm.inflightCommit.Add(-1)
 	}()
 
 	// TODO: Move these condition expressions to `internal/storagenode/logstream.(*committer).commit` method.
 	commitVersion, _, _, invalid := cm.lse.lsc.reportCommitBase()
 	if ct.stale(commitVersion) {
-		cm.logger.Debug("discard a stale commit message",
-			zap.Any("replica", commitVersion),
-			zap.Any("commit", ct.version),
-		)
+		if ce := cm.logger.Check(zap.DebugLevel, "discard a stale commit message"); ce != nil {
+			ce.Write(
+				zap.Any("replica", commitVersion),
+				zap.Any("commit", ct.version),
+			)
+		}
 		return
 	}
 	if invalid {
 		// Synchronization should fix this invalid replica status
 		// caused by the inconsistency between the commit context and
 		// the last log entry.
-		cm.logger.Debug("discard a commit message due to invalid replica status")
+		if ce := cm.logger.Check(zap.DebugLevel, "discard a commit message due to invalid replica status"); ce != nil {
+			ce.Write()
+		}
 		return
 	}
 
@@ -244,9 +254,9 @@ func (cm *committer) commitInternal(cc storage.CommitContext, requireCommitWaitT
 		if cm.lse.lsm == nil {
 			return
 		}
-		atomic.AddInt64(&cm.lse.lsm.CommitterOperationDuration, time.Since(startTime).Microseconds())
-		atomic.AddInt64(&cm.lse.lsm.CommitterOperations, 1)
-		atomic.AddInt64(&cm.lse.lsm.CommitterLogs, int64(numCommits))
+		cm.lse.lsm.CommitterOperationDuration.Add(int64(time.Since(startTime).Microseconds()))
+		cm.lse.lsm.CommitterOperations.Add(1)
+		cm.lse.lsm.CommitterLogs.Add(int64(numCommits))
 	}()
 
 	iter := cm.commitWaitQ.peekIterator()
@@ -305,7 +315,7 @@ func (cm *committer) commitInternal(cc storage.CommitContext, requireCommitWaitT
 		GLSN: cc.CommittedGLSNBegin + types.GLSN(numCommits),
 	}
 	cm.lse.decider.change(func() {
-		cm.lse.lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedBegin, false)
+		cm.lse.lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedBegin, false /*invalid*/)
 	})
 
 	for _, cwt := range committedTasks {
@@ -315,7 +325,7 @@ func (cm *committer) commitInternal(cc storage.CommitContext, requireCommitWaitT
 
 	// NOTE: When sync replication is occurred, it can be zero.
 	if len(committedTasks) > 0 {
-		atomic.AddInt64(&cm.inflightCommitWait, int64(-numCommits))
+		cm.inflightCommitWait.Add(int64(-numCommits))
 	}
 
 	return nil
@@ -323,20 +333,24 @@ func (cm *committer) commitInternal(cc storage.CommitContext, requireCommitWaitT
 
 // drainCommitWaitQ drains the commit wait tasks in commitWaitQ.
 func (cm *committer) drainCommitWaitQ(cause error) {
-	cm.logger.Debug("draining commit wait tasks",
-		zap.Int64("inflight", atomic.LoadInt64(&cm.inflightCommitWait)),
-		zap.Error(cause),
-	)
+	if ce := cm.logger.Check(zap.DebugLevel, "draining commit wait tasks"); ce != nil {
+		ce.Write(
+			zap.Int64("inflight", cm.inflightCommitWait.Load()),
+			zap.Error(cause),
+		)
+	}
 
-	for atomic.LoadInt64(&cm.inflightCommitWait) > 0 {
+	for cm.inflightCommitWait.Load() > 0 {
 		cwt := cm.commitWaitQ.pop()
 		if cwt == nil {
 			continue
 		}
 		cwt.awg.commitDone(cause)
 		cwt.release()
-		inflight := atomic.AddInt64(&cm.inflightCommitWait, -1)
-		cm.logger.Debug("discard a commit wait task", zap.Int64("inflight", inflight))
+		inflight := cm.inflightCommitWait.Add(-1)
+		if ce := cm.logger.Check(zap.DebugLevel, "discard a commit wait task"); ce != nil {
+			ce.Write(zap.Int64("inflight", inflight))
+		}
 	}
 }
 
@@ -347,7 +361,7 @@ func (cm *committer) waitForDrainageOfCommitQueue(forceDrain bool) {
 	timer := time.NewTimer(tick)
 	defer timer.Stop()
 
-	for atomic.LoadInt64(&cm.inflightCommit) > 0 {
+	for cm.inflightCommit.Load() > 0 {
 		if !forceDrain {
 			<-timer.C
 			timer.Reset(tick)
@@ -359,7 +373,7 @@ func (cm *committer) waitForDrainageOfCommitQueue(forceDrain bool) {
 			timer.Reset(tick)
 		case ct := <-cm.commitQueue:
 			ct.release()
-			atomic.AddInt64(&cm.inflightCommit, -1)
+			cm.inflightCommit.Add(-1)
 		}
 	}
 }

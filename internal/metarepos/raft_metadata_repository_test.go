@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,7 +23,6 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/util/testutil/ports"
-	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -543,6 +541,63 @@ func TestMRApplyInvalidReport(t *testing.T) {
 	})
 }
 
+func TestMRIgnoreDirtyReport(t *testing.T) {
+	Convey("Given LogStream", t, func(ctx C) {
+		rep := 2
+		clus := newMetadataRepoCluster(1, rep, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+		mr := clus.nodes[0]
+
+		tn := &varlogpb.TopicDescriptor{
+			TopicID: types.TopicID(1),
+			Status:  varlogpb.TopicStatusRunning,
+		}
+
+		err := mr.storage.registerTopic(tn)
+		So(err, ShouldBeNil)
+
+		snIDs := make([]types.StorageNodeID, rep)
+		for i := range snIDs {
+			snIDs[i] = types.MinStorageNodeID + types.StorageNodeID(i)
+
+			sn := &varlogpb.StorageNodeDescriptor{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snIDs[i],
+				},
+			}
+
+			err := mr.storage.registerStorageNode(sn)
+			So(err, ShouldBeNil)
+		}
+
+		lsID := types.MinLogStreamID
+		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
+		err = mr.storage.registerLogStream(ls)
+		So(err, ShouldBeNil)
+
+		curLen := uint64(2)
+		curVer := types.Version(1)
+
+		for _, snID := range snIDs {
+			report := makeUncommitReport(snID, curVer, types.InvalidGLSN, lsID, types.MinLLSN, curLen)
+			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
+		}
+
+		Convey("When Some LogStream reports dirty report", func(ctx C) {
+			report := makeUncommitReport(snIDs[0], curVer+1, types.InvalidGLSN, lsID, types.MinLLSN, curLen-1)
+			mr.applyReport(&mrpb.Reports{Reports: []*mrpb.Report{report}}) //nolint:errcheck,revive // TODO:: Handle an error returned.
+
+			Convey("Then, it should ignored", func(ctx C) {
+				r, ok := mr.storage.LookupUncommitReport(lsID, snIDs[0])
+				So(ok, ShouldBeTrue)
+				So(r.UncommittedLLSNLength, ShouldEqual, curLen)
+			})
+		})
+	})
+}
+
 func TestMRCalculateCommit(t *testing.T) {
 	Convey("Calculate commit", t, func(ctx C) {
 		clus := newMetadataRepoCluster(1, 2, false)
@@ -721,6 +776,14 @@ func TestMRGlobalCommit(t *testing.T) {
 					return hwm == types.GLSN(9)
 				}), ShouldBeTrue)
 			})
+
+			Convey("The LastHighWatermark of the new topic should be InvalidGLSN", func(ctx C) {
+				hwm, _ := mr.GetLastCommitResults().LastHighWatermark(topicID, -1)
+				So(hwm, ShouldNotEqual, types.InvalidGLSN)
+
+				hwm, _ = mr.GetLastCommitResults().LastHighWatermark(topicID+1, -1)
+				So(hwm, ShouldEqual, types.InvalidGLSN)
+			})
 		})
 	})
 }
@@ -871,7 +934,7 @@ func TestMRRequestMap(t *testing.T) {
 			},
 		}
 
-		requestNum := atomic.LoadUint64(&mr.requestNum)
+		requestNum := mr.requestNum.Load()
 
 		var wg sync.WaitGroup
 		var st sync.WaitGroup
@@ -955,7 +1018,7 @@ func TestMRRequestMap(t *testing.T) {
 		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(1))
 		defer cancel()
 
-		requestNum := atomic.LoadUint64(&mr.requestNum)
+		requestNum := mr.requestNum.Load()
 		err := mr.RegisterStorageNode(rctx, sn)
 		So(err, ShouldNotBeNil)
 
@@ -985,7 +1048,7 @@ func TestMRRequestMap(t *testing.T) {
 			},
 		}
 
-		requestNum := atomic.LoadUint64(&mr.requestNum)
+		requestNum := mr.requestNum.Load()
 		err := mr.RegisterStorageNode(context.TODO(), sn)
 		So(err, ShouldBeNil)
 
@@ -1753,7 +1816,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 
 			Convey("Then it should not have member info", func(ctx C) {
 				_, err := clus.nodes[newNode].GetClusterInfo(context.TODO(), types.ClusterID(0))
-				So(err, ShouldResemble, verrors.ErrNotMember)
+				So(status.Code(err), ShouldEqual, codes.Unavailable)
 
 				cinfo, err := clus.nodes[0].GetClusterInfo(context.TODO(), types.ClusterID(0))
 				So(err, ShouldBeNil)
@@ -2462,7 +2525,7 @@ func TestMRScaleOutJoin(t *testing.T) {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
-		So(testutil.CompareWaitN(500, func() bool {
+		So(testutil.CompareWaitN(1000, func() bool {
 			peers := clus.getMembersFromSnapshot(0)
 			return len(peers) == nrNode
 		}), ShouldBeTrue)
@@ -2751,6 +2814,39 @@ func TestMRTopicLastHighWatermark(t *testing.T) {
 					So(mr.numCommitSince(topicID, lsID, base, latest, -1), ShouldEqual, 2)
 				}
 			}
+
+			Convey("when topic added, glsn of new topic should start from 1", func(ctx C) {
+				err := mr.storage.registerTopic(&varlogpb.TopicDescriptor{TopicID: topicID})
+				So(err, ShouldBeNil)
+
+				lsIds := make([]types.LogStreamID, nrLS)
+				for i := range lsIds {
+					ls := makeLogStream(topicID, lsID, snIDs)
+					err := mr.storage.registerLogStream(ls)
+					So(err, ShouldBeNil)
+
+					lsIds[i] = lsID
+					lsID++
+				}
+				topicLogStreamID[topicID] = lsIds
+
+				preVersion := mr.storage.GetLastCommitVersion()
+
+				for _, lsID := range lsIds {
+					for i := 0; i < rep; i++ {
+						So(testutil.CompareWaitN(10, func() bool {
+							report := makeUncommitReport(snIDs[i], preVersion, types.InvalidGLSN, lsID, types.MinLLSN, uint64(2+i))
+							return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
+						}), ShouldBeTrue)
+					}
+				}
+
+				// global commit (2, 2) highest glsn: 4
+				So(testutil.CompareWaitN(10, func() bool {
+					hwm, _ := mr.GetLastCommitResults().LastHighWatermark(topicID, -1)
+					return hwm == types.GLSN(4)
+				}), ShouldBeTrue)
+			})
 		})
 
 		Convey("add logStream into topic", func(ctx C) {
@@ -2826,6 +2922,7 @@ func TestMRTopicLastHighWatermark(t *testing.T) {
 				}
 			}
 		})
+
 	})
 }
 

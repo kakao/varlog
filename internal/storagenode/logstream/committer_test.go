@@ -5,7 +5,6 @@ import (
 	"errors"
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -56,25 +55,25 @@ func TestCommitter_ShouldNotAcceptTasksWhileNotAppendable(t *testing.T) {
 
 	lse.esm.store(executorStateAppendable)
 	assert.Panics(t, func() {
-		_ = cm.sendCommitWaitTask(context.Background(), cwts)
+		_ = cm.sendCommitWaitTask(context.Background(), cwts, false /*ignoreSealing*/)
 	})
 
 	assert.Panics(t, func() {
-		_ = cm.sendCommitWaitTask(context.Background(), nil)
+		_ = cm.sendCommitWaitTask(context.Background(), nil, false /*ignoreSealing*/)
 	})
 
 	cwts.PushFront(&commitWaitTask{})
 
 	lse.esm.store(executorStateSealing)
-	err := cm.sendCommitWaitTask(context.Background(), cwts)
+	err := cm.sendCommitWaitTask(context.Background(), cwts, false /*ignoreSealing*/)
 	assert.Error(t, err)
 
 	lse.esm.store(executorStateSealed)
-	err = cm.sendCommitWaitTask(context.Background(), cwts)
+	err = cm.sendCommitWaitTask(context.Background(), cwts, false /*ignoreSealing*/)
 	assert.Error(t, err)
 
 	lse.esm.store(executorStateClosed)
-	err = cm.sendCommitWaitTask(context.Background(), cwts)
+	err = cm.sendCommitWaitTask(context.Background(), cwts, false /*ignoreSealing*/)
 	assert.Error(t, err)
 
 	// sendCommitTask
@@ -144,13 +143,13 @@ func TestCommitter_DrainCommitWaitQ(t *testing.T) {
 
 	cwts := newListQueue()
 	cwts.PushFront(newCommitWaitTask(newAppendWaitGroup(newWriteWaitGroup())))
-	err := cm.sendCommitWaitTask(context.Background(), cwts)
+	err := cm.sendCommitWaitTask(context.Background(), cwts, false /*ignoreSealing*/)
 	assert.NoError(t, err)
 
-	assert.EqualValues(t, 1, atomic.LoadInt64(&cm.inflightCommitWait))
+	assert.EqualValues(t, 1, cm.inflightCommitWait.Load())
 	assert.EqualValues(t, 1, cm.commitWaitQ.size())
 
 	cm.drainCommitWaitQ(errors.New("drain"))
-	assert.Zero(t, atomic.LoadInt64(&cm.inflightCommitWait))
+	assert.Zero(t, cm.inflightCommitWait.Load())
 	assert.Zero(t, cm.commitWaitQ.size())
 }

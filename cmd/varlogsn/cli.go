@@ -1,11 +1,9 @@
 package main
 
 import (
-	"time"
-
 	"github.com/urfave/cli/v2"
 
-	"github.com/kakao/varlog/internal/storage"
+	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/storagenode/logstream"
 	"github.com/kakao/varlog/pkg/types"
@@ -38,7 +36,7 @@ func newStartCommand() *cli.Command {
 			flagStorageNodeID.StringFlag(false, types.StorageNodeID(1).String()),
 			flagListen.StringFlag(false, "127.0.0.1:9091"),
 			flagAdvertise.StringFlag(false, ""),
-			flagBallastSize.StringFlag(false, "1G"),
+			flagBallastSize.StringFlag(false, storagenode.DefaultBallastSize),
 
 			// volumes
 			flagVolumes.StringSliceFlag(true, nil),
@@ -48,6 +46,8 @@ func newStartCommand() *cli.Command {
 			flagServerMaxRecvMsgSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultServerMaxRecvSize)),
 			flagReplicationClientReadBufferSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultReplicateClientReadBufferSize)),
 			flagReplicationClientWriteBufferSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultReplicateClientWriteBufferSize)),
+			flagServerInitialConnWindowSize,
+			flagServerInitialStreamWindowSize,
 
 			// lse options
 			flagLogStreamExecutorSequenceQueueCapacity.IntFlag(false, logstream.DefaultSequenceQueueCapacity),
@@ -55,30 +55,45 @@ func newStartCommand() *cli.Command {
 			flagLogStreamExecutorCommitQueueCapacity.IntFlag(false, logstream.DefaultCommitQueueCapacity),
 			flagLogStreamExecutorReplicateclientQueueCapacity.IntFlag(false, logstream.DefaultReplicateClientQueueCapacity),
 			flagMaxLogStreamReplicasCount,
+			flagAppendPipelineSize,
 
 			// storage options
-			flagStorageDisableWAL.BoolFlag(),
-			flagStorageNoSync.BoolFlag(),
-			flagStorageL0CompactionThreshold.IntFlag(false, storage.DefaultL0CompactionThreshold),
-			flagStorageL0StopWritesThreshold.IntFlag(false, storage.DefaultL0StopWritesThreshold),
-			flagStorageLBaseMaxBytes.StringFlag(false, units.ToByteSizeString(storage.DefaultLBaseMaxBytes)),
-			flagStorageMaxOpenFiles.IntFlag(false, storage.DefaultMaxOpenFiles),
-			flagStorageMemTableSize.StringFlag(false, units.ToByteSizeString(storage.DefaultMemTableSize)),
-			flagStorageMemTableStopWritesThreshold.IntFlag(false, storage.DefaultMemTableStopWritesThreshold),
-			flagStorageMaxConcurrentCompaction.IntFlag(false, storage.DefaultMaxConcurrentCompactions),
-			flagStorageVerbose.BoolFlag(),
+			flagExperimentalStorageSeparateDB,
+			flagStorageDisableWAL,
+			flagStorageNoSync,
+			flagStorageL0CompactionFileThreshold,
+			flagStorageL0CompactionThreshold,
+			flagStorageL0StopWritesThreshold,
+			flagStorageL0TargetFileSize,
+			flagStorageFlushSplitBytes,
+			flagStorageLBaseMaxBytes,
+			flagStorageMaxOpenFiles,
+			flagStorageMemTableSize,
+			flagStorageMemTableStopWritesThreshold,
+			flagStorageMaxConcurrentCompaction,
+			flagStorageMetricsLogInterval,
+			flagStorageVerbose,
+			flagStorageTrimDelay,
+			flagStorageTrimRate,
 
-			flagLogDir.StringFlag(false, ""),
-			flagLogToStderr.BoolFlag(),
-			flagLogFileRetentionDays.IntFlag(false, 0),
-			flagLogFileCompression.BoolFlag(),
-			flagLogLevel.StringFlag(false, "info"),
+			// logger options
+			flags.LogDir,
+			flags.LogToStderr,
+			flags.LogFileMaxSizeMB,
+			flags.LogFileMaxBackups,
+			flags.LogFileRetentionDays,
+			flags.LogFileNameUTC,
+			flags.LogFileCompression,
+			flags.LogHumanReadable,
+			flags.LogLevel,
 
-			flagExporterType.StringFlag(false, "noop"),
-			flagExporterStopTimeout.DurationFlag(false, 5*time.Second),
-			flagStdoutExporterPrettyPrint.BoolFlag(),
-			flagOTLPExporterInsecure.BoolFlag(),
-			flagOTLPExporterEndpoint.StringFlag(false, ""),
+			// telemetry
+			flags.TelemetryExporter,
+			flags.TelemetryExporterStopTimeout,
+			flags.TelemetryOTLPEndpoint,
+			flags.TelemetryOTLPInsecure,
+			flags.TelemetryHost,
+			flags.TelemetryRuntime,
 		},
 	}
 }

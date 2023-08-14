@@ -181,16 +181,16 @@ func TestExecutorsMapOrdred(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	rand.Seed(time.Now().UnixNano())
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	emap := New(numExtors)
 	lstpMap := make(map[types.LogStreamID]types.TopicID)
 
 	var stored [numExtors]bool
 	for i := 0; i < numExtors*10; i++ {
-		pos := rand.Intn(numExtors)
+		pos := rng.Intn(numExtors)
 		lsid := types.LogStreamID(pos)
-		tpid := types.TopicID(rand.Int31())
+		tpid := types.TopicID(rng.Int31())
 		if _, ok := lstpMap[lsid]; ok {
 			tpid = lstpMap[lsid]
 		} else {

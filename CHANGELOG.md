@@ -1,5 +1,170 @@
 # Changelog
 
+## [0.15.0](https://github.com/kakao/varlog/compare/v0.14.1...v0.15.0) (2023-07-31)
+
+
+### Features
+
+* **admin:** add otelgrpc metric interceptor ([d9ca9aa](https://github.com/kakao/varlog/commit/d9ca9aaab6cdb56a096541ac3d8193a22558fa77))
+* **admin:** add otelgrpc metric interceptor ([#509](https://github.com/kakao/varlog/issues/509)) ([db7a1a2](https://github.com/kakao/varlog/commit/db7a1a2467fc91346e6bb1324ed65d33ba7db3b2))
+* **admin:** speed up fetching cluster metadata ([3e46f62](https://github.com/kakao/varlog/commit/3e46f625a8666d4c2aa077bcb90e5f57d701faaa))
+* **admin:** speed up fetching cluster metadata ([#480](https://github.com/kakao/varlog/issues/480)) ([53a8f19](https://github.com/kakao/varlog/commit/53a8f195f6063add1c8ca6479f36acf5b6ab9102))
+* **all:** add common flags for telemetry ([fcacd1a](https://github.com/kakao/varlog/commit/fcacd1a6491b1333fc0470f563ff651e9938707c))
+* **all:** add common flags for telemetry ([#494](https://github.com/kakao/varlog/issues/494)) ([63355e9](https://github.com/kakao/varlog/commit/63355e9a72351beff51301291bc13ef389576cda))
+* **benchmark:** share a connection between appenders in a target ([7dc53e9](https://github.com/kakao/varlog/commit/7dc53e942513feec279c3beccb30b20602d2cb7f))
+* **benchmark:** share a connection between appenders in a target ([#524](https://github.com/kakao/varlog/issues/524)) ([2cd9196](https://github.com/kakao/varlog/commit/2cd9196771681a89e036e5bc3b3394a748656b7c))
+* **client:** add Clear to the log stream appender manager ([9a89065](https://github.com/kakao/varlog/commit/9a890654c70e6168ae34e8b5321edb7735649110))
+* **client:** add Clear to the log stream appender manager ([#514](https://github.com/kakao/varlog/issues/514)) ([e5b6a2e](https://github.com/kakao/varlog/commit/e5b6a2e49866fb9355923746fe404d7c11990b9a))
+* **storagenode:** add --storage-trim-delay to set a delay before the deletion of log entries ([db39713](https://github.com/kakao/varlog/commit/db39713654ec962149fa9a1637bf1f38317d0746))
+* **storagenode:** add --storage-trim-delay to set a delay before the deletion of log entries ([#529](https://github.com/kakao/varlog/issues/529)) ([015bfa4](https://github.com/kakao/varlog/commit/015bfa4d58164a8ac94686aa68222956494b5838))
+* **storagenode:** add --storage-trim-rate to set throttling rate of Trim ([83b7496](https://github.com/kakao/varlog/commit/83b7496cee04303b2c2620cd51558315b2864969))
+* **storagenode:** add --storage-trim-rate to set throttling rate of Trim ([#530](https://github.com/kakao/varlog/issues/530)) ([6e69306](https://github.com/kakao/varlog/commit/6e69306b9145851a1d513d25f18afd380a9f6e9f))
+* **telemetry:** customize bucket size of process.runtime.go.gc.pause_ns ([b181132](https://github.com/kakao/varlog/commit/b181132df575100f8a2275856b862bd99ae09814))
+* **telemetry:** customize bucket size of process.runtime.go.gc.pause_ns ([#510](https://github.com/kakao/varlog/issues/510)) ([9d99520](https://github.com/kakao/varlog/commit/9d9952077a7bfbce5aaeaf4fd1204e418f43acfe))
+* **telemetry:** customize bucket size of rpc.server.duration ([a0e5973](https://github.com/kakao/varlog/commit/a0e5973ac9d7f5edc5c370c14bb1c495e0af003b))
+* **telemetry:** customize bucket size of rpc.server.duration ([#511](https://github.com/kakao/varlog/issues/511)) ([e41fe1c](https://github.com/kakao/varlog/commit/e41fe1cd4f10670721d8b8be5beae9c5f70927e4))
+
+
+### Bug Fixes
+
+* **benchmark:** make append duration's precision high ([e3a091d](https://github.com/kakao/varlog/commit/e3a091df53d8308b11c7917f6fa2f8d22dc31d10))
+* **benchmark:** make append duration's precision high ([#522](https://github.com/kakao/varlog/issues/522)) ([815af53](https://github.com/kakao/varlog/commit/815af531c9f42520780091ebce10888b1a7eff97))
+* **benchmark:** support graceful stop ([8616d55](https://github.com/kakao/varlog/commit/8616d55681ec8a09adbf69e073b76d9e2198da65))
+* **benchmark:** support graceful stop ([#527](https://github.com/kakao/varlog/issues/527)) ([fc4ed81](https://github.com/kakao/varlog/commit/fc4ed8165d70ab01c8b02a53007def8dfda0d293))
+* **metarepos:** add TestMRIgnoreDirtyReport ([fe2a550](https://github.com/kakao/varlog/commit/fe2a550df1f5917218104d70a2680bba8f380a99))
+* **metarepos:** allow set commitTick ([bdca20a](https://github.com/kakao/varlog/commit/bdca20a06b66b21c806eb2ce2022f6d5ad8b5d29))
+* **metarepos:** ignore invalid report ([e8620de](https://github.com/kakao/varlog/commit/e8620de689d3eff7670e991500adf242576ae6e1))
+* **storagenode:** ignore context error while checking to interleave of Append RPC errors ([04d1052](https://github.com/kakao/varlog/commit/04d1052955959658524e2716bf34294d919b942e))
+* **storagenode:** ignore context error while checking to interleave of Append RPC errors ([#504](https://github.com/kakao/varlog/issues/504)) ([5a7a3b0](https://github.com/kakao/varlog/commit/5a7a3b01bdc007da9d7aac15a080f9ef8e613e0a))
+* **storagenode:** restore uncommitted logs ([267cccc](https://github.com/kakao/varlog/commit/267ccccc15ff937ab099991c1b61d868c86252d6)), closes [#490](https://github.com/kakao/varlog/issues/490)
+* **storagenode:** restore uncommitted logs ([#492](https://github.com/kakao/varlog/issues/492)) ([a9832ee](https://github.com/kakao/varlog/commit/a9832eee6c2532cc29051382a01262db1131595c)), closes [#490](https://github.com/kakao/varlog/issues/490)
+
+
+### Performance Improvements
+
+* **admin:** use singleflight to handle Admin's RPCs ([c231888](https://github.com/kakao/varlog/commit/c23188830b65885293f124a04cac26df4fb8da81))
+* **admin:** use singleflight to handle Admin's RPCs ([#482](https://github.com/kakao/varlog/issues/482)) ([1a6a96d](https://github.com/kakao/varlog/commit/1a6a96da9983bab4305bc1bcd7934c5a9b3e8a24))
+* **metarepos:** add a pool for []*mrpb.Report ([fa8c89d](https://github.com/kakao/varlog/commit/fa8c89d8ec6786f8e1b7dc795b03c81bb8589f33))
+* **metarepos:** add a pool for []*mrpb.Report ([#534](https://github.com/kakao/varlog/issues/534)) ([16b2181](https://github.com/kakao/varlog/commit/16b2181a2a4d36b48422b00025e0429e90b79383))
+* **metarepos:** add a pool for *mrpb.RaftEntry ([be9f121](https://github.com/kakao/varlog/commit/be9f1216175ccc62cfa974e8857b68131d48ce40))
+* **metarepos:** add a pool for *mrpb.RaftEntry ([#536](https://github.com/kakao/varlog/issues/536)) ([96ab5e2](https://github.com/kakao/varlog/commit/96ab5e2b482d96ca240f8ab180ea4b8584685bcd))
+* **metarepos:** add a pool for mrpb.Reports ([59a6a5a](https://github.com/kakao/varlog/commit/59a6a5afa02058f247f77dcbf8b7d8c37da25f58))
+* **metarepos:** add a pool for mrpb.Reports ([#533](https://github.com/kakao/varlog/issues/533)) ([b227c75](https://github.com/kakao/varlog/commit/b227c7570e06084cbd8824fa247794d923426067))
+* **metarepos:** avoid copy overhead by removing unnecessary converting from byte slice to string ([a775628](https://github.com/kakao/varlog/commit/a77562854ef687f1a8b25c44407e6fb0aae49659))
+* **metarepos:** avoid copy overhead by removing unnecessary converting from byte slice to string ([#532](https://github.com/kakao/varlog/issues/532)) ([1702769](https://github.com/kakao/varlog/commit/1702769fbd5e3aaaadb1a16a73b3ec50f4867b5f))
+* **metarepos:** reuse mrpb.StorageNodeUncommitReport while changed ([57d8039](https://github.com/kakao/varlog/commit/57d8039e1814cde8c2147906a93ee516ed923f20))
+* **metarepos:** reuse mrpb.StorageNodeUncommitReport while changed ([#537](https://github.com/kakao/varlog/issues/537)) ([8f6e097](https://github.com/kakao/varlog/commit/8f6e097e337a76d2d3aff78e9348b1cbc84069ff))
+
+## [0.14.1](https://github.com/kakao/varlog/compare/v0.14.0...v0.14.1) (2023-06-20)
+
+
+### Bug Fixes
+
+* **client:** add missing method pkg/varlog.(*MockLog).AppendableLogStreams ([7bf9bf9](https://github.com/kakao/varlog/commit/7bf9bf91660f1361c78976716e9570884f5e86e0))
+* **client:** add missing method pkg/varlog.(*MockLog).AppendableLogStreams ([#487](https://github.com/kakao/varlog/issues/487)) ([61747ed](https://github.com/kakao/varlog/commit/61747ed0077d6f7aca9c3a220f0f488bfb154bb8))
+
+## [0.14.0](https://github.com/kakao/varlog/compare/v0.13.0...v0.14.0) (2023-06-19)
+
+
+### Features
+
+* **client:** add call timeout to log stream appender ([6f916d4](https://github.com/kakao/varlog/commit/6f916d4272ac9ba779e15f71e76e8e2e521ae9f8))
+* **client:** add call timeout to log stream appender ([#474](https://github.com/kakao/varlog/issues/474)) ([6db401a](https://github.com/kakao/varlog/commit/6db401a59fcadbe37a0bb1cff7da779f6a266b0f))
+* **client:** add LogStreamAppender ([dec3421](https://github.com/kakao/varlog/commit/dec3421ddf305ec161e274643089a5dcfb415b53))
+* **client:** add LogStreamAppender ([#459](https://github.com/kakao/varlog/issues/459)) ([bfe88d7](https://github.com/kakao/varlog/commit/bfe88d742e65b3f1265bfa63ef36355b79e4ef6e)), closes [#433](https://github.com/kakao/varlog/issues/433)
+* **client:** add settings for gRPC client ([917e5fc](https://github.com/kakao/varlog/commit/917e5fc5231d119ac51b44e6076e4cd0445dcec1))
+* **client:** add settings for gRPC client ([#479](https://github.com/kakao/varlog/issues/479)) ([4b8f01c](https://github.com/kakao/varlog/commit/4b8f01c9a50cd0b4770c6a8107c8eb9c5c5707eb))
+* **client:** can call Close at callback in LogStreamAppender ([77b8de8](https://github.com/kakao/varlog/commit/77b8de8e041bee5dc9e6a92afe4ab8f653f11205))
+* **client:** can call Close at callback in LogStreamAppender ([#473](https://github.com/kakao/varlog/issues/473)) ([23236c1](https://github.com/kakao/varlog/commit/23236c18a7cac87961f7d469989070367dd1cacd))
+* **client:** log stream appender manager ([64eae0b](https://github.com/kakao/varlog/commit/64eae0bf9aff698961db7ed27a0fec6ae6923bec))
+* **client:** log stream appender manager ([#475](https://github.com/kakao/varlog/issues/475)) ([ac6c7c6](https://github.com/kakao/varlog/commit/ac6c7c6bdc675aeb5881e94bf0015196636b8386))
+* **client:** support goroutine-safety of pkg/var log.(LogStream Appender).Append Batch ([7fa53f3](https://github.com/kakao/varlog/commit/7fa53f303e0623dbe966e763dfbfff263f6fddba))
+* **client:** support goroutine-safety of pkg/var log.(LogStream Appender).Append Batch ([#472](https://github.com/kakao/varlog/issues/472)) ([46f0d0b](https://github.com/kakao/varlog/commit/46f0d0b8179e4a70c1244e759082014bc8c799a3))
+* **storagenode:** add configurations for initial window size ([8b623b0](https://github.com/kakao/varlog/commit/8b623b012a95123b393ed85f69cee0df0deae0c9))
+* **storagenode:** add configurations for initial window size ([#451](https://github.com/kakao/varlog/issues/451)) ([5269481](https://github.com/kakao/varlog/commit/5269481c0e80c2eebf8214116a2d1544a26cb443))
+* **storagenode:** add pipelined Append RPC handler ([8535a4d](https://github.com/kakao/varlog/commit/8535a4daa4d7f749ad8601a455a5f6cda1344800))
+* **storagenode:** add pipelined Append RPC handler ([#457](https://github.com/kakao/varlog/issues/457)) ([0323629](https://github.com/kakao/varlog/commit/0323629d50d547e6312d01e3dcf6e2b0d7324b30))
+* **storagenode:** change append rpc from unary to stream ([5b27a18](https://github.com/kakao/varlog/commit/5b27a186988a725acfe5880db910f61169aa3aea))
+* **storagenode:** change append rpc from unary to stream ([#449](https://github.com/kakao/varlog/issues/449)) ([7e4ef03](https://github.com/kakao/varlog/commit/7e4ef0351ed3cc74d4e11f9ce18bf2dcbf9444d2))
+
+
+### Bug Fixes
+
+* **storagenode:** accept SyncInit sent from trimmed source to new destination ([0e141bd](https://github.com/kakao/varlog/commit/0e141bdc1e180dfa8b877f3de083e1c9efe29cd0)), closes [#478](https://github.com/kakao/varlog/issues/478)
+* **storagenode:** support partial success/failure for append ([5d438bb](https://github.com/kakao/varlog/commit/5d438bb111cb6bfd7af69821200420afcdbbd151))
+* **storagenode:** support partial success/failure for append ([#450](https://github.com/kakao/varlog/issues/450)) ([c8b7fe0](https://github.com/kakao/varlog/commit/c8b7fe07c346295e81c3b1639d432d4000ecd6b0))
+
+## [0.13.0](https://github.com/kakao/varlog/compare/v0.12.0...v0.13.0) (2023-06-01)
+
+
+### Features
+
+* **admin:** add a new flag `replica-selector` to the varlogadm ([805f8de](https://github.com/kakao/varlog/commit/805f8de5ad7f20cf3153c81afd04a41fe70ff67c)), closes [#393](https://github.com/kakao/varlog/issues/393)
+* **all:** add flags for logger ([7efe407](https://github.com/kakao/varlog/commit/7efe407f2e85d2ac6271873d7424ec0f5d28e857)), closes [#439](https://github.com/kakao/varlog/issues/439)
+* **all:** add flags for logger ([#447](https://github.com/kakao/varlog/issues/447)) ([f2e1193](https://github.com/kakao/varlog/commit/f2e1193d453a5f724d85e4d3c8aa3ad1aa3287d8)), closes [#439](https://github.com/kakao/varlog/issues/439)
+* **storage:** separate storage databases experimentally ([b3845f5](https://github.com/kakao/varlog/commit/b3845f568fb6f39b284d38935e991f8d5df3c4ac))
+* **storage:** separate storage databases experimentally ([#410](https://github.com/kakao/varlog/issues/410)) ([9f64785](https://github.com/kakao/varlog/commit/9f64785de64b4bdc8ecb67ee746bdd36cfbf52e3))
+
+
+### Bug Fixes
+
+* **metarepos:** new topic should start from MinGLSN ([d1ae8c8](https://github.com/kakao/varlog/commit/d1ae8c808f69a7c2c4b425c1dc98ceffc153ffd6))
+
+
+### Performance Improvements
+
+* **metarepos:** add mrpb.StorageNodeUncommitReport pool ([4c624da](https://github.com/kakao/varlog/commit/4c624dabce5ec063c797df92ed44930178b67d2b))
+* **metarepos:** add mrpb.StorageNodeUncommitReport pool ([#446](https://github.com/kakao/varlog/issues/446)) ([60f2cfe](https://github.com/kakao/varlog/commit/60f2cfe96d4cc574ab933358217811635f3649be))
+* **storagenode:** check log level ([39cdbae](https://github.com/kakao/varlog/commit/39cdbaeb1b2b8412af6f8b80853d6fe67f45f887))
+* **storagenode:** check log level ([#411](https://github.com/kakao/varlog/issues/411)) ([da1409d](https://github.com/kakao/varlog/commit/da1409d1d555351eca099bbf1c507d2c2b0d583a))
+* **storagenode:** estimate the number of batchlets ([3c91b62](https://github.com/kakao/varlog/commit/3c91b6214a058fa5850885d13f550a23c2ddde8c))
+* **storagenode:** estimate the number of batchlets ([#414](https://github.com/kakao/varlog/issues/414)) ([cb25d19](https://github.com/kakao/varlog/commit/cb25d195cbac2a25c58c0ccb0d5aa34d383241f3))
+* **storagenode:** remove backup from append request ([f75ef55](https://github.com/kakao/varlog/commit/f75ef55b2dcf5098b35750660691c9893a088446))
+* **storagenode:** remove backup from append request ([#412](https://github.com/kakao/varlog/issues/412)) ([0abcb1a](https://github.com/kakao/varlog/commit/0abcb1a029036f20d59b2c5038b68632a4ecdbf8))
+* **storagenode:** wrap replicateTask slice with struct ([37250e1](https://github.com/kakao/varlog/commit/37250e1670831baa7d472e3c4832c4f21701944c)), closes [#75](https://github.com/kakao/varlog/issues/75)
+* **storagenode:** wrap replicateTask slice with struct ([#416](https://github.com/kakao/varlog/issues/416)) ([911b5fe](https://github.com/kakao/varlog/commit/911b5fe7d298aaa5a4ca74b9501a2778b49f4c77)), closes [#75](https://github.com/kakao/varlog/issues/75)
+
+## [0.12.0](https://github.com/kakao/varlog/compare/v0.11.0...v0.12.0) (2023-04-06)
+
+
+### Features
+
+* **admin:** add a name to the replica selector ([6e7e74f](https://github.com/kakao/varlog/commit/6e7e74fda80693a86f8c45819ba9616c3dbad7ef)), closes [#393](https://github.com/kakao/varlog/issues/393)
+* **admin:** LFU replica selector ([0e08901](https://github.com/kakao/varlog/commit/0e08901189896d7dae74d694d78a82768cf130d9)), closes [#393](https://github.com/kakao/varlog/issues/393)
+* **admin:** random replica selector ([ad1226e](https://github.com/kakao/varlog/commit/ad1226e031fb5b90a6a2634901e84efbe8f84a6b)), closes [#393](https://github.com/kakao/varlog/issues/393)
+* **storage:** metrics logging and less verbose event logging ([3b47f8b](https://github.com/kakao/varlog/commit/3b47f8be0a34c57f931c1133853c7b6cb6811ab9))
+* **storagenode:** add automaxprocs to storagenode ([64f2afe](https://github.com/kakao/varlog/commit/64f2afef925a570831e6823ed0c3754cc77ed975))
+* **storagenode:** change SyncInit to handle trimmed source replica ([79c5323](https://github.com/kakao/varlog/commit/79c5323f0656cf7c17077d7ed3f98b5ddebb4f34)), closes [#351](https://github.com/kakao/varlog/issues/351)
+* **storagenode:** restore trimmed log stream replica ([02106fa](https://github.com/kakao/varlog/commit/02106fae07af76c132c0d3fadbf83557a3b369c8)), closes [#351](https://github.com/kakao/varlog/issues/351)
+* **storagenode:** trim API with no safety gap ([2fe4a8e](https://github.com/kakao/varlog/commit/2fe4a8e01b9cf1211cacd95a167cad819087e656)), closes [#351](https://github.com/kakao/varlog/issues/351)
+
+
+### Bug Fixes
+
+* **metarepos:** fix race in TestReportCommit ([ff21f66](https://github.com/kakao/varlog/commit/ff21f66ab5b6eb63267a16311fabcf73bb18603b)), closes [#379](https://github.com/kakao/varlog/issues/379)
+* **storagenode:** configure ballast by using flags ([cc38fcc](https://github.com/kakao/varlog/commit/cc38fccab50a58defef6f756d8da3ee7fbe09c55))
+* **storagenode:** set the flag --storage-mem-table-size correctly ([872d796](https://github.com/kakao/varlog/commit/872d79699bae3533565108819a81cbfc87709010))
+* **storagenode:** subscribe empty range below the global high watermark ([1ef39f8](https://github.com/kakao/varlog/commit/1ef39f8adfa19c90b467b357b69979b478425e29)), closes [#375](https://github.com/kakao/varlog/issues/375)
+* **storage:** prints storage log clearly ([6e868be](https://github.com/kakao/varlog/commit/6e868be273d581e7910da29b5ffe655b1dbb3c04))
+
+
+### Performance Improvements
+
+* **storage:** change storage key prefixes ([8d49523](https://github.com/kakao/varlog/commit/8d4952300bb80627b3270e8daccd69bc29ac3f69))
+
+## [0.11.0](https://github.com/kakao/varlog/compare/v0.10.0...v0.11.0) (2023-02-20)
+
+
+### Features
+
+* **admin:** defines error codes of several RPCs in the admin server ([f5ed66f](https://github.com/kakao/varlog/commit/f5ed66ff776db710bd13e5782de404f6c888cae6)), closes [#312](https://github.com/kakao/varlog/issues/312)
+* **metarepos:** add grpc error codes to the metadata repository service ([2903f8c](https://github.com/kakao/varlog/commit/2903f8cbc438653a92cb855d991ef78e6845142f))
+* **metarepos:** fix grpc error code ([ce5feb3](https://github.com/kakao/varlog/commit/ce5feb36392b26f729da9d8fe0c29ed01bef5bdc))
+* **storagenode:** add gRPC error codes to the admin service ([80cd082](https://github.com/kakao/varlog/commit/80cd08283fcc5eb36e60340c7a24ad56cb43556c)), closes [#312](https://github.com/kakao/varlog/issues/312)
+* **storagenode:** add gRPC error codes to the log server ([5e813fc](https://github.com/kakao/varlog/commit/5e813fce4fc87fd0ce0c82ecbd8c16d409194cce)), closes [#312](https://github.com/kakao/varlog/issues/312)
+* **varlogcli:** do not deny filtered logsteam ([26fec68](https://github.com/kakao/varlog/commit/26fec688596bf059b5cc0f42d04cdf05fff5a74c))
+* **varlogcli:** select log stream within AllowedLogStreams ([26627a0](https://github.com/kakao/varlog/commit/26627a09c53891855c56cb55b5b20f643f555eb8))
+
 ## [0.10.0](https://github.com/kakao/varlog/compare/v0.9.2...v0.10.0) (2023-01-04)
 
 

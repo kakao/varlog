@@ -28,7 +28,7 @@ func (c *testLog) lock() error {
 	return nil
 }
 
-func (c testLog) unlock() {
+func (c *testLog) unlock() {
 	c.vt.cond.L.Unlock()
 }
 
@@ -295,6 +295,128 @@ func (c *testLog) PeekLogStream(ctx context.Context, tpid types.TopicID, lsid ty
 	}
 	return first, last, nil
 
+}
+
+func (c *testLog) AppendableLogStreams(tpid types.TopicID) map[types.LogStreamID]struct{} {
+	if err := c.lock(); err != nil {
+		return nil
+	}
+	defer c.unlock()
+
+	topicDesc, ok := c.vt.topics[tpid]
+	if !ok {
+		return nil
+	}
+
+	ret := make(map[types.LogStreamID]struct{}, len(topicDesc.LogStreams))
+	for _, lsid := range topicDesc.LogStreams {
+		ret[lsid] = struct{}{}
+	}
+	return ret
+}
+
+// NewLogStreamAppender returns a new fake LogStreamAppender for testing. It
+// ignores options; the pipeline size is five, and the default callback has no
+// operation.
+func (c *testLog) NewLogStreamAppender(tpid types.TopicID, lsid types.LogStreamID, _ ...varlog.LogStreamAppenderOption) (varlog.LogStreamAppender, error) {
+	const pipelineSize = 5
+
+	if err := c.lock(); err != nil {
+		return nil, err
+	}
+	defer c.unlock()
+
+	_, err := c.vt.logStreamDescriptor(tpid, lsid)
+	if err != nil {
+		return nil, err
+	}
+
+	lsa := &logStreamAppender{
+		c:               c,
+		tpid:            tpid,
+		lsid:            lsid,
+		pipelineSize:    pipelineSize,
+		defaultCallback: func([]varlogpb.LogEntryMeta, error) {},
+	}
+	lsa.queue.ch = make(chan *queueEntry, pipelineSize)
+	lsa.queue.cv = sync.NewCond(&lsa.queue.mu)
+
+	lsa.wg.Add(1)
+	go func() {
+		defer lsa.wg.Done()
+		for qe := range lsa.queue.ch {
+			qe.callback(qe.result.Metadata, nil)
+			lsa.queue.cv.L.Lock()
+			lsa.queue.cv.Broadcast()
+			lsa.queue.cv.L.Unlock()
+		}
+	}()
+
+	return lsa, nil
+}
+
+type queueEntry struct {
+	callback varlog.BatchCallback
+	result   varlog.AppendResult
+}
+
+type logStreamAppender struct {
+	c               *testLog
+	tpid            types.TopicID
+	lsid            types.LogStreamID
+	pipelineSize    int
+	defaultCallback varlog.BatchCallback
+
+	closed struct {
+		value bool
+		sync.Mutex
+	}
+	queue struct {
+		ch chan *queueEntry
+		cv *sync.Cond
+		mu sync.Mutex
+	}
+
+	wg sync.WaitGroup
+}
+
+var _ varlog.LogStreamAppender = (*logStreamAppender)(nil)
+
+func (lsa *logStreamAppender) AppendBatch(dataBatch [][]byte, callback varlog.BatchCallback) error {
+	lsa.closed.Lock()
+	defer lsa.closed.Unlock()
+
+	if lsa.closed.value {
+		return varlog.ErrClosed
+	}
+
+	lsa.queue.cv.L.Lock()
+	defer lsa.queue.cv.L.Unlock()
+
+	for len(lsa.queue.ch) >= lsa.pipelineSize {
+		lsa.queue.cv.Wait()
+	}
+
+	qe := &queueEntry{
+		callback: callback,
+	}
+	qe.result = lsa.c.AppendTo(context.Background(), lsa.tpid, lsa.lsid, dataBatch)
+	if qe.callback == nil {
+		qe.callback = lsa.defaultCallback
+	}
+	lsa.queue.ch <- qe
+	return nil
+}
+
+func (lsa *logStreamAppender) Close() {
+	lsa.closed.Lock()
+	defer lsa.closed.Unlock()
+	if lsa.closed.value {
+		return
+	}
+	lsa.closed.value = true
+	close(lsa.queue.ch)
+	lsa.wg.Wait()
 }
 
 type errSubscriber struct {

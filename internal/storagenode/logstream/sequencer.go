@@ -19,7 +19,7 @@ type sequencer struct {
 	sequencerConfig
 	llsn     types.LLSN
 	queue    chan *sequenceTask
-	inflight int64
+	inflight atomic.Int64
 	runner   *runner.Runner
 }
 
@@ -42,15 +42,17 @@ func newSequencer(cfg sequencerConfig) (*sequencer, error) {
 // send sends a sequence task to the sequencer.
 // If state of the log stream executor is not appendable, it returns an error.
 func (sq *sequencer) send(ctx context.Context, st *sequenceTask) (err error) {
-	inflight := atomic.AddInt64(&sq.inflight, 1)
+	inflight := sq.inflight.Add(1)
 	defer func() {
 		if err != nil {
-			inflight = atomic.AddInt64(&sq.inflight, -1)
+			inflight = sq.inflight.Add(-1)
 		}
-		sq.logger.Debug("sent seqeuencer a task",
-			zap.Int64("inflight", inflight),
-			zap.Error(err),
-		)
+		if ce := sq.logger.Check(zap.DebugLevel, "sent seqeuencer a task"); ce != nil {
+			ce.Write(
+				zap.Int64("inflight", inflight),
+				zap.Error(err),
+			)
+		}
 	}()
 
 	switch sq.lse.esm.load() {
@@ -88,14 +90,14 @@ func (sq *sequencer) sequenceLoop(ctx context.Context) {
 func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask) {
 	var startTime, operationEndTime time.Time
 	defer func() {
-		inflight := atomic.AddInt64(&sq.inflight, -1)
+		inflight := sq.inflight.Add(-1)
 		if sq.lse.lsm == nil {
 			return
 		}
-		atomic.AddInt64(&sq.lse.lsm.SequencerFanoutDuration, time.Since(operationEndTime).Microseconds())
-		atomic.AddInt64(&sq.lse.lsm.SequencerOperationDuration, operationEndTime.Sub(startTime).Microseconds())
-		atomic.AddInt64(&sq.lse.lsm.SequencerOperations, 1)
-		atomic.StoreInt64(&sq.lse.lsm.ReplicateClientInflightOperations, inflight)
+		sq.lse.lsm.SequencerFanoutDuration.Add(time.Since(operationEndTime).Microseconds())
+		sq.lse.lsm.SequencerOperationDuration.Add(int64(operationEndTime.Sub(startTime).Microseconds()))
+		sq.lse.lsm.SequencerOperations.Add(1)
+		sq.lse.lsm.ReplicateClientInflightOperations.Store(inflight)
 	}()
 
 	startTime = time.Now()
@@ -103,10 +105,12 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 	for dataIdx := 0; dataIdx < len(st.awgs); dataIdx++ {
 		sq.llsn++
 		st.awgs[dataIdx].setLLSN(sq.llsn)
-		sq.logger.Debug("sequencer: issued llsn", zap.Uint64("llsn", uint64(sq.llsn)))
-		for replicaIdx := 0; replicaIdx < len(st.rts); replicaIdx++ {
+		if ce := sq.logger.Check(zap.DebugLevel, "sequencer: issued llsn"); ce != nil {
+			ce.Write(zap.Uint64("llsn", uint64(sq.llsn)))
+		}
+		for replicaIdx := 0; replicaIdx < len(st.rts.tasks); replicaIdx++ {
 			// NOTE: Use "append" since the length of st.rts is not enough to use index. Its capacity is enough because it is created to be reused.
-			st.rts[replicaIdx].llsnList = append(st.rts[replicaIdx].llsnList, sq.llsn)
+			st.rts.tasks[replicaIdx].llsnList = append(st.rts.tasks[replicaIdx].llsnList, sq.llsn)
 		}
 		//nolint:staticcheck
 		if err := st.wb.Set(sq.llsn, st.dataBatch[dataIdx]); err != nil {
@@ -135,13 +139,13 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 	// before sending tasks to writer. It prevents the above subtle case.
 	//
 	// send to committer
-	if err := sq.lse.cm.sendCommitWaitTask(ctx, cwts); err != nil {
+	if err := sq.lse.cm.sendCommitWaitTask(ctx, cwts, false /*ignoreSealing*/); err != nil {
 		sq.logger.Error("could not send to committer", zap.Error(err))
 		sq.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
 		st.wwg.done(err)
 		_ = st.wb.Close()
 		releaseCommitWaitTaskList(cwts)
-		releaseReplicateTasks(rts)
+		releaseReplicateTasks(rts.tasks)
 		releaseReplicateTaskSlice(rts)
 		st.release()
 		return
@@ -154,7 +158,7 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 		st.wwg.done(err)
 		_ = st.wb.Close()
 		releaseCommitWaitTaskList(cwts)
-		releaseReplicateTasks(rts)
+		releaseReplicateTasks(rts.tasks)
 		releaseReplicateTaskSlice(rts)
 		st.release()
 		return
@@ -162,8 +166,8 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 
 	// send to replicator
 	ridx := 0
-	for ridx < len(rts) {
-		err := sq.lse.rcs.clients[ridx].send(ctx, rts[ridx])
+	for ridx < len(rts.tasks) {
+		err := sq.lse.rcs.clients[ridx].send(ctx, rts.tasks[ridx])
 		if err != nil {
 			sq.logger.Error("could not send to replicate client", zap.Error(err))
 			sq.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
@@ -171,7 +175,7 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 		}
 		ridx++
 	}
-	releaseReplicateTasks(rts[ridx:])
+	releaseReplicateTasks(rts.tasks[ridx:])
 	releaseReplicateTaskSlice(rts)
 }
 
@@ -183,12 +187,14 @@ func (sq *sequencer) waitForDrainage(cause error, forceDrain bool) {
 	timer := time.NewTimer(tick)
 	defer timer.Stop()
 
-	sq.logger.Debug("draining sequencer tasks",
-		zap.Int64("inflight", atomic.LoadInt64(&sq.inflight)),
-		zap.Error(cause),
-	)
+	if ce := sq.logger.Check(zap.DebugLevel, "draining sequencer tasks"); ce != nil {
+		ce.Write(
+			zap.Int64("inflight", sq.inflight.Load()),
+			zap.Error(cause),
+		)
+	}
 
-	for atomic.LoadInt64(&sq.inflight) > 0 {
+	for sq.inflight.Load() > 0 {
 		if !forceDrain {
 			<-timer.C
 			timer.Reset(tick)
@@ -203,7 +209,7 @@ func (sq *sequencer) waitForDrainage(cause error, forceDrain bool) {
 				st.awgs[i].writeDone(cause)
 				st.awgs[i].commitDone(nil)
 			}
-			atomic.AddInt64(&sq.inflight, -1)
+			sq.inflight.Add(-1)
 		}
 	}
 }
@@ -248,7 +254,7 @@ type sequenceTask struct {
 	wb        *storage.WriteBatch
 	dataBatch [][]byte
 	cwts      *listQueue
-	rts       []*replicateTask
+	rts       *replicateTaskSlice
 }
 
 func newSequenceTask() *sequenceTask {

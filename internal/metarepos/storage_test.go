@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"math/rand"
 	"sort"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,7 +17,6 @@ import (
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
-	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -51,7 +49,7 @@ func TestStorageRegisterSN(t *testing.T) {
 			}
 
 			err = ms.registerStorageNode(dupSN)
-			So(err, ShouldResemble, verrors.ErrAlreadyExists)
+			So(status.Code(err), ShouldEqual, codes.AlreadyExists)
 		})
 	})
 }
@@ -64,7 +62,7 @@ func TestStoragUnregisterSN(t *testing.T) {
 		Convey("When SN is not exist", func(ctx C) {
 			Convey("Then it should not be registered", func(ctx C) {
 				err := ms.unregisterStorageNode(snID)
-				So(err, ShouldResemble, verrors.ErrNotExist)
+				So(status.Code(err), ShouldEqual, codes.NotFound)
 			})
 		})
 
@@ -120,7 +118,7 @@ func TestStoragUnregisterSN(t *testing.T) {
 
 				Convey("Then SN should not be unregistered", func(ctx C) {
 					err := ms.unregisterStorageNode(snID)
-					So(err, ShouldResemble, verrors.ErrInvalidArgument)
+					So(status.Code(err), ShouldEqual, codes.FailedPrecondition)
 				})
 			})
 		})
@@ -275,7 +273,7 @@ func TestStorageRegisterLS(t *testing.T) {
 		ls := makeLogStream(types.TopicID(1), lsID, nil)
 
 		err = ms.registerLogStream(ls)
-		So(err, ShouldResemble, verrors.ErrInvalidArgument)
+		So(status.Code(err), ShouldEqual, codes.InvalidArgument)
 	})
 
 	Convey("LS should not be registered if not exist proper SN", t, func(ctx C) {
@@ -295,7 +293,7 @@ func TestStorageRegisterLS(t *testing.T) {
 		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
 
 		err = ms.registerLogStream(ls)
-		So(err, ShouldResemble, verrors.ErrInvalidArgument)
+		So(status.Code(err), ShouldEqual, codes.NotFound)
 
 		sn := &varlogpb.StorageNodeDescriptor{
 			StorageNode: varlogpb.StorageNode{
@@ -307,7 +305,7 @@ func TestStorageRegisterLS(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		err = ms.registerLogStream(ls)
-		So(err, ShouldResemble, verrors.ErrInvalidArgument)
+		So(status.Code(err), ShouldEqual, codes.NotFound)
 
 		Convey("LS should be registered if exist all SN", func(ctx C) {
 			sn := &varlogpb.StorageNodeDescriptor{
@@ -339,7 +337,7 @@ func TestStoragUnregisterLS(t *testing.T) {
 		lsID := types.LogStreamID(time.Now().UnixNano())
 
 		err := ms.unregisterLogStream(lsID)
-		So(err, ShouldResemble, verrors.ErrNotExist)
+		So(status.Code(err), ShouldEqual, codes.NotFound)
 
 		Convey("LS which is exist should be unregistered", func(ctx C) {
 			rep := 1
@@ -435,7 +433,7 @@ func TestStorageUpdateLS(t *testing.T) {
 		updateLS := makeLogStream(types.TopicID(1), lsID, updateSnIDs)
 
 		err = ms.UpdateLogStream(updateLS, 0, 0)
-		So(err, ShouldResemble, verrors.ErrInvalidArgument)
+		So(status.Code(err), ShouldEqual, codes.NotFound)
 
 		Convey("LS should be updated if exist all SN", func(ctx C) {
 			for i := 1; i < rep; i++ {
@@ -461,7 +459,7 @@ func TestStorageUpdateLS(t *testing.T) {
 				}
 
 				So(testutil.CompareWaitN(10, func() bool {
-					return atomic.LoadInt64(&ms.nrRunning) == 0
+					return ms.nrRunning.Load() == 0
 				}), ShouldBeTrue)
 
 				meta := ms.GetMetadata()
@@ -568,7 +566,7 @@ func TestStorageSealLS(t *testing.T) {
 
 		lsID := types.LogStreamID(time.Now().UnixNano())
 		err := ms.SealLogStream(lsID, 0, 0)
-		So(err, ShouldResemble, verrors.ErrNotExist)
+		So(status.Code(err), ShouldEqual, codes.NotFound)
 	})
 
 	Convey("For resigtered LS", t, func(ctx C) {
@@ -607,7 +605,7 @@ func TestStorageSealLS(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			So(testutil.CompareWaitN(10, func() bool {
-				return atomic.LoadInt64(&ms.nrRunning) == 0
+				return ms.nrRunning.Load() == 0
 			}), ShouldBeTrue)
 
 			Convey("Sealed LS should have LogStreamStatusSealed", func(ctx C) {
@@ -627,7 +625,7 @@ func TestStorageSealLS(t *testing.T) {
 
 		Convey("Sealed UncommitReportReplica should have same EndLLSN", func(ctx C) {
 			So(testutil.CompareWaitN(10, func() bool {
-				return atomic.LoadInt64(&ms.nrRunning) == 0
+				return ms.nrRunning.Load() == 0
 			}), ShouldBeTrue)
 
 			for i := 0; i < rep; i++ {
@@ -740,7 +738,7 @@ func TestStorageUnsealLS(t *testing.T) {
 
 		lsID := types.LogStreamID(time.Now().UnixNano())
 		err := ms.UnsealLogStream(lsID, 0, 0)
-		So(err, ShouldResemble, verrors.ErrNotExist)
+		So(status.Code(err), ShouldEqual, codes.NotFound)
 	})
 
 	Convey("For resigtered LS", t, func(ctx C) {
@@ -779,7 +777,7 @@ func TestStorageUnsealLS(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			So(testutil.CompareWaitN(10, func() bool {
-				return atomic.LoadInt64(&ms.nrRunning) == 0
+				return ms.nrRunning.Load() == 0
 			}), ShouldBeTrue)
 
 			Convey("Unsealed to sealed LS should be success", func(ctx C) {
@@ -787,14 +785,14 @@ func TestStorageUnsealLS(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				So(testutil.CompareWaitN(10, func() bool {
-					return atomic.LoadInt64(&ms.nrRunning) == 0
+					return ms.nrRunning.Load() == 0
 				}), ShouldBeTrue)
 
 				err = ms.UnsealLogStream(lsID, 0, 0)
 				So(err, ShouldBeNil)
 
 				So(testutil.CompareWaitN(10, func() bool {
-					return atomic.LoadInt64(&ms.nrRunning) == 0
+					return ms.nrRunning.Load() == 0
 				}), ShouldBeTrue)
 
 				meta := ms.GetMetadata()
@@ -984,7 +982,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 			},
 		}
 		err = ms.RegisterStorageNode(sn, 0, 0)
-		So(err, ShouldResemble, verrors.ErrAlreadyExists)
+		So(status.Code(err), ShouldEqual, codes.AlreadyExists)
 
 		snID2 := snID + types.StorageNodeID(1)
 		sn = &varlogpb.StorageNodeDescriptor{
@@ -1037,7 +1035,7 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		conflict := makeLogStream(types.TopicID(1), lsID, snIDs)
 		ls.Replicas[0].StorageNodeID += 100
 		err = ms.RegisterLogStream(conflict, 0, 0)
-		So(err, ShouldResemble, verrors.ErrAlreadyExists)
+		So(status.Code(err), ShouldEqual, codes.AlreadyExists)
 
 		err = ms.RegisterLogStream(ls2, 0, 0)
 		So(err, ShouldBeNil)
@@ -1203,7 +1201,7 @@ func TestStorageMetadataCache(t *testing.T) {
 		So(meta, ShouldNotBeNil)
 		So(meta.GetStorageNode(snID), ShouldNotBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
-			return atomic.LoadInt64(&ms.nrRunning) == 0
+			return ms.nrRunning.Load() == 0
 		}), ShouldBeTrue)
 	})
 
@@ -1229,7 +1227,7 @@ func TestStorageMetadataCache(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		ms.setCopyOnWrite()
-		atomic.AddInt64(&ms.nrRunning, 1)
+		ms.nrRunning.Add(1)
 		ms.jobC <- &storageAsyncJob{job: &jobMetadataCache{}}
 
 		snID2 := snID + types.StorageNodeID(1)
@@ -1242,7 +1240,7 @@ func TestStorageMetadataCache(t *testing.T) {
 		err = ms.RegisterStorageNode(sn, 0, 0)
 		So(err, ShouldBeNil)
 
-		atomic.AddInt64(&ms.nrRunning, 1)
+		ms.nrRunning.Add(1)
 		ms.jobC <- &storageAsyncJob{job: &jobMetadataCache{}}
 
 		ms.Run()
@@ -1263,7 +1261,7 @@ func TestStorageMetadataCache(t *testing.T) {
 		So(meta2, ShouldEqual, meta)
 
 		So(testutil.CompareWaitN(10, func() bool {
-			return atomic.LoadInt64(&ms.nrRunning) == 0
+			return ms.nrRunning.Load() == 0
 		}), ShouldBeTrue)
 	})
 }
@@ -1291,7 +1289,7 @@ func TestStorageStateMachineMerge(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		ms.setCopyOnWrite()
-		atomic.AddInt64(&ms.nrRunning, 1)
+		ms.nrRunning.Add(1)
 		ms.jobC <- &storageAsyncJob{job: &jobMetadataCache{}}
 
 		ms.mergeStateMachine()
@@ -1322,7 +1320,7 @@ func TestStorageStateMachineMerge(t *testing.T) {
 			<-ch
 
 			So(testutil.CompareWaitN(10, func() bool {
-				return atomic.LoadInt64(&ms.nrRunning) == 0
+				return ms.nrRunning.Load() == 0
 			}), ShouldBeTrue)
 
 			ms.mergeStateMachine()
@@ -1425,12 +1423,12 @@ func TestStorageSnapshot(t *testing.T) {
 		snap, _, _ := ms.GetSnapshot()
 		So(snap, ShouldBeNil)
 		So(testutil.CompareWaitN(10, func() bool {
-			return atomic.LoadInt64(&ms.nrRunning) == 0
+			return ms.nrRunning.Load() == 0
 		}), ShouldBeTrue)
 
 		Convey("create snapshot should operate if no more job", func(ctx C) {
 			So(testutil.CompareWaitN(10, func() bool {
-				return atomic.LoadInt64(&ms.nrRunning) == 0
+				return ms.nrRunning.Load() == 0
 			}), ShouldBeTrue)
 
 			appliedIndex++
@@ -1510,14 +1508,14 @@ func TestStorageApplySnapshot(t *testing.T) {
 		<-ch
 
 		So(testutil.CompareWaitN(10, func() bool {
-			return atomic.LoadInt64(&ms.nrRunning) == 0
+			return ms.nrRunning.Load() == 0
 		}), ShouldBeTrue)
 
 		ms.mergeStateMachine()
 		ms.triggerSnapshot(appliedIndex)
 
 		So(testutil.CompareWaitN(10, func() bool {
-			return atomic.LoadInt64(&ms.nrRunning) == 0
+			return ms.nrRunning.Load() == 0
 		}), ShouldBeTrue)
 
 		snap, confState, snapIndex := ms.GetSnapshot()
@@ -1658,14 +1656,14 @@ func TestStorageSnapshotRace(t *testing.T) {
 		So(checkLS, ShouldEqual, n*numLS*numRep)
 
 		So(testutil.CompareWaitN(100, func() bool {
-			return atomic.LoadInt64(&ms.nrRunning) == 0
+			return ms.nrRunning.Load() == 0
 		}), ShouldBeTrue)
 
 		ms.mergeStateMachine()
 		ms.triggerSnapshot(appliedIndex)
 
 		So(testutil.CompareWaitN(100, func() bool {
-			return atomic.LoadInt64(&ms.nrRunning) == 0
+			return ms.nrRunning.Load() == 0
 		}), ShouldBeTrue)
 
 		_, _, recv := ms.GetSnapshot()
@@ -1853,7 +1851,7 @@ func TestStorageRegisterTopic(t *testing.T) {
 		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
 
 		err := ms.registerLogStream(ls)
-		So(err, ShouldResemble, verrors.ErrInvalidArgument)
+		So(status.Code(err), ShouldEqual, codes.NotFound)
 
 		Convey("LS should be registered if exist topic", func(ctx C) {
 			err := ms.registerTopic(&varlogpb.TopicDescriptor{TopicID: types.TopicID(1)})
@@ -1883,7 +1881,7 @@ func TestStoragUnregisterTopic(t *testing.T) {
 		ms := NewMetadataStorage(nil, DefaultSnapshotCount, zap.NewNop())
 
 		err := ms.unregisterTopic(types.TopicID(1))
-		So(err, ShouldResemble, verrors.ErrNotExist)
+		So(status.Code(err), ShouldEqual, codes.NotFound)
 	})
 
 	Convey("unregister exist topic", t, func(ctx C) {

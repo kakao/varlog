@@ -82,17 +82,18 @@ import (
 // properties must only apply to the key, and will be provided a nil value.
 
 // BlockPropertyCollector is used when writing a sstable.
-// - All calls to Add are included in the next FinishDataBlock, after which
-//   the next data block is expected to start.
 //
-// - The index entry generated for the data block, which contains the return
-//   value from FinishDataBlock, is not immediately included in the current
-//   index block. It is included when AddPrevDataBlockToIndexBlock is called.
-//   An alternative would be to return an opaque handle from FinishDataBlock
-//   and pass it to a new AddToIndexBlock method, which requires more
-//   plumbing, and passing of an interface{} results in a undesirable heap
-//   allocation. AddPrevDataBlockToIndexBlock must be called before keys are
-//   added to the new data block.
+//   - All calls to Add are included in the next FinishDataBlock, after which
+//     the next data block is expected to start.
+//
+//   - The index entry generated for the data block, which contains the return
+//     value from FinishDataBlock, is not immediately included in the current
+//     index block. It is included when AddPrevDataBlockToIndexBlock is called.
+//     An alternative would be to return an opaque handle from FinishDataBlock
+//     and pass it to a new AddToIndexBlock method, which requires more
+//     plumbing, and passing of an interface{} results in a undesirable heap
+//     allocation. AddPrevDataBlockToIndexBlock must be called before keys are
+//     added to the new data block.
 type BlockPropertyCollector interface {
 	// Name returns the name of the block property collector.
 	Name() string
@@ -116,7 +117,7 @@ type BlockPropertyCollector interface {
 }
 
 // SuffixReplaceableBlockCollector is an extension to the BlockPropertyCollector
-// interface that allows a block property collector to indicate the it supports
+// interface that allows a block property collector to indicate that it supports
 // being *updated* during suffix replacement, i.e. when an existing SST in which
 // all keys have the same key suffix is updated to have a new suffix.
 //
@@ -586,9 +587,9 @@ var blockPropertiesFiltererPool = sync.Pool{
 	},
 }
 
-// NewBlockPropertiesFilterer returns a partially initialized filterer. To complete
+// newBlockPropertiesFilterer returns a partially initialized filterer. To complete
 // initialization, call IntersectsUserPropsAndFinishInit.
-func NewBlockPropertiesFilterer(
+func newBlockPropertiesFilterer(
 	filters []BlockPropertyFilter, limited BoundLimitedBlockPropertyFilter,
 ) *BlockPropertiesFilterer {
 	filterer := blockPropertiesFiltererPool.Get().(*BlockPropertiesFilterer)
@@ -608,11 +609,31 @@ func releaseBlockPropertiesFilterer(filterer *BlockPropertiesFilterer) {
 	blockPropertiesFiltererPool.Put(filterer)
 }
 
-// IntersectsUserPropsAndFinishInit is called with the user properties map for
+// IntersectsTable evaluates the provided block-property filter against the
+// provided set of table-level properties. If there is no intersection between
+// the filters and the table or an error is encountered, IntersectsTable returns
+// a nil filterer (and possibly an error). If there is an intersection,
+// IntersectsTable returns a non-nil filterer that may be used by an iterator
+// reading the table.
+func IntersectsTable(
+	filters []BlockPropertyFilter,
+	limited BoundLimitedBlockPropertyFilter,
+	userProperties map[string]string,
+) (*BlockPropertiesFilterer, error) {
+	f := newBlockPropertiesFilterer(filters, limited)
+	ok, err := f.intersectsUserPropsAndFinishInit(userProperties)
+	if !ok || err != nil {
+		releaseBlockPropertiesFilterer(f)
+		return nil, err
+	}
+	return f, nil
+}
+
+// intersectsUserPropsAndFinishInit is called with the user properties map for
 // the sstable and returns whether the sstable intersects the filters. It
 // additionally initializes the shortIDToFiltersIndex for the filters that are
 // relevant to this sstable.
-func (f *BlockPropertiesFilterer) IntersectsUserPropsAndFinishInit(
+func (f *BlockPropertiesFilterer) intersectsUserPropsAndFinishInit(
 	userProperties map[string]string,
 ) (bool, error) {
 	for i := range f.filters {

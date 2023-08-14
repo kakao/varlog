@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/cockroachdb/pebble"
@@ -23,10 +24,20 @@ func TestNewStorage(tb testing.TB, opts ...Option) *Storage {
 
 // TestGetUnderlyingDB returns a pebble that is an internal database in the
 // storage.
-func TestGetUnderlyingDB(tb testing.TB, stg *Storage) *pebble.DB {
+func TestGetUnderlyingDB(tb testing.TB, stg *Storage) (dataDB, commitDB *pebble.DB) {
 	require.NotNil(tb, stg)
-	require.NotNil(tb, stg.db)
-	return stg.db
+	require.NotNil(tb, stg.dataDB)
+	require.NotNil(tb, stg.commitDB)
+	return stg.dataDB, stg.commitDB
+}
+
+// TestWriteLogEntry stores data located by the llsn. The data is not committed
+// because it does not store commits.
+func TestWriteLogEntry(tb testing.TB, stg *Storage, llsn types.LLSN, data []byte) {
+	batch := stg.NewWriteBatch()
+	require.NoError(tb, batch.Set(llsn, data))
+	require.NoError(tb, batch.Apply())
+	require.NoError(tb, batch.Close())
 }
 
 // TestAppendLogEntryWithoutCommitContext stores log entries without commit
@@ -47,25 +58,26 @@ func TestSetCommitContext(tb testing.TB, stg *Storage, cc CommitContext) {
 }
 
 func TestDeleteCommitContext(tb testing.TB, stg *Storage) {
-	err := stg.db.Delete(commitContextKey, pebble.Sync)
+	err := stg.commitDB.Delete(commitContextKey, pebble.Sync)
 	require.NoError(tb, err)
 }
 
 func TestDeleteLogEntry(tb testing.TB, stg *Storage, lsn varlogpb.LogSequenceNumber) {
-	batch := stg.db.NewBatch()
+	dataBatch := stg.dataDB.NewBatch()
+	commitBatch := stg.commitDB.NewBatch()
 	defer func() {
-		err := batch.Close()
+		err := errors.Join(dataBatch.Close(), commitBatch.Close())
 		require.NoError(tb, err)
 	}()
 
 	dk := make([]byte, dataKeyLength)
-	err := batch.Delete(encodeDataKeyInternal(lsn.LLSN, dk), nil)
+	err := dataBatch.Delete(encodeDataKeyInternal(lsn.LLSN, dk), nil)
 	require.NoError(tb, err)
 
 	ck := make([]byte, commitKeyLength)
-	err = batch.Delete(encodeCommitKeyInternal(lsn.GLSN, ck), nil)
+	err = commitBatch.Delete(encodeCommitKeyInternal(lsn.GLSN, ck), nil)
 	require.NoError(tb, err)
 
-	err = batch.Commit(pebble.Sync)
+	err = errors.Join(dataBatch.Commit(pebble.Sync), commitBatch.Commit(pebble.Sync))
 	require.NoError(tb, err)
 }

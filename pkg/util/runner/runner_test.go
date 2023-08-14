@@ -10,7 +10,6 @@ import (
 	"go.uber.org/goleak"
 	"go.uber.org/zap"
 
-	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 	"github.com/kakao/varlog/pkg/util/testutil"
 )
 
@@ -45,7 +44,8 @@ func TestRunner(t *testing.T) {
 		})
 
 		Convey("runner should run a task and release resource of the task when called cancel", func() {
-			running := atomicutil.AtomicBool(1)
+			var running atomic.Bool
+			running.Store(true)
 			worker := func(ctx context.Context) {
 				defer running.Store(false)
 				<-ctx.Done()
@@ -66,7 +66,7 @@ func TestRunner(t *testing.T) {
 		})
 
 		Convey("runner should release resource when task gets into panic", func() {
-			var panicHappend atomicutil.AtomicBool
+			var panicHappend atomic.Bool
 			cancel, err := r.Run(func(ctx context.Context) {
 				defer func() {
 					if p := recover(); p != nil {
@@ -156,7 +156,7 @@ func TestRunner(t *testing.T) {
 				})
 			})
 
-			var stopped atomicutil.AtomicBool
+			var stopped atomic.Bool
 			go func() {
 				defer stopped.Store(true)
 				r.Stop()

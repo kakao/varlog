@@ -14,13 +14,6 @@ type ClusterID uint32
 
 var _ fmt.Stringer = (*ClusterID)(nil)
 
-func NewClusterIDFromUint(u uint) (ClusterID, error) {
-	if u > math.MaxUint32 {
-		return 0, fmt.Errorf("cluster id overflow %v", u)
-	}
-	return ClusterID(u), nil
-}
-
 func ParseClusterID(s string) (ClusterID, error) {
 	id, err := strconv.ParseUint(s, 10, 32)
 	return ClusterID(id), err
@@ -102,25 +95,6 @@ func (ver Version) Invalid() bool {
 	return ver == InvalidVersion
 }
 
-type AtomicVersion uint64
-
-func (ver *AtomicVersion) Add(delta uint64) Version {
-	return Version(atomic.AddUint64((*uint64)(ver), delta))
-}
-
-func (ver *AtomicVersion) Load() Version {
-	return Version(atomic.LoadUint64((*uint64)(ver)))
-}
-
-func (ver *AtomicVersion) Store(val Version) {
-	atomic.StoreUint64((*uint64)(ver), uint64(val))
-}
-
-func (ver *AtomicVersion) CompareAndSwap(old, new Version) (swapped bool) {
-	swapped = atomic.CompareAndSwapUint64((*uint64)(ver), uint64(old), uint64(new))
-	return swapped
-}
-
 type GLSN uint64
 
 const (
@@ -133,25 +107,6 @@ var GLSNLen = binary.Size(InvalidGLSN)
 
 func (glsn GLSN) Invalid() bool {
 	return glsn == InvalidGLSN
-}
-
-type AtomicGLSN uint64
-
-func (glsn *AtomicGLSN) Add(delta uint64) GLSN {
-	return GLSN(atomic.AddUint64((*uint64)(glsn), delta))
-}
-
-func (glsn *AtomicGLSN) Load() GLSN {
-	return GLSN(atomic.LoadUint64((*uint64)(glsn)))
-}
-
-func (glsn *AtomicGLSN) Store(val GLSN) {
-	atomic.StoreUint64((*uint64)(glsn), uint64(val))
-}
-
-func (glsn *AtomicGLSN) CompareAndSwap(old, new GLSN) (swapped bool) {
-	swapped = atomic.CompareAndSwapUint64((*uint64)(glsn), uint64(old), uint64(new))
-	return swapped
 }
 
 type LLSN uint64

@@ -125,7 +125,10 @@ func newConfig(opts []Option) (config, error) {
 		return config{}, err
 	}
 
-	cfg.logger = cfg.logger.Named("vmr").With(zap.Any("nodeid", cfg.nodeID))
+	cfg.logger = cfg.logger.Named("mr").With(
+		zap.Uint32("cid", uint32(cfg.clusterID)),
+		zap.Uint64("nodeid", uint64(cfg.nodeID)),
+	)
 
 	return cfg, nil
 }

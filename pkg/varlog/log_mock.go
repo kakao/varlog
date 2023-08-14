@@ -75,6 +75,20 @@ func (mr *MockLogMockRecorder) AppendTo(arg0, arg1, arg2, arg3 interface{}, arg4
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendTo", reflect.TypeOf((*MockLog)(nil).AppendTo), varargs...)
 }
 
+// AppendableLogStreams mocks base method.
+func (m *MockLog) AppendableLogStreams(arg0 types.TopicID) map[types.LogStreamID]struct{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppendableLogStreams", arg0)
+	ret0, _ := ret[0].(map[types.LogStreamID]struct{})
+	return ret0
+}
+
+// AppendableLogStreams indicates an expected call of AppendableLogStreams.
+func (mr *MockLogMockRecorder) AppendableLogStreams(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendableLogStreams", reflect.TypeOf((*MockLog)(nil).AppendableLogStreams), arg0)
+}
+
 // Close mocks base method.
 func (m *MockLog) Close() error {
 	m.ctrl.T.Helper()
@@ -87,6 +101,26 @@ func (m *MockLog) Close() error {
 func (mr *MockLogMockRecorder) Close() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockLog)(nil).Close))
+}
+
+// NewLogStreamAppender mocks base method.
+func (m *MockLog) NewLogStreamAppender(arg0 types.TopicID, arg1 types.LogStreamID, arg2 ...LogStreamAppenderOption) (LogStreamAppender, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "NewLogStreamAppender", varargs...)
+	ret0, _ := ret[0].(LogStreamAppender)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewLogStreamAppender indicates an expected call of NewLogStreamAppender.
+func (mr *MockLogMockRecorder) NewLogStreamAppender(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewLogStreamAppender", reflect.TypeOf((*MockLog)(nil).NewLogStreamAppender), varargs...)
 }
 
 // PeekLogStream mocks base method.

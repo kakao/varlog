@@ -26,7 +26,7 @@ type cluster struct {
 	peers       []string
 	peerToIdx   map[uint64]int
 	commitC     []<-chan *raftCommittedEntry
-	proposeC    []chan string
+	proposeC    []chan []byte
 	confChangeC []chan raftpb.ConfChange
 	running     []bool
 	stop        []stopFunc
@@ -49,7 +49,7 @@ func newCluster(n int) *cluster {
 		peers:       peers,
 		peerToIdx:   make(map[uint64]int),
 		commitC:     make([]<-chan *raftCommittedEntry, len(peers)),
-		proposeC:    make([]chan string, len(peers)),
+		proposeC:    make([]chan []byte, len(peers)),
 		confChangeC: make([]chan raftpb.ConfChange, len(peers)),
 		running:     make([]bool, len(peers)),
 		stop:        make([]stopFunc, len(peers)),
@@ -66,7 +66,7 @@ func newCluster(n int) *cluster {
 
 		os.RemoveAll(fmt.Sprintf("raftdata/wal/%d", nodeID))  //nolint:errcheck,revive // TODO:: Handle an error returned.
 		os.RemoveAll(fmt.Sprintf("raftdata/snap/%d", nodeID)) //nolint:errcheck,revive // TODO:: Handle an error returned.
-		clus.proposeC[i] = make(chan string, 1)
+		clus.proposeC[i] = make(chan []byte, 1)
 		clus.confChangeC[i] = make(chan raftpb.ConfChange, 1)
 		//logger, _ := zap.NewDevelopment()
 		logger := zap.NewNop()
@@ -152,7 +152,7 @@ func TestProposeOnFollower(t *testing.T) {
 	donec := make(chan struct{})
 	for i := range clus.peers {
 		// feedback for "n" committed entries, then update donec
-		go func(pC chan<- string, cC <-chan *raftCommittedEntry) {
+		go func(pC chan<- []byte, cC <-chan *raftCommittedEntry) {
 		Loop:
 			for range cC {
 				break Loop
@@ -165,7 +165,7 @@ func TestProposeOnFollower(t *testing.T) {
 		}(clus.proposeC[i], clus.commitC[i])
 
 		// one message feedback per node
-		go func(i int) { clus.proposeC[i] <- fmt.Sprintf("%d", i) }(i)
+		go func(i int) { clus.proposeC[i] <- []byte(fmt.Sprintf("%d", i)) }(i)
 	}
 
 	for range clus.peers {
@@ -187,7 +187,7 @@ func TestFailoverLeaderElection(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.TODO())
 			cancels[i] = cancel
 			// feedback for "n" committed entries, then update donec
-			go func(ctx context.Context, idx int, pC chan<- string, cC <-chan *raftCommittedEntry) {
+			go func(ctx context.Context, _ int, _ chan<- []byte, cC <-chan *raftCommittedEntry) {
 				defer wg.Done()
 
 			Loop:

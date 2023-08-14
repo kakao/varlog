@@ -5,29 +5,13 @@
 package pebble
 
 import (
+	"sync"
 	"time"
-
-	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble/internal/rate"
 )
 
-var nilPacer = &noopPacer{}
-
-type limiter interface {
-	DelayN(now time.Time, n int) time.Duration
-	AllowN(now time.Time, n int) bool
-	Burst() int
-}
-
-// pacer is the interface for flush and compaction rate limiters. The rate limiter
-// is possible applied on each iteration step of a flush or compaction. This is to
-// limit background IO usage so that it does not contend with foreground traffic.
-type pacer interface {
-	maybeThrottle(bytesIterated uint64) error
-}
-
 // deletionPacerInfo contains any info from the db necessary to make deletion
-// pacing decisions.
+// pacing decisions (to limit background IO usage so that it does not contend
+// with foreground traffic).
 type deletionPacerInfo struct {
 	freeBytes     uint64
 	obsoleteBytes uint64
@@ -40,79 +24,167 @@ type deletionPacerInfo struct {
 // negatively impacted if too many blocks are deleted very quickly, so this
 // mechanism helps mitigate that.
 type deletionPacer struct {
-	limiter               limiter
-	freeSpaceThreshold    uint64
-	obsoleteBytesMaxRatio float64
+	// If there are less than freeSpaceThreshold bytes of free space on
+	// disk, increase the pace of deletions such that we delete enough bytes to
+	// get back to the threshold within the freeSpaceTimeframe.
+	freeSpaceThreshold uint64
+	freeSpaceTimeframe time.Duration
+
+	// If the ratio of obsolete bytes to live bytes is greater than
+	// obsoleteBytesMaxRatio, increase the pace of deletions such that we delete
+	// enough bytes to get back to the threshold within the obsoleteBytesTimeframe.
+	obsoleteBytesMaxRatio  float64
+	obsoleteBytesTimeframe time.Duration
+
+	mu struct {
+		sync.Mutex
+
+		// history keeps rack of recent deletion history; it used to increase the
+		// deletion rate to match the pace of deletions.
+		history history
+	}
+
+	targetByteDeletionRate int64
 
 	getInfo func() deletionPacerInfo
 }
 
+const deletePacerHistory = 5 * time.Minute
+
 // newDeletionPacer instantiates a new deletionPacer for use when deleting
-// obsolete files. The limiter passed in must be a singleton shared across this
-// pebble instance.
-func newDeletionPacer(limiter limiter, getInfo func() deletionPacerInfo) *deletionPacer {
-	return &deletionPacer{
-		limiter: limiter,
-		// If there are less than freeSpaceThreshold bytes of free space on
-		// disk, do not pace deletions at all.
+// obsolete files.
+//
+// targetByteDeletionRate is the rate (in bytes/sec) at which we want to
+// normally limit deletes (when we are not falling behind or running out of
+// space). A value of 0.0 disables pacing.
+func newDeletionPacer(
+	now time.Time, targetByteDeletionRate int64, getInfo func() deletionPacerInfo,
+) *deletionPacer {
+	d := &deletionPacer{
 		freeSpaceThreshold: 16 << 30, // 16 GB
-		// If the ratio of obsolete bytes to live bytes is greater than
-		// obsoleteBytesMaxRatio, do not pace deletions at all.
-		obsoleteBytesMaxRatio: 0.20,
+		freeSpaceTimeframe: 10 * time.Second,
 
-		getInfo: getInfo,
+		obsoleteBytesMaxRatio:  0.20,
+		obsoleteBytesTimeframe: 5 * time.Minute,
+
+		targetByteDeletionRate: targetByteDeletionRate,
+		getInfo:                getInfo,
+	}
+	d.mu.history.Init(now, deletePacerHistory)
+	return d
+}
+
+// ReportDeletion is used to report a deletion to the pacer. The pacer uses it
+// to keep track of the recent rate of deletions and potentially increase the
+// deletion rate accordingly.
+//
+// ReportDeletion is thread-safe.
+func (p *deletionPacer) ReportDeletion(now time.Time, bytesToDelete uint64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.history.Add(now, int64(bytesToDelete))
+}
+
+// PacingDelay returns the recommended pacing wait time (in seconds) for
+// deleting the given number of bytes.
+//
+// PacingDelay is thread-safe.
+func (p *deletionPacer) PacingDelay(now time.Time, bytesToDelete uint64) (waitSeconds float64) {
+	if p.targetByteDeletionRate == 0 {
+		// Pacing disabled.
+		return 0.0
+	}
+
+	baseRate := float64(p.targetByteDeletionRate)
+	// If recent deletion rate is more than our target, use that so that we don't
+	// fall behind.
+	historicRate := func() float64 {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return float64(p.mu.history.Sum(now)) / deletePacerHistory.Seconds()
+	}()
+	if historicRate > baseRate {
+		baseRate = historicRate
+	}
+
+	// Apply heuristics to increase the deletion rate.
+	var extraRate float64
+	info := p.getInfo()
+	if info.freeBytes <= p.freeSpaceThreshold {
+		// Increase the rate so that we can free up enough bytes within the timeframe.
+		extraRate = float64(p.freeSpaceThreshold-info.freeBytes) / p.freeSpaceTimeframe.Seconds()
+	}
+	if info.liveBytes == 0 {
+		// We don't know the obsolete bytes ratio. Disable pacing altogether.
+		return 0.0
+	}
+	obsoleteBytesRatio := float64(info.obsoleteBytes) / float64(info.liveBytes)
+	if obsoleteBytesRatio >= p.obsoleteBytesMaxRatio {
+		// Increase the rate so that we can free up enough bytes within the timeframe.
+		r := (obsoleteBytesRatio - p.obsoleteBytesMaxRatio) * float64(info.liveBytes) / p.obsoleteBytesTimeframe.Seconds()
+		if extraRate < r {
+			extraRate = r
+		}
+	}
+
+	return float64(bytesToDelete) / (baseRate + extraRate)
+}
+
+// history is a helper used to keep track of the recent history of a set of
+// data points (in our case deleted bytes), at limited granularity.
+// Specifically, we split the desired timeframe into 100 "epochs" and all times
+// are effectively rounded down to the nearest epoch boundary.
+type history struct {
+	epochDuration time.Duration
+	startTime     time.Time
+	// currEpoch is the epoch of the most recent operation.
+	currEpoch int64
+	// val contains the recent epoch values.
+	// val[currEpoch % historyEpochs] is the current epoch.
+	// val[(currEpoch + 1) % historyEpochs] is the oldest epoch.
+	val [historyEpochs]int64
+	// sum is always equal to the sum of values in val.
+	sum int64
+}
+
+const historyEpochs = 100
+
+// Init the history helper to keep track of data over the given number of
+// seconds.
+func (h *history) Init(now time.Time, timeframe time.Duration) {
+	*h = history{
+		epochDuration: timeframe / time.Duration(historyEpochs),
+		startTime:     now,
+		currEpoch:     0,
+		sum:           0,
 	}
 }
 
-// limit applies rate limiting if the current free disk space is more than
-// freeSpaceThreshold, and the ratio of obsolete to live bytes is less than
-// obsoleteBytesMaxRatio.
-func (p *deletionPacer) limit(amount uint64, info deletionPacerInfo) error {
-	obsoleteBytesRatio := float64(1.0)
-	if info.liveBytes > 0 {
-		obsoleteBytesRatio = float64(info.obsoleteBytes) / float64(info.liveBytes)
-	}
-	paceDeletions := info.freeBytes > p.freeSpaceThreshold &&
-		obsoleteBytesRatio < p.obsoleteBytesMaxRatio
-	if paceDeletions {
-		burst := p.limiter.Burst()
-		for amount > uint64(burst) {
-			d := p.limiter.DelayN(time.Now(), burst)
-			if d == rate.InfDuration {
-				return errors.Errorf("pacing failed")
-			}
-			time.Sleep(d)
-			amount -= uint64(burst)
-		}
-		d := p.limiter.DelayN(time.Now(), int(amount))
-		if d == rate.InfDuration {
-			return errors.Errorf("pacing failed")
-		}
-		time.Sleep(d)
-	} else {
-		burst := p.limiter.Burst()
-		for amount > uint64(burst) {
-			// AllowN will subtract burst if there are enough tokens available,
-			// else leave the tokens untouched. That is, we are making a
-			// best-effort to account for this activity in the limiter, but by
-			// ignoring the return value, we do the activity instantaneously
-			// anyway.
-			p.limiter.AllowN(time.Now(), burst)
-			amount -= uint64(burst)
-		}
-		p.limiter.AllowN(time.Now(), int(amount))
-	}
-	return nil
+// Add adds a value for the current time.
+func (h *history) Add(now time.Time, val int64) {
+	h.advance(now)
+	h.val[h.currEpoch%historyEpochs] += val
+	h.sum += val
 }
 
-// maybeThrottle slows down a deletion of this file if it's faster than
-// opts.Experimental.MinDeletionRate.
-func (p *deletionPacer) maybeThrottle(bytesToDelete uint64) error {
-	return p.limit(bytesToDelete, p.getInfo())
+// Sum returns the sum of recent values. The result is approximate in that the
+// cut-off time is within 1% of the exact one.
+func (h *history) Sum(now time.Time) int64 {
+	h.advance(now)
+	return h.sum
 }
 
-type noopPacer struct{}
+func (h *history) epoch(t time.Time) int64 {
+	return int64(t.Sub(h.startTime) / h.epochDuration)
+}
 
-func (p *noopPacer) maybeThrottle(_ uint64) error {
-	return nil
+// advance advances the time to the given time.
+func (h *history) advance(now time.Time) {
+	epoch := h.epoch(now)
+	for h.currEpoch < epoch {
+		h.currEpoch++
+		// Forget the data for the oldest epoch.
+		h.sum -= h.val[h.currEpoch%historyEpochs]
+		h.val[h.currEpoch%historyEpochs] = 0
+	}
 }

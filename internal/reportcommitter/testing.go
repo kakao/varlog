@@ -24,6 +24,12 @@ func TestCommit(t *testing.T, addr string, cr snpb.CommitRequest) {
 	assert.NoError(t, client.Commit(cr))
 }
 
+func TestCommitBatch(t *testing.T, addr string, cb snpb.CommitBatchRequest) {
+	client, closer := TestNewClient(t, addr)
+	defer closer()
+	assert.NoError(t, client.CommitBatch(cb))
+}
+
 func TestGetReport(t *testing.T, addr string) []snpb.LogStreamUncommitReport {
 	client, closer := TestNewClient(t, addr)
 	defer closer()

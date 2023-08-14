@@ -9,20 +9,22 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/status"
-	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
-	grpcctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
+	"github.com/kakao/varlog/internal/admin/sfgkey"
 	"github.com/kakao/varlog/internal/admin/snwatcher"
+	"github.com/kakao/varlog/pkg/rpc/interceptors/logging"
+	"github.com/kakao/varlog/pkg/rpc/interceptors/otelgrpc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/netutil"
+	"github.com/kakao/varlog/pkg/util/telemetry"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/admpb"
 	"github.com/kakao/varlog/proto/mrpb"
@@ -43,6 +45,7 @@ type Admin struct {
 
 	// single large lock
 	mu                sync.RWMutex
+	sfg               singleflight.Group
 	muLogStreamStatus [numLogStreamMutex]sync.Mutex
 
 	snw     *snwatcher.StorageNodeWatcher
@@ -72,13 +75,9 @@ func New(ctx context.Context, opts ...Option) (*Admin, error) {
 	}
 
 	grpcServer := grpc.NewServer(
-		grpcmiddleware.WithUnaryServerChain(
-			grpcctxtags.UnaryServerInterceptor(),
-			grpczap.UnaryServerInterceptor(cfg.logger, grpczap.WithDecider(
-				func(fullMethodName string, err error) bool {
-					return err != nil || !grpcHandlerLogDenyList[fullMethodName]
-				},
-			)),
+		grpc.ChainUnaryInterceptor(
+			logging.UnaryServerInterceptor(cfg.logger),
+			otelgrpc.UnaryServerInterceptor(telemetry.GetGlobalMeterProvider()),
 		),
 	)
 
@@ -135,6 +134,15 @@ func (adm *Admin) Serve() error {
 	}
 	adm.mu.Unlock()
 
+	if ce := adm.logger.Check(zap.InfoLevel, "starting"); ce != nil {
+		ce.Write(
+			zap.String("address", adm.serverAddr),
+			zap.Uint("replicationFactor", adm.replicationFactor),
+			zap.String("replicationSelector", adm.snSelector.Name()),
+			zap.Duration("logStreamGCTimeout", adm.logStreamGCTimeout),
+		)
+	}
+
 	return adm.server.Serve(lis)
 }
 
@@ -163,6 +171,7 @@ func (adm *Admin) Close() (err error) {
 func (adm *Admin) Metadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	adm.mu.RLock()
 	defer adm.mu.RUnlock()
+
 	return adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 }
 
@@ -170,6 +179,16 @@ func (adm *Admin) getStorageNode(ctx context.Context, snid types.StorageNodeID) 
 	adm.mu.RLock()
 	defer adm.mu.RUnlock()
 
+	snm, err, _ := adm.sfg.Do(sfgkey.GetStorageNodeKey(snid), func() (interface{}, error) {
+		return adm.getStorageNodeInternal(ctx, snid)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return snm.(*admpb.StorageNodeMetadata), nil
+}
+
+func (adm *Admin) getStorageNodeInternal(ctx context.Context, snid types.StorageNodeID) (*admpb.StorageNodeMetadata, error) {
 	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "get storage node: %s", err.Error())
@@ -216,6 +235,16 @@ func (adm *Admin) listStorageNodes(ctx context.Context) ([]admpb.StorageNodeMeta
 	adm.mu.RLock()
 	defer adm.mu.RUnlock()
 
+	snms, err, _ := adm.sfg.Do(sfgkey.ListStorageNodesKey(), func() (interface{}, error) {
+		return adm.listStorageNodesInternal(ctx)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return snms.([]admpb.StorageNodeMetadata), nil
+}
+
+func (adm *Admin) listStorageNodesInternal(ctx context.Context) ([]admpb.StorageNodeMetadata, error) {
 	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "list storage nodes: %s", err.Error())
@@ -349,6 +378,19 @@ func (adm *Admin) unregisterStorageNode(ctx context.Context, snid types.StorageN
 }
 
 func (adm *Admin) getTopic(ctx context.Context, tpid types.TopicID) (*varlogpb.TopicDescriptor, error) {
+	adm.mu.RLock()
+	defer adm.mu.RUnlock()
+
+	td, err, _ := adm.sfg.Do(sfgkey.GetTopicKey(tpid), func() (interface{}, error) {
+		return adm.getTopicInternal(ctx, tpid)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return td.(*varlogpb.TopicDescriptor), nil
+}
+
+func (adm *Admin) getTopicInternal(ctx context.Context, tpid types.TopicID) (*varlogpb.TopicDescriptor, error) {
 	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "get topic: %s", err.Error())
@@ -361,9 +403,19 @@ func (adm *Admin) getTopic(ctx context.Context, tpid types.TopicID) (*varlogpb.T
 }
 
 func (adm *Admin) listTopics(ctx context.Context) ([]varlogpb.TopicDescriptor, error) {
-	adm.mu.Lock()
-	defer adm.mu.Unlock()
+	adm.mu.RLock()
+	defer adm.mu.RUnlock()
 
+	tds, err, _ := adm.sfg.Do(sfgkey.ListTopicsKey(), func() (interface{}, error) {
+		return adm.listTopicsInternal(ctx)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return tds.([]varlogpb.TopicDescriptor), nil
+}
+
+func (adm *Admin) listTopicsInternal(ctx context.Context) ([]varlogpb.TopicDescriptor, error) {
 	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "list topics: %s", err.Error())
@@ -417,6 +469,19 @@ func (adm *Admin) unregisterTopic(ctx context.Context, tpid types.TopicID) error
 }
 
 func (adm *Admin) getLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
+	adm.mu.RLock()
+	defer adm.mu.RUnlock()
+
+	lsd, err, _ := adm.sfg.Do(sfgkey.GetLogStreamKey(tpid, lsid), func() (interface{}, error) {
+		return adm.getLogStreamInternal(ctx, tpid, lsid)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return lsd.(*varlogpb.LogStreamDescriptor), nil
+}
+
+func (adm *Admin) getLogStreamInternal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (*varlogpb.LogStreamDescriptor, error) {
 	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "get log stream: %s", err.Error())
@@ -439,6 +504,19 @@ func (adm *Admin) getLogStream(ctx context.Context, tpid types.TopicID, lsid typ
 }
 
 func (adm *Admin) listLogStreams(ctx context.Context, tpid types.TopicID) ([]varlogpb.LogStreamDescriptor, error) {
+	adm.mu.RLock()
+	defer adm.mu.RUnlock()
+
+	lsds, err, _ := adm.sfg.Do(sfgkey.ListLogStreamsKey(tpid), func() (interface{}, error) {
+		return adm.listLogStreamsInternal(ctx, tpid)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return lsds.([]varlogpb.LogStreamDescriptor), nil
+}
+
+func (adm *Admin) listLogStreamsInternal(ctx context.Context, tpid types.TopicID) ([]varlogpb.LogStreamDescriptor, error) {
 	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "list log streams: %s", err.Error())
@@ -462,9 +540,34 @@ func (adm *Admin) listLogStreams(ctx context.Context, tpid types.TopicID) ([]var
 }
 
 func (adm *Admin) describeTopic(ctx context.Context, tpid types.TopicID) (td varlogpb.TopicDescriptor, lsds []varlogpb.LogStreamDescriptor, err error) {
-	adm.mu.Lock()
-	defer adm.mu.Unlock()
+	adm.mu.RLock()
+	defer adm.mu.RUnlock()
 
+	type result struct {
+		td   varlogpb.TopicDescriptor
+		lsds []varlogpb.LogStreamDescriptor
+	}
+
+	iface, err, _ := adm.sfg.Do(sfgkey.DescribeTopicKey(tpid), func() (interface{}, error) {
+		td, lsds, err := adm.describeTopicInternal(ctx, tpid)
+		if err != nil {
+			return nil, err
+		}
+		return &result{
+			td:   td,
+			lsds: lsds,
+		}, nil
+	})
+	if err != nil {
+		return
+	}
+
+	res := iface.(*result)
+	return res.td, res.lsds, nil
+
+}
+
+func (adm *Admin) describeTopicInternal(ctx context.Context, tpid types.TopicID) (td varlogpb.TopicDescriptor, lsds []varlogpb.LogStreamDescriptor, err error) {
 	md, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil || len(md.Topics) == 0 {
 		return
@@ -901,6 +1004,7 @@ func (adm *Admin) syncInternal(ctx context.Context, tpid types.TopicID, lsid typ
 func (adm *Admin) trim(ctx context.Context, tpid types.TopicID, lastGLSN types.GLSN) ([]admpb.TrimResult, error) {
 	adm.mu.Lock()
 	defer adm.mu.Unlock()
+
 	return adm.snmgr.Trim(ctx, tpid, lastGLSN)
 }
 
@@ -943,6 +1047,7 @@ func (adm *Admin) listMetadataRepositoryNodes(ctx context.Context) ([]varlogpb.M
 func (adm *Admin) mrInfos(ctx context.Context) (*mrpb.ClusterInfo, error) {
 	adm.mu.RLock()
 	defer adm.mu.RUnlock()
+
 	return adm.mrmgr.GetClusterInfo(ctx)
 }
 

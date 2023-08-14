@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/cockroachdb/pebble"
@@ -20,22 +21,25 @@ var appendBatchPool = sync.Pool{
 
 // AppendBatch is a batch to put one or more log entries.
 type AppendBatch struct {
-	batch     *pebble.Batch
-	writeOpts *pebble.WriteOptions
-	dk        []byte
-	ck        []byte
-	cc        []byte
+	dataBatch   *pebble.Batch
+	commitBatch *pebble.Batch
+	writeOpts   *pebble.WriteOptions
+	dk          []byte
+	ck          []byte
+	cc          []byte
 }
 
-func newAppendBatch(batch *pebble.Batch, writeOpts *pebble.WriteOptions) *AppendBatch {
+func newAppendBatch(dataBatch, commitBatch *pebble.Batch, writeOpts *pebble.WriteOptions) *AppendBatch {
 	ab := appendBatchPool.Get().(*AppendBatch)
-	ab.batch = batch
+	ab.dataBatch = dataBatch
+	ab.commitBatch = commitBatch
 	ab.writeOpts = writeOpts
 	return ab
 }
 
 func (ab *AppendBatch) release() {
-	ab.batch = nil
+	ab.dataBatch = nil
+	ab.commitBatch = nil
 	ab.writeOpts = nil
 	appendBatchPool.Put(ab)
 }
@@ -44,10 +48,10 @@ func (ab *AppendBatch) release() {
 func (ab *AppendBatch) SetLogEntry(llsn types.LLSN, glsn types.GLSN, data []byte) error {
 	dk := encodeDataKeyInternal(llsn, ab.dk)
 	ck := encodeCommitKeyInternal(glsn, ab.ck)
-	if err := ab.batch.Set(dk, data, nil); err != nil {
+	if err := ab.dataBatch.Set(dk, data, nil); err != nil {
 		return err
 	}
-	if err := ab.batch.Set(ck, dk, nil); err != nil {
+	if err := ab.commitBatch.Set(ck, dk, nil); err != nil {
 		return err
 	}
 	return nil
@@ -55,17 +59,20 @@ func (ab *AppendBatch) SetLogEntry(llsn types.LLSN, glsn types.GLSN, data []byte
 
 // SetCommitContext inserts a commit context.
 func (ab *AppendBatch) SetCommitContext(cc CommitContext) error {
-	return ab.batch.Set(commitContextKey, encodeCommitContext(cc, ab.cc), nil)
+	return ab.commitBatch.Set(commitContextKey, encodeCommitContext(cc, ab.cc), nil)
 }
 
 // Apply saves a batch of appended log entries to the storage.
 func (ab *AppendBatch) Apply() error {
-	return ab.batch.Commit(ab.writeOpts)
+	if err := ab.dataBatch.Commit(ab.writeOpts); err != nil {
+		return err
+	}
+	return ab.commitBatch.Commit(ab.writeOpts)
 }
 
 // Close releases an AppendBatch.
 func (ab *AppendBatch) Close() error {
-	err := ab.batch.Close()
+	err := errors.Join(ab.dataBatch.Close(), ab.commitBatch.Close())
 	ab.release()
 	return err
 }

@@ -3,6 +3,7 @@ package storage
 import (
 	"io"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/assert"
@@ -18,15 +19,95 @@ func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
 }
 
-func TestStorage_InvalidConfig(t *testing.T) {
-	_, err := New(WithLogger(zap.NewNop()))
-	assert.Error(t, err)
+func TestStorage_New(t *testing.T) {
+	tcs := []struct {
+		name  string
+		pref  func(t *testing.T, path string)
+		postf func(t *testing.T, path string)
+	}{
+		{
+			name: "NoPath",
+			pref: func(t *testing.T, _ string) {
+				_, err := New(WithLogger(zap.NewNop()))
+				require.Error(t, err)
+			},
+			postf: func(*testing.T, string) {},
+		},
+		{
+			name: "NoLogger",
+			pref: func(t *testing.T, path string) {
+				_, err := New(WithPath(path), WithLogger(nil))
+				require.Error(t, err)
+			},
+			postf: func(*testing.T, string) {},
+		},
+		{
+			name: "NoWALWithSync",
+			pref: func(t *testing.T, path string) {
+				_, err := New(WithPath(path), WithoutWAL())
+				require.Error(t, err)
+			},
+			postf: func(*testing.T, string) {},
+		},
+		{
+			name: "SeparateAndNotSeparate",
+			pref: func(t *testing.T, path string) {
+				s, err := New(WithPath(path), SeparateDatabase())
+				require.NoError(t, err)
+				require.NoError(t, s.Close())
+			},
+			postf: func(t *testing.T, path string) {
+				_, err := New(WithPath(path))
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "NotSeparateAndSeparate",
+			pref: func(t *testing.T, path string) {
+				s, err := New(WithPath(path))
+				require.NoError(t, err)
+				require.NoError(t, s.Close())
+			},
+			postf: func(t *testing.T, path string) {
+				_, err := New(WithPath(path), SeparateDatabase())
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "NewAndCloseSeparateDB",
+			pref: func(t *testing.T, path string) {
+				s, err := New(WithPath(path), SeparateDatabase(), WithVerboseLogging(), WithMetricsLogInterval(time.Second))
+				require.NoError(t, err)
+				require.NoError(t, s.Close())
+			},
+			postf: func(t *testing.T, path string) {
+				s, err := New(WithPath(path), SeparateDatabase(), WithVerboseLogging(), WithMetricsLogInterval(time.Second))
+				require.NoError(t, err)
+				require.NoError(t, s.Close())
+			},
+		},
+		{
+			name: "SeparateDBNewAndCloseNotSeparateDB",
+			pref: func(t *testing.T, path string) {
+				s, err := New(WithPath(path), WithVerboseLogging(), WithMetricsLogInterval(time.Second))
+				require.NoError(t, err)
+				require.NoError(t, s.Close())
+			},
+			postf: func(t *testing.T, path string) {
+				s, err := New(WithPath(path), WithVerboseLogging(), WithMetricsLogInterval(time.Second))
+				require.NoError(t, err)
+				require.NoError(t, s.Close())
+			},
+		},
+	}
 
-	_, err = New(WithPath(t.TempDir()), WithLogger(nil))
-	assert.Error(t, err)
-
-	_, err = New(WithPath(t.TempDir()), WithoutWAL())
-	assert.Error(t, err)
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			path := t.TempDir()
+			tc.pref(t, path)
+			tc.postf(t, path)
+		})
+	}
 }
 
 func TestStorageEncodeDecode(t *testing.T) {
@@ -565,8 +646,8 @@ func TestStorageReadLogEntryBoundaries(t *testing.T) {
 		first, last, err = stg.readLogEntryBoundaries()
 		assert.NoError(t, err)
 		// FIXME(jun): LogEntryMeta has unnecessary fields?
-		assert.Equal(t, &varlogpb.LogEntryMeta{GLSN: 1, LLSN: 1}, first)
-		assert.Equal(t, &varlogpb.LogEntryMeta{GLSN: 1, LLSN: 1}, last)
+		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, first)
+		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, last)
 
 		// two logs
 		cb, err = stg.NewCommitBatch(CommitContext{
@@ -592,8 +673,8 @@ func TestStorageReadLogEntryBoundaries(t *testing.T) {
 		first, last, err = stg.readLogEntryBoundaries()
 		assert.NoError(t, err)
 		// FIXME(jun): LogEntryMeta has unnecessary fields?
-		assert.Equal(t, &varlogpb.LogEntryMeta{GLSN: 1, LLSN: 1}, first)
-		assert.Equal(t, &varlogpb.LogEntryMeta{GLSN: 2, LLSN: 2}, last)
+		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, first)
+		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 2, LLSN: 2}, last)
 	})
 }
 
@@ -660,8 +741,8 @@ func TestStorageReadRecoveryPoints(t *testing.T) {
 			CommittedGLSNEnd:   2,
 			CommittedLLSNBegin: 1,
 		}, rp.LastCommitContext)
-		assert.Equal(t, &varlogpb.LogEntryMeta{GLSN: 1, LLSN: 1}, rp.CommittedLogEntry.First)
-		assert.Equal(t, &varlogpb.LogEntryMeta{GLSN: 1, LLSN: 1}, rp.CommittedLogEntry.Last)
+		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, rp.CommittedLogEntry.First)
+		assert.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, rp.CommittedLogEntry.Last)
 	})
 }
 
@@ -672,10 +753,10 @@ func TestStorageReadRecoveryPoints_InconsistentWriteCommit(t *testing.T) {
 		dk := make([]byte, dataKeyLength)
 
 		// committed log: llsn = 1, glsn = 1
-		err := stg.db.Set(encodeCommitKeyInternal(1, ck), encodeDataKeyInternal(1, dk), pebble.Sync)
+		err := stg.commitDB.Set(encodeCommitKeyInternal(1, ck), encodeDataKeyInternal(1, dk), pebble.Sync)
 		assert.NoError(t, err)
 
-		err = stg.db.Set(encodeDataKeyInternal(1, dk), nil, pebble.Sync)
+		err = stg.dataDB.Set(encodeDataKeyInternal(1, dk), nil, pebble.Sync)
 		assert.NoError(t, err)
 
 		// A committed log exists, but no commit context for that.
@@ -756,7 +837,7 @@ func TestStorage_Trim(t *testing.T) {
 				err := stg.Trim(types.MinGLSN)
 				assert.NoError(t, err)
 
-				it := stg.db.NewIter(&pebble.IterOptions{
+				it := stg.dataDB.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{dataKeyPrefix},
 					UpperBound: []byte{dataKeySentinelPrefix},
 				})
@@ -766,7 +847,7 @@ func TestStorage_Trim(t *testing.T) {
 				assert.Equal(t, types.LLSN(3), decodeDataKey(it.Key()))
 				assert.NoError(t, it.Close())
 
-				it = stg.db.NewIter(&pebble.IterOptions{
+				it = stg.commitDB.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{commitKeyPrefix},
 					UpperBound: []byte{commitKeySentinelPrefix},
 				})
@@ -788,14 +869,14 @@ func TestStorage_Trim(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NoError(t, err)
 
-				it := stg.db.NewIter(&pebble.IterOptions{
+				it := stg.dataDB.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{dataKeyPrefix},
 					UpperBound: []byte{dataKeySentinelPrefix},
 				})
 				assert.False(t, it.First())
 				assert.NoError(t, it.Close())
 
-				it = stg.db.NewIter(&pebble.IterOptions{
+				it = stg.commitDB.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{commitKeyPrefix},
 					UpperBound: []byte{commitKeySentinelPrefix},
 				})
@@ -813,14 +894,14 @@ func TestStorage_Trim(t *testing.T) {
 				err := stg.Trim(types.MaxGLSN)
 				assert.NoError(t, err)
 
-				it := stg.db.NewIter(&pebble.IterOptions{
+				it := stg.dataDB.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{dataKeyPrefix},
 					UpperBound: []byte{dataKeySentinelPrefix},
 				})
 				assert.False(t, it.First())
 				assert.NoError(t, it.Close())
 
-				it = stg.db.NewIter(&pebble.IterOptions{
+				it = stg.commitDB.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{commitKeyPrefix},
 					UpperBound: []byte{commitKeySentinelPrefix},
 				})

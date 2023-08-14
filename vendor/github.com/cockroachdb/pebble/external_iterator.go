@@ -5,6 +5,7 @@
 package pebble
 
 import (
+	"context"
 	"fmt"
 	"sort"
 
@@ -80,6 +81,18 @@ func NewExternalIter(
 	files [][]sstable.ReadableFile,
 	extraOpts ...ExternalIterOption,
 ) (it *Iterator, err error) {
+	return NewExternalIterWithContext(context.Background(), o, iterOpts, files, extraOpts...)
+}
+
+// NewExternalIterWithContext is like NewExternalIter, and additionally
+// accepts a context for tracing.
+func NewExternalIterWithContext(
+	ctx context.Context,
+	o *Options,
+	iterOpts *IterOptions,
+	files [][]sstable.ReadableFile,
+	extraOpts ...ExternalIterOption,
+) (it *Iterator, err error) {
 	if iterOpts != nil {
 		if err := validateExternalIterOpts(iterOpts); err != nil {
 			return nil, err
@@ -119,6 +132,7 @@ func NewExternalIter(
 	buf := iterAllocPool.Get().(*iterAlloc)
 	dbi := &buf.dbi
 	*dbi = Iterator{
+		ctx:                 ctx,
 		alloc:               buf,
 		merge:               o.Merger.Merge,
 		comparer:            *o.Comparer,
@@ -130,7 +144,9 @@ func NewExternalIter(
 		// Add the readers to the Iterator so that Close closes them, and
 		// SetOptions can re-construct iterators from them.
 		externalReaders: readers,
-		newIters: func(f *manifest.FileMetadata, opts *IterOptions, internalOpts internalIterOpts) (internalIterator, keyspan.FragmentIterator, error) {
+		newIters: func(
+			ctx context.Context, f *manifest.FileMetadata, opts *IterOptions,
+			internalOpts internalIterOpts) (internalIterator, keyspan.FragmentIterator, error) {
 			// NB: External iterators are currently constructed without any
 			// `levelIters`. newIters should never be called. When we support
 			// organizing multiple non-overlapping files into a single level
@@ -143,12 +159,12 @@ func NewExternalIter(
 	}
 	if iterOpts != nil {
 		dbi.opts = *iterOpts
-		dbi.saveBounds(iterOpts.LowerBound, iterOpts.UpperBound)
+		dbi.processBounds(iterOpts.LowerBound, iterOpts.UpperBound)
 	}
 	for i := range extraOpts {
 		extraOpts[i].iterApply(dbi)
 	}
-	finishInitializingExternal(dbi)
+	finishInitializingExternal(ctx, dbi)
 	return dbi, nil
 }
 
@@ -168,7 +184,7 @@ func validateExternalIterOpts(iterOpts *IterOptions) error {
 	return nil
 }
 
-func createExternalPointIter(it *Iterator) (internalIterator, error) {
+func createExternalPointIter(ctx context.Context, it *Iterator) (internalIterator, error) {
 	// TODO(jackson): In some instances we could generate fewer levels by using
 	// L0Sublevels code to organize nonoverlapping files into the same level.
 	// This would allow us to use levelIters and keep a smaller set of data and
@@ -193,13 +209,15 @@ func createExternalPointIter(it *Iterator) (internalIterator, error) {
 				pointIter    internalIterator
 				err          error
 			)
-			pointIter, err = r.NewIterWithBlockPropertyFilters(
-				it.opts.LowerBound,
-				it.opts.UpperBound,
-				nil,   /* BlockPropertiesFilterer */
-				false, /* useFilterBlock */
-				&it.stats.InternalStats,
-			)
+			// We could set hideObsoletePoints=true, since we are reading at
+			// InternalKeySeqNumMax, but we don't bother since these sstables should
+			// not have obsolete points (so the performance optimization is
+			// unnecessary), and we don't want to bother constructing a
+			// BlockPropertiesFilterer that includes obsoleteKeyBlockPropertyFilter.
+			pointIter, err = r.NewIterWithBlockPropertyFiltersAndContextEtc(
+				ctx, it.opts.LowerBound, it.opts.UpperBound, nil, /* BlockPropertiesFilterer */
+				false /* hideObsoletePoints */, false, /* useFilterBlock */
+				&it.stats.InternalStats, sstable.TrivialReaderProvider{Reader: r})
 			if err != nil {
 				return nil, err
 			}
@@ -248,12 +266,14 @@ func createExternalPointIter(it *Iterator) (internalIterator, error) {
 
 	it.alloc.merging.init(&it.opts, &it.stats.InternalStats, it.comparer.Compare, it.comparer.Split, mlevels...)
 	it.alloc.merging.snapshot = base.InternalKeySeqNumMax
-	it.alloc.merging.elideRangeTombstones = true
+	if len(mlevels) <= cap(it.alloc.levelsPositioned) {
+		it.alloc.merging.levelsPositioned = it.alloc.levelsPositioned[:len(mlevels)]
+	}
 	return &it.alloc.merging, nil
 }
 
-func finishInitializingExternal(it *Iterator) {
-	pointIter, err := createExternalPointIter(it)
+func finishInitializingExternal(ctx context.Context, it *Iterator) {
+	pointIter, err := createExternalPointIter(ctx, it)
 	if err != nil {
 		it.pointIter = &errorIter{err: err}
 	} else {
@@ -291,6 +311,7 @@ func finishInitializingExternal(it *Iterator) {
 					base.InternalKeySeqNumMax,
 					it.opts.LowerBound, it.opts.UpperBound,
 					&it.hasPrefix, &it.prefixOrFullSeekKey,
+					true /* onlySets */, &it.rangeKey.internal,
 				)
 				for i := range rangeKeyIters {
 					it.rangeKey.iterConfig.AddLevel(rangeKeyIters[i])
@@ -314,7 +335,11 @@ func openExternalTables(
 ) (readers []*sstable.Reader, err error) {
 	readers = make([]*sstable.Reader, 0, len(files))
 	for i := range files {
-		r, err := sstable.NewReader(files[i], readerOpts, extraReaderOpts...)
+		readable, err := sstable.NewSimpleReadable(files[i])
+		if err != nil {
+			return readers, err
+		}
+		r, err := sstable.NewReader(readable, readerOpts, extraReaderOpts...)
 		if err != nil {
 			return readers, err
 		}
@@ -472,6 +497,20 @@ func (s *simpleLevelIter) Next() (*base.InternalKey, base.LazyValue) {
 	}
 	s.currentIdx++
 	return s.skipEmptyFileForward(nil /* seekKey */, base.SeekGEFlagsNone)
+}
+
+func (s *simpleLevelIter) NextPrefix(succKey []byte) (*base.InternalKey, base.LazyValue) {
+	if s.err != nil {
+		return nil, base.LazyValue{}
+	}
+	if s.currentIdx < 0 || s.currentIdx >= len(s.filtered) {
+		return nil, base.LazyValue{}
+	}
+	if iterKey, val := s.filtered[s.currentIdx].NextPrefix(succKey); iterKey != nil {
+		return iterKey, val
+	}
+	s.currentIdx++
+	return s.skipEmptyFileForward(succKey /* seekKey */, base.SeekGEFlagsNone)
 }
 
 func (s *simpleLevelIter) Prev() (*base.InternalKey, base.LazyValue) {

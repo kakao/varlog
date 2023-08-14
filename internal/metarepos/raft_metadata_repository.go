@@ -12,12 +12,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gogo/status"
 	"go.etcd.io/etcd/pkg/fileutil"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
-	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
@@ -55,14 +56,14 @@ type RaftMetadataRepository struct {
 	storage         *MetadataStorage
 
 	// for ack
-	requestNum uint64
+	requestNum atomic.Uint64
 	requestMap sync.Map
 
 	// for raft
 	proposeC      chan *mrpb.RaftEntry
 	commitC       chan *committedEntry
 	rnConfChangeC chan raftpb.ConfChange
-	rnProposeC    chan string
+	rnProposeC    chan []byte
 	rnCommitC     chan *raftCommittedEntry
 
 	// for report
@@ -83,7 +84,7 @@ type RaftMetadataRepository struct {
 	// membership
 	membership Membership
 
-	nrReport            uint64
+	nrReport            atomic.Uint64
 	nrReportSinceCommit uint64
 
 	// commit helper
@@ -105,18 +106,17 @@ func NewRaftMetadataRepository(opts ...Option) *RaftMetadataRepository {
 
 	mr := &RaftMetadataRepository{
 		config:        cfg,
-		requestNum:    uint64(time.Now().UnixNano()),
 		proposeC:      make(chan *mrpb.RaftEntry, 4096),
 		commitC:       make(chan *committedEntry, 4096),
 		rnConfChangeC: make(chan raftpb.ConfChange, 1),
-		rnProposeC:    make(chan string),
-		reportQueue:   make([]*mrpb.Report, 0, 1024),
+		rnProposeC:    make(chan []byte),
+		reportQueue:   mrpb.NewReportQueue(),
 		runner:        runner.New("mr", cfg.logger),
 		sw:            stopwaiter.New(),
 		tmStub:        tmStub,
 		topicEndPos:   make(map[types.TopicID]int),
 	}
-
+	mr.requestNum.Store(uint64(time.Now().UnixNano()))
 	mr.storage = NewMetadataStorage(mr.sendAck, cfg.snapCount, mr.logger.Named("storage"))
 	mr.storage.limits.maxTopicsCount = mr.maxTopicsCount
 	mr.storage.limits.maxLogStreamsCountPerTopic = mr.maxLogStreamsCountPerTopic
@@ -275,7 +275,6 @@ func (mr *RaftMetadataRepository) Close() error {
 
 	// FIXME (jun, pharrell): Stop gracefully
 	mr.server.Stop()
-	mr.tmStub.close(context.TODO())
 	return nil
 }
 
@@ -303,13 +302,16 @@ Loop:
 			b, err := e.Marshal()
 			if err != nil {
 				mr.logger.Error(err.Error())
+				e.Release()
 				continue
 			}
+			nodeIndex, requestIndex := e.NodeIndex, e.RequestIndex
+			e.Release()
 
 			select {
-			case mr.rnProposeC <- string(b):
+			case mr.rnProposeC <- b:
 			case <-ctx.Done():
-				mr.sendAck(e.NodeIndex, e.RequestIndex, ctx.Err())
+				mr.sendAck(nodeIndex, requestIndex, ctx.Err())
 			}
 		case <-ctx.Done():
 			break Loop
@@ -346,12 +348,9 @@ func (mr *RaftMetadataRepository) processReport(ctx context.Context) {
 			mr.muReportQueue.Lock()
 			num := len(mr.reportQueue)
 			if num > 0 {
-				reports = &mrpb.Reports{
-					NodeID:      mr.nodeID,
-					CreatedTime: time.Now(),
-				}
+				reports = mrpb.NewReports(mr.nodeID, time.Now())
 				reports.Reports = mr.reportQueue
-				mr.reportQueue = make([]*mrpb.Report, 0, 1024)
+				mr.reportQueue = mrpb.NewReportQueue()
 			}
 			mr.muReportQueue.Unlock()
 
@@ -757,15 +756,12 @@ func (mr *RaftMetadataRepository) applyUpdateLogStream(r *mrpb.UpdateLogStream, 
 }
 
 func (mr *RaftMetadataRepository) applyReport(reports *mrpb.Reports) error {
-	atomic.AddUint64(&mr.nrReport, 1)
+	mr.nrReport.Add(1)
 	mr.nrReportSinceCommit++
 
 	mr.tmStub.mb.Records("mr.raft.reports.delay").Record(context.TODO(),
 		float64(time.Since(reports.CreatedTime).Nanoseconds())/float64(time.Millisecond),
-		attribute.KeyValue{
-			Key:   "nodeid",
-			Value: attribute.StringValue(mr.nodeID.String()),
-		})
+	)
 
 	for _, r := range reports.Reports {
 		snID := r.StorageNodeID
@@ -783,6 +779,20 @@ func (mr *RaftMetadataRepository) applyReport(reports *mrpb.Reports) error {
 			if (s.Version == u.Version &&
 				s.UncommittedLLSNEnd() < u.UncommittedLLSNEnd()) ||
 				s.Version < u.Version {
+				if s.UncommittedLLSNEnd() > u.UncommittedLLSNEnd() {
+					mr.logger.Error("unexpeted report",
+						zap.Any("nodeID", reports.GetNodeID()),
+						zap.Any("sn", snID),
+						zap.Any("ls", u.GetLogStreamID()),
+						zap.Any("ver", u.GetVersion()),
+						zap.Any("off", u.GetUncommittedLLSNOffset()),
+						zap.Any("end", u.UncommittedLLSNEnd()),
+						zap.Any("cver", s.GetVersion()),
+						zap.Any("coff", s.GetUncommittedLLSNOffset()),
+						zap.Any("cend", s.UncommittedLLSNEnd()),
+					)
+					continue LS
+				}
 				mr.storage.UpdateUncommitReport(u.LogStreamID, snID, u)
 			}
 		}
@@ -811,13 +821,9 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 	if r != nil {
 		mr.tmStub.mb.Records("mr.raft.commit.delay").Record(context.TODO(),
 			float64(time.Since(r.CreatedTime).Nanoseconds())/float64(time.Millisecond),
-			attribute.KeyValue{
-				Key:   "nodeid",
-				Value: attribute.StringValue(mr.nodeID.String()),
-			})
+		)
 	}
 
-	startTime := time.Now()
 	_, err := mr.withTelemetry(context.TODO(), "mr.build_commit_results.duration", func(ctx context.Context) (interface{}, error) {
 		defer mr.storage.ResetUpdateSinceCommit()
 
@@ -829,19 +835,11 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 
 		crs := &mrpb.LogStreamCommitResults{}
 
-		mr.tmStub.mb.Records("mr.reports_log.count").Record(context.Background(),
-			float64(mr.nrReportSinceCommit),
-			attribute.KeyValue{
-				Key:   "nodeid",
-				Value: attribute.StringValue(mr.nodeID.String()),
-			})
+		mr.tmStub.mb.Records("mr.reports_log.count").Record(context.Background(), float64(mr.nrReportSinceCommit))
 
 		mr.tmStub.mb.Records("mr.update_reports.count").Record(context.Background(),
 			float64(mr.storage.NumUpdateSinceCommit()),
-			attribute.KeyValue{
-				Key:   "nodeid",
-				Value: attribute.StringValue(mr.nodeID.String()),
-			})
+		)
 
 		mr.nrReportSinceCommit = 0
 
@@ -914,10 +912,11 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 								reports,
 								nrCommitted, nrUncommit,
 							)
-							mr.logger.Panic(msg)
+							mr.logger.Error(msg)
+							nrUncommit = 0
+						} else {
+							nrUncommit -= nrCommitted
 						}
-
-						nrUncommit -= nrCommitted
 					}
 				}
 
@@ -953,10 +952,7 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 
 			mr.tmStub.mb.Records("mr.build_commit_results.pure.duration").Record(context.TODO(),
 				float64(time.Since(st).Nanoseconds())/float64(time.Millisecond),
-				attribute.KeyValue{
-					Key:   "nodeid",
-					Value: attribute.StringValue(mr.nodeID.String()),
-				})
+			)
 		}
 		crs.Version = curVer + 1
 
@@ -974,14 +970,6 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 
 		return nil, nil
 	})
-
-	mr.tmStub.mb.Records("mr.build_commit_results.duration").Record(context.Background(),
-		float64(time.Since(startTime).Nanoseconds())/float64(time.Millisecond),
-		attribute.KeyValue{
-			Key:   "nodeid",
-			Value: attribute.StringValue(mr.nodeID.String()),
-		},
-	)
 
 	return err
 }
@@ -1163,53 +1151,69 @@ func (mr *RaftMetadataRepository) proposeReport(snID types.StorageNodeID, ur []s
 	return nil
 }
 
-func (mr *RaftMetadataRepository) propose(ctx context.Context, r interface{}, guarantee bool) error {
-	e := &mrpb.RaftEntry{}
-	e.Request.SetValue(r)
-	e.NodeIndex = uint64(mr.nodeID)
-	e.RequestIndex = UnusedRequestIndex
+func (mr *RaftMetadataRepository) leaseRaftEntry(request any, requestIndex uint64) *mrpb.RaftEntry {
+	re := mrpb.NewRaftEntry()
+	re.Request.SetValue(request)
+	re.NodeIndex = uint64(mr.nodeID)
+	re.RequestIndex = requestIndex
+	return re
+}
 
-	if guarantee {
-		c := make(chan error, 1)
-		rIdx := atomic.AddUint64(&mr.requestNum, 1)
+func (mr *RaftMetadataRepository) proposeWithoutGuarantee(ctx context.Context, request any) (err error) {
+	re := mr.leaseRaftEntry(request, UnusedRequestIndex)
+	select {
+	case mr.proposeC <- re:
+		return nil
+	case <-ctx.Done():
+		err = ctx.Err()
+	default:
+		err = verrors.ErrIgnore
+	}
+	if err != nil {
+		re.Release()
+	}
+	return err
+}
 
-		e.RequestIndex = rIdx
-		mr.requestMap.Store(rIdx, c)
-		defer mr.requestMap.Delete(rIdx)
+func (mr *RaftMetadataRepository) proposeWithGuarantee(ctx context.Context, request any) error {
+	rIdx := mr.requestNum.Add(1)
+	c := make(chan error, 1)
+	mr.requestMap.Store(rIdx, c)
+	defer mr.requestMap.Delete(rIdx)
 
-		t := time.NewTimer(mr.raftProposeTimeout)
-		defer t.Stop()
+	t := time.NewTimer(mr.raftProposeTimeout)
+	defer t.Stop()
 
-	PROPOSE:
-		select {
-		case mr.proposeC <- e:
-		case <-t.C:
-			t.Reset(mr.raftProposeTimeout)
-			goto PROPOSE
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+	re := mr.leaseRaftEntry(request, rIdx)
 
-		select {
-		case err := <-c:
-			return err
-		case <-t.C:
-			t.Reset(mr.raftProposeTimeout)
-			goto PROPOSE
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	} else {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case mr.proposeC <- e:
-		default:
-			return verrors.ErrIgnore
-		}
+Propose:
+	select {
+	case mr.proposeC <- re:
+	case <-t.C:
+		t.Reset(mr.raftProposeTimeout)
+		goto Propose
+	case <-ctx.Done():
+		re.Release()
+		return ctx.Err()
 	}
 
-	return nil
+	select {
+	case err := <-c:
+		return err
+	case <-t.C:
+		t.Reset(mr.raftProposeTimeout)
+		re = mr.leaseRaftEntry(request, rIdx)
+		goto Propose
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (mr *RaftMetadataRepository) propose(ctx context.Context, request interface{}, guarantee bool) error {
+	if !guarantee {
+		return mr.proposeWithoutGuarantee(ctx, request)
+	}
+	return mr.proposeWithGuarantee(ctx, request)
 }
 
 func (mr *RaftMetadataRepository) proposeConfChange(ctx context.Context, r raftpb.ConfChange) error {
@@ -1350,7 +1354,7 @@ func (mr *RaftMetadataRepository) Unseal(ctx context.Context, lsID types.LogStre
 func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, _ types.ClusterID, nodeID types.NodeID, url string) error {
 	if mr.membership.IsMember(nodeID) ||
 		mr.membership.IsLearner(nodeID) {
-		return verrors.ErrAlreadyExists
+		return status.Errorf(codes.AlreadyExists, "node %d, addr:%s", nodeID, url)
 	}
 
 	r := raftpb.ConfChange{
@@ -1382,7 +1386,7 @@ func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, _ types.ClusterID
 func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, _ types.ClusterID, nodeID types.NodeID) error {
 	if !mr.membership.IsMember(nodeID) &&
 		!mr.membership.IsLearner(nodeID) {
-		return verrors.ErrNotExist
+		return status.Errorf(codes.NotFound, "node %d", nodeID)
 	}
 
 	r := raftpb.ConfChange{
@@ -1422,7 +1426,7 @@ func (mr *RaftMetadataRepository) registerEndpoint(ctx context.Context) {
 
 func (mr *RaftMetadataRepository) GetClusterInfo(context.Context, types.ClusterID) (*mrpb.ClusterInfo, error) {
 	if !mr.IsMember() {
-		return nil, verrors.ErrNotMember
+		return nil, status.Errorf(codes.Unavailable, "this mr is not member")
 	}
 
 	peerMap := mr.membership.GetPeers()
@@ -1461,7 +1465,7 @@ func (mr *RaftMetadataRepository) GetServerAddr() string {
 }
 
 func (mr *RaftMetadataRepository) GetReportCount() uint64 {
-	return atomic.LoadUint64(&mr.nrReport)
+	return mr.nrReport.Load()
 }
 
 func (mr *RaftMetadataRepository) GetLastCommitVersion() types.Version {
@@ -1501,11 +1505,6 @@ type handler func(ctx context.Context) (interface{}, error)
 func (mr *RaftMetadataRepository) withTelemetry(ctx context.Context, name string, h handler) (interface{}, error) {
 	st := time.Now()
 	rsp, err := h(ctx)
-	mr.tmStub.mb.Records(name).Record(ctx,
-		float64(time.Since(st).Nanoseconds())/float64(time.Millisecond),
-		attribute.KeyValue{
-			Key:   "nodeid",
-			Value: attribute.StringValue(mr.nodeID.String()),
-		})
+	mr.tmStub.mb.Records(name).Record(ctx, float64(time.Since(st).Nanoseconds())/float64(time.Millisecond))
 	return rsp, err
 }

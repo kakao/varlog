@@ -69,6 +69,8 @@ type Command struct {
 
 	// if this is a root "special" command
 	isRoot bool
+
+	separator separatorSpec
 }
 
 type Commands []*Command
@@ -133,6 +135,7 @@ func (c *Command) setup(ctx *Context) {
 		if scmd.HelpName == "" {
 			scmd.HelpName = fmt.Sprintf("%s %s", c.HelpName, scmd.Name)
 		}
+		scmd.separator = c.separator
 		newCmds = append(newCmds, scmd)
 	}
 	c.Subcommands = newCmds
@@ -275,7 +278,7 @@ func (c *Command) Run(cCtx *Context, arguments ...string) (err error) {
 }
 
 func (c *Command) newFlagSet() (*flag.FlagSet, error) {
-	return flagSet(c.Name, c.Flags)
+	return flagSet(c.Name, c.Flags, c.separator)
 }
 
 func (c *Command) useShortOptionHandling() bool {

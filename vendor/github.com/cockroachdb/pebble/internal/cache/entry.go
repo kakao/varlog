@@ -4,6 +4,8 @@
 
 package cache
 
+import "sync/atomic"
+
 type entryType int8
 
 const (
@@ -30,7 +32,7 @@ func (p entryType) String() string {
 // Using manual memory management for entries is technically a volation of the
 // Cgo pointer rules:
 //
-//   https://golang.org/cmd/cgo/#hdr-Passing_pointers
+//	https://golang.org/cmd/cgo/#hdr-Passing_pointers
 //
 // Specifically, Go pointers should not be stored in C allocated memory. The
 // reason for this rule is that the Go GC will not look at C allocated memory
@@ -56,7 +58,7 @@ type entry struct {
 	ptype entryType
 	// referenced is atomically set to indicate that this entry has been accessed
 	// since the last time one of the clock hands swept it.
-	referenced int32
+	referenced atomic.Bool
 	shard      *shard
 	// Reference count for the entry. The entry is freed when the reference count
 	// drops to zero.

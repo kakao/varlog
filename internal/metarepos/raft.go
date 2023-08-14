@@ -21,7 +21,6 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 	"go.etcd.io/etcd/wal"
 	"go.etcd.io/etcd/wal/walpb"
-	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 
 	vtypes "github.com/kakao/varlog/pkg/types"
@@ -34,7 +33,7 @@ import (
 type raftNode struct {
 	raftConfig
 
-	proposeC    chan string              // proposed messages from app
+	proposeC    chan []byte              // proposed messages from app
 	confChangeC chan raftpb.ConfChange   // proposed cluster config changes
 	commitC     chan *raftCommittedEntry // entries committed to app
 	snapshotC   chan struct{}            // snapshot trigger
@@ -99,7 +98,7 @@ var purgeInterval = 30 * time.Second
 // current), then new log entries.
 func newRaftNode(cfg raftConfig,
 	snapshotGetter SnapshotGetter,
-	proposeC chan string,
+	proposeC chan []byte,
 	confChangeC chan raftpb.ConfChange,
 	tmStub *telemetryStub,
 	logger *zap.Logger) *raftNode {
@@ -708,7 +707,7 @@ Loop:
 
 			// blocks until accepted by raft state machine
 			// TODO:: handle dropped proposal
-			err := rc.node.Propose(context.TODO(), []byte(prop))
+			err := rc.node.Propose(context.TODO(), prop)
 			if err != nil {
 				rc.logger.Warn("proposal fail", zap.String("err", err.Error()))
 			}
@@ -1008,11 +1007,6 @@ func (rc *raftNode) withTelemetry(ctx context.Context, name string, h handler) (
 	st := time.Now()
 	rsp, err := h(ctx)
 
-	rc.tmStub.mb.Records(name).Record(ctx,
-		float64(time.Since(st).Nanoseconds())/float64(time.Millisecond),
-		attribute.KeyValue{
-			Key:   "nodeid",
-			Value: attribute.StringValue(rc.nodeID.String()),
-		})
+	rc.tmStub.mb.Records(name).Record(ctx, float64(time.Since(st).Nanoseconds())/float64(time.Millisecond))
 	return rsp, err
 }

@@ -23,14 +23,6 @@ var propTagMap = make(map[string]reflect.StructField)
 var propBoolTrue = []byte{'1'}
 var propBoolFalse = []byte{'0'}
 
-var columnFamilyIDField = func() reflect.StructField {
-	f, ok := reflect.TypeOf(Properties{}).FieldByName("ColumnFamilyID")
-	if !ok {
-		panic("Properties.ColumnFamilyID field not found")
-	}
-	return f
-}()
-
 var propOffsetTagMap = make(map[uintptr]string)
 
 func init() {
@@ -56,51 +48,35 @@ func init() {
 // automatically populated during sstable creation and load from the properties
 // meta block when an sstable is opened.
 type Properties struct {
-	// ID of column family for this SST file, corresponding to the CF identified
-	// by column_family_name.
-	ColumnFamilyID uint64 `prop:"rocksdb.column.family.id"`
-	// Name of the column family with which this SST file is associated. Empty if
-	// the column family is unknown.
-	ColumnFamilyName string `prop:"rocksdb.column.family.name"`
 	// The name of the comparer used in this table.
 	ComparerName string `prop:"rocksdb.comparator"`
 	// The compression algorithm used to compress blocks.
 	CompressionName string `prop:"rocksdb.compression"`
 	// The compression options used to compress blocks.
 	CompressionOptions string `prop:"rocksdb.compression_options"`
-	// The time when the SST file was created. Since SST files are immutable,
-	// this is equivalent to last modified time.
-	CreationTime uint64 `prop:"rocksdb.creation.time"`
 	// The total size of all data blocks.
 	DataSize uint64 `prop:"rocksdb.data.size"`
 	// The external sstable version format. Version 2 is the one RocksDB has been
 	// using since 5.13. RocksDB only uses the global sequence number for an
 	// sstable if this property has been set.
 	ExternalFormatVersion uint32 `prop:"rocksdb.external_sst_file.version"`
-	// Actual SST file creation time. 0 means unknown.
-	FileCreationTime uint64 `prop:"rocksdb.file.creation.time"`
 	// The name of the filter policy used in this table. Empty if no filter
 	// policy is used.
 	FilterPolicyName string `prop:"rocksdb.filter.policy"`
 	// The size of filter block.
 	FilterSize uint64 `prop:"rocksdb.filter.size"`
-	// If 0, key is variable length. Otherwise number of bytes for each key.
-	FixedKeyLen uint64 `prop:"rocksdb.fixed.key.length"`
-	// Format version, reserved for backward compatibility.
-	FormatVersion uint64 `prop:"rocksdb.format.version"`
 	// The global sequence number to use for all entries in the table. Present if
 	// the table was created externally and ingested whole.
 	GlobalSeqNum uint64 `prop:"rocksdb.external_sst_file.global_seqno"`
-	// Whether the index key is user key or an internal key.
-	IndexKeyIsUserKey uint64 `prop:"rocksdb.index.key.is.user.key"`
 	// Total number of index partitions if kTwoLevelIndexSearch is used.
 	IndexPartitions uint64 `prop:"rocksdb.index.partitions"`
 	// The size of index block.
 	IndexSize uint64 `prop:"rocksdb.index.size"`
 	// The index type. TODO(peter): add a more detailed description.
 	IndexType uint32 `prop:"rocksdb.block.based.table.index.type"`
-	// Whether delta encoding is used to encode the index values.
-	IndexValueIsDeltaEncoded uint64 `prop:"rocksdb.index.value.is.delta.encoded"`
+	// For formats >= TableFormatPebblev4, this is set to true if the obsolete
+	// bit is strict for all the point keys.
+	IsStrictObsolete bool `prop:"pebble.obsolete.is_strict"`
 	// The name of the merger used in this table. Empty if no merger is used.
 	MergerName string `prop:"rocksdb.merge.operator"`
 	// The number of blocks in this table.
@@ -108,6 +84,9 @@ type Properties struct {
 	// The number of deletion entries in this table, including both point and
 	// range deletions.
 	NumDeletions uint64 `prop:"rocksdb.deleted.keys"`
+	// The number of point deletion entries ("tombstones") in this table that
+	// carry a size hint indicating the size of the value the tombstone deletes.
+	NumSizedDeletions uint64 `prop:"pebble.num.deletions.sized"`
 	// The number of entries in this table.
 	NumEntries uint64 `prop:"rocksdb.num.entries"`
 	// The number of merge operands in the table.
@@ -120,8 +99,10 @@ type Properties struct {
 	NumRangeKeySets uint64 `prop:"pebble.num.range-key-sets"`
 	// The number of RANGEKEYUNSETs in this table.
 	NumRangeKeyUnsets uint64 `prop:"pebble.num.range-key-unsets"`
-	// Timestamp of the earliest key. 0 if unknown.
-	OldestKeyTime uint64 `prop:"rocksdb.oldest.key.time"`
+	// The number of value blocks in this table. Only serialized if > 0.
+	NumValueBlocks uint64 `prop:"pebble.num.value-blocks"`
+	// The number of values stored in value blocks. Only serialized if > 0.
+	NumValuesInValueBlocks uint64 `prop:"pebble.num.values.in.value-blocks"`
 	// The name of the prefix extractor used in this table. Empty if no prefix
 	// extractor is used.
 	PrefixExtractorName string `prop:"rocksdb.prefix.extractor.name"`
@@ -132,16 +113,33 @@ type Properties struct {
 	PropertyCollectorNames string `prop:"rocksdb.property.collectors"`
 	// Total raw key size.
 	RawKeySize uint64 `prop:"rocksdb.raw.key.size"`
+	// Total raw key size of point deletion tombstones. This value is comparable
+	// to RawKeySize.
+	RawPointTombstoneKeySize uint64 `prop:"pebble.raw.point-tombstone.key.size"`
+	// Sum of the raw value sizes carried by point deletion tombstones
+	// containing size estimates. See the DeleteSized key kind. This value is
+	// comparable to Raw{Key,Value}Size.
+	RawPointTombstoneValueSize uint64 `prop:"pebble.raw.point-tombstone.value.size"`
 	// Total raw rangekey key size.
 	RawRangeKeyKeySize uint64 `prop:"pebble.raw.range-key.key.size"`
 	// Total raw rangekey value size.
 	RawRangeKeyValueSize uint64 `prop:"pebble.raw.range-key.value.size"`
 	// Total raw value size.
 	RawValueSize uint64 `prop:"rocksdb.raw.value.size"`
+	// The total number of keys in this table that were pinned by open snapshots.
+	SnapshotPinnedKeys uint64 `prop:"pebble.num.snapshot-pinned-keys"`
+	// The cumulative bytes of keys in this table that were pinned by
+	// open snapshots. This value is comparable to RawKeySize.
+	SnapshotPinnedKeySize uint64 `prop:"pebble.raw.snapshot-pinned-keys.size"`
+	// The cumulative bytes of values in this table that were pinned by
+	// open snapshots. This value is comparable to RawValueSize.
+	SnapshotPinnedValueSize uint64 `prop:"pebble.raw.snapshot-pinned-values.size"`
 	// Size of the top-level index if kTwoLevelIndexSearch is used.
 	TopLevelIndexSize uint64 `prop:"rocksdb.top-level.index.size"`
 	// User collected properties.
 	UserProperties map[string]string
+	// Total size of value blocks and value index block. Only serialized if > 0.
+	ValueBlocksSize uint64 `prop:"pebble.value-blocks.size"`
 	// If filtering is enabled, was the filter created on the whole key.
 	WholeKeyFiltering bool `prop:"rocksdb.block.based.table.whole.key.filtering"`
 
@@ -189,12 +187,7 @@ func (p *Properties) String() string {
 		case reflect.Uint32:
 			fmt.Fprintf(&buf, "%d\n", f.Uint())
 		case reflect.Uint64:
-			u := f.Uint()
-			if ft.Offset == columnFamilyIDField.Offset && u == math.MaxInt32 {
-				fmt.Fprintf(&buf, "-\n")
-			} else {
-				fmt.Fprintf(&buf, "%d\n", f.Uint())
-			}
+			fmt.Fprintf(&buf, "%d\n", f.Uint())
 		case reflect.String:
 			fmt.Fprintf(&buf, "%s\n", f.String())
 		default:
@@ -212,7 +205,9 @@ func (p *Properties) String() string {
 	return buf.String()
 }
 
-func (p *Properties) load(b block, blockOffset uint64) error {
+func (p *Properties) load(
+	b block, blockOffset uint64, deniedUserProperties map[string]struct{},
+) error {
 	i, err := newRawBlockIter(bytes.Compare, b)
 	if err != nil {
 		return err
@@ -220,8 +215,7 @@ func (p *Properties) load(b block, blockOffset uint64) error {
 	p.Loaded = make(map[uintptr]struct{})
 	v := reflect.ValueOf(p).Elem()
 	for valid := i.First(); valid; valid = i.Next() {
-		tag := intern.Bytes(i.Key().UserKey)
-		if f, ok := propTagMap[tag]; ok {
+		if f, ok := propTagMap[string(i.Key().UserKey)]; ok {
 			p.Loaded[f.Offset] = struct{}{}
 			field := v.FieldByIndex(f.Index)
 			switch f.Type.Kind() {
@@ -231,7 +225,7 @@ func (p *Properties) load(b block, blockOffset uint64) error {
 				field.SetUint(uint64(binary.LittleEndian.Uint32(i.Value())))
 			case reflect.Uint64:
 				var n uint64
-				if tag == propGlobalSeqnumName {
+				if string(i.Key().UserKey) == propGlobalSeqnumName {
 					n = binary.LittleEndian.Uint64(i.Value())
 				} else {
 					n, _ = binary.Uvarint(i.Value())
@@ -247,7 +241,10 @@ func (p *Properties) load(b block, blockOffset uint64) error {
 		if p.UserProperties == nil {
 			p.UserProperties = make(map[string]string)
 		}
-		p.UserProperties[tag] = string(i.Value())
+
+		if _, denied := deniedUserProperties[string(i.Key().UserKey)]; !denied {
+			p.UserProperties[intern.Bytes(i.Key().UserKey)] = string(i.Value())
+		}
 	}
 	return nil
 }
@@ -283,16 +280,12 @@ func (p *Properties) saveString(m map[string][]byte, offset uintptr, value strin
 	m[propOffsetTagMap[offset]] = []byte(value)
 }
 
-func (p *Properties) save(w *rawBlockWriter) {
+func (p *Properties) save(tblFormat TableFormat, w *rawBlockWriter) {
 	m := make(map[string][]byte)
 	for k, v := range p.UserProperties {
 		m[k] = []byte(v)
 	}
 
-	p.saveUvarint(m, unsafe.Offsetof(p.ColumnFamilyID), p.ColumnFamilyID)
-	if p.ColumnFamilyName != "" {
-		p.saveString(m, unsafe.Offsetof(p.ColumnFamilyName), p.ColumnFamilyName)
-	}
 	if p.ComparerName != "" {
 		p.saveString(m, unsafe.Offsetof(p.ComparerName), p.ComparerName)
 	}
@@ -302,37 +295,45 @@ func (p *Properties) save(w *rawBlockWriter) {
 	if p.CompressionOptions != "" {
 		p.saveString(m, unsafe.Offsetof(p.CompressionOptions), p.CompressionOptions)
 	}
-	p.saveUvarint(m, unsafe.Offsetof(p.CreationTime), p.CreationTime)
 	p.saveUvarint(m, unsafe.Offsetof(p.DataSize), p.DataSize)
 	if p.ExternalFormatVersion != 0 {
 		p.saveUint32(m, unsafe.Offsetof(p.ExternalFormatVersion), p.ExternalFormatVersion)
 		p.saveUint64(m, unsafe.Offsetof(p.GlobalSeqNum), p.GlobalSeqNum)
 	}
-	if p.FileCreationTime > 0 {
-		p.saveUvarint(m, unsafe.Offsetof(p.FileCreationTime), p.FileCreationTime)
-	}
 	if p.FilterPolicyName != "" {
 		p.saveString(m, unsafe.Offsetof(p.FilterPolicyName), p.FilterPolicyName)
 	}
 	p.saveUvarint(m, unsafe.Offsetof(p.FilterSize), p.FilterSize)
-	p.saveUvarint(m, unsafe.Offsetof(p.FixedKeyLen), p.FixedKeyLen)
-	p.saveUvarint(m, unsafe.Offsetof(p.FormatVersion), p.FormatVersion)
-	p.saveUvarint(m, unsafe.Offsetof(p.IndexKeyIsUserKey), p.IndexKeyIsUserKey)
 	if p.IndexPartitions != 0 {
 		p.saveUvarint(m, unsafe.Offsetof(p.IndexPartitions), p.IndexPartitions)
 		p.saveUvarint(m, unsafe.Offsetof(p.TopLevelIndexSize), p.TopLevelIndexSize)
 	}
 	p.saveUvarint(m, unsafe.Offsetof(p.IndexSize), p.IndexSize)
 	p.saveUint32(m, unsafe.Offsetof(p.IndexType), p.IndexType)
-	p.saveUvarint(m, unsafe.Offsetof(p.IndexValueIsDeltaEncoded), p.IndexValueIsDeltaEncoded)
+	if p.IsStrictObsolete {
+		p.saveBool(m, unsafe.Offsetof(p.IsStrictObsolete), p.IsStrictObsolete)
+	}
 	if p.MergerName != "" {
 		p.saveString(m, unsafe.Offsetof(p.MergerName), p.MergerName)
 	}
 	p.saveUvarint(m, unsafe.Offsetof(p.NumDataBlocks), p.NumDataBlocks)
 	p.saveUvarint(m, unsafe.Offsetof(p.NumEntries), p.NumEntries)
 	p.saveUvarint(m, unsafe.Offsetof(p.NumDeletions), p.NumDeletions)
+	if p.NumSizedDeletions > 0 {
+		p.saveUvarint(m, unsafe.Offsetof(p.NumSizedDeletions), p.NumSizedDeletions)
+	}
 	p.saveUvarint(m, unsafe.Offsetof(p.NumMergeOperands), p.NumMergeOperands)
 	p.saveUvarint(m, unsafe.Offsetof(p.NumRangeDeletions), p.NumRangeDeletions)
+	// NB: We only write out some properties for Pebble formats. This isn't
+	// strictly necessary because unrecognized properties are interpreted as
+	// user-defined properties, however writing them prevents byte-for-byte
+	// equivalence with RocksDB files that some of our testing requires.
+	if p.RawPointTombstoneKeySize > 0 && tblFormat >= TableFormatPebblev1 {
+		p.saveUvarint(m, unsafe.Offsetof(p.RawPointTombstoneKeySize), p.RawPointTombstoneKeySize)
+	}
+	if p.RawPointTombstoneValueSize > 0 {
+		p.saveUvarint(m, unsafe.Offsetof(p.RawPointTombstoneValueSize), p.RawPointTombstoneValueSize)
+	}
 	if p.NumRangeKeys() > 0 {
 		p.saveUvarint(m, unsafe.Offsetof(p.NumRangeKeyDels), p.NumRangeKeyDels)
 		p.saveUvarint(m, unsafe.Offsetof(p.NumRangeKeySets), p.NumRangeKeySets)
@@ -340,7 +341,12 @@ func (p *Properties) save(w *rawBlockWriter) {
 		p.saveUvarint(m, unsafe.Offsetof(p.RawRangeKeyKeySize), p.RawRangeKeyKeySize)
 		p.saveUvarint(m, unsafe.Offsetof(p.RawRangeKeyValueSize), p.RawRangeKeyValueSize)
 	}
-	p.saveUvarint(m, unsafe.Offsetof(p.OldestKeyTime), p.OldestKeyTime)
+	if p.NumValueBlocks > 0 {
+		p.saveUvarint(m, unsafe.Offsetof(p.NumValueBlocks), p.NumValueBlocks)
+	}
+	if p.NumValuesInValueBlocks > 0 {
+		p.saveUvarint(m, unsafe.Offsetof(p.NumValuesInValueBlocks), p.NumValuesInValueBlocks)
+	}
 	if p.PrefixExtractorName != "" {
 		p.saveString(m, unsafe.Offsetof(p.PrefixExtractorName), p.PrefixExtractorName)
 	}
@@ -348,9 +354,27 @@ func (p *Properties) save(w *rawBlockWriter) {
 	if p.PropertyCollectorNames != "" {
 		p.saveString(m, unsafe.Offsetof(p.PropertyCollectorNames), p.PropertyCollectorNames)
 	}
+	if p.SnapshotPinnedKeys > 0 {
+		p.saveUvarint(m, unsafe.Offsetof(p.SnapshotPinnedKeys), p.SnapshotPinnedKeys)
+		p.saveUvarint(m, unsafe.Offsetof(p.SnapshotPinnedKeySize), p.SnapshotPinnedKeySize)
+		p.saveUvarint(m, unsafe.Offsetof(p.SnapshotPinnedValueSize), p.SnapshotPinnedValueSize)
+	}
 	p.saveUvarint(m, unsafe.Offsetof(p.RawKeySize), p.RawKeySize)
 	p.saveUvarint(m, unsafe.Offsetof(p.RawValueSize), p.RawValueSize)
+	if p.ValueBlocksSize > 0 {
+		p.saveUvarint(m, unsafe.Offsetof(p.ValueBlocksSize), p.ValueBlocksSize)
+	}
 	p.saveBool(m, unsafe.Offsetof(p.WholeKeyFiltering), p.WholeKeyFiltering)
+
+	if tblFormat < TableFormatPebblev1 {
+		m["rocksdb.column.family.id"] = binary.AppendUvarint([]byte(nil), math.MaxInt32)
+		m["rocksdb.fixed.key.length"] = []byte{0x00}
+		m["rocksdb.index.key.is.user.key"] = []byte{0x00}
+		m["rocksdb.index.value.is.delta.encoded"] = []byte{0x00}
+		m["rocksdb.oldest.key.time"] = []byte{0x00}
+		m["rocksdb.creation.time"] = []byte{0x00}
+		m["rocksdb.format.version"] = []byte{0x00}
+	}
 
 	keys := make([]string, 0, len(m))
 	for key := range m {

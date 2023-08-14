@@ -11,8 +11,10 @@ import (
 
 	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/pkg/rpc"
+	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/snpb/mock"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 type testReplicateServer struct {
@@ -90,4 +92,14 @@ func TestGetStorage(t *testing.T, lse *Executor) *storage.Storage {
 	require.NotNil(t, lse)
 	require.NotNil(t, lse.stg)
 	return lse.stg
+}
+
+func TestGetReportCommitBase(t *testing.T, lse *Executor) (commitVersion types.Version, highWatermark types.GLSN, uncommittedBegin varlogpb.LogSequenceNumber, invalid bool) {
+	require.NotNil(t, lse)
+	return lse.lsc.reportCommitBase()
+}
+
+func TestGetUncommittedLLSNEnd(t *testing.T, lse *Executor) types.LLSN {
+	require.NotNil(t, lse)
+	return lse.lsc.uncommittedLLSNEnd.Load()
 }

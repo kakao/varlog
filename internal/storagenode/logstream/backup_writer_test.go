@@ -4,7 +4,6 @@ import (
 	"context"
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -91,7 +90,7 @@ func TestBackupWriter_Drain(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	assert.EqualValues(t, numTasks, atomic.LoadInt64(&bw.inflight))
+	assert.EqualValues(t, numTasks, bw.inflight.Load())
 	assert.Len(t, bw.queue, numTasks)
 
 	var wg sync.WaitGroup
@@ -104,7 +103,7 @@ func TestBackupWriter_Drain(t *testing.T) {
 	bw.waitForDrainage(true)
 	wg.Wait()
 
-	assert.Zero(t, atomic.LoadInt64(&bw.inflight))
+	assert.Zero(t, bw.inflight.Load())
 	assert.Empty(t, bw.queue)
 }
 

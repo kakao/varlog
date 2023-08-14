@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -110,8 +111,8 @@ type DummyStorageNodeClient struct {
 
 	reportDelay   atomicutil.AtomicDuration
 	commitDelay   atomicutil.AtomicDuration
-	disableReport atomicutil.AtomicBool
-	disableCommit atomicutil.AtomicBool
+	disableReport atomic.Bool
+	disableCommit atomic.Bool
 
 	ref int
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/mrc/mrconnector"
@@ -88,6 +89,7 @@ type mrManager struct {
 	mu        sync.RWMutex
 	connector mrconnector.Connector
 
+	sfg     singleflight.Group
 	dirty   bool
 	updated time.Time
 	meta    *varlogpb.MetadataDescriptor
@@ -168,10 +170,12 @@ func (mrm *mrManager) clusterMetadata(ctx context.Context) (*varlogpb.MetadataDe
 	return meta, err
 }
 
-func (mrm *mrManager) RegisterStorageNode(ctx context.Context, storageNodeMeta *varlogpb.StorageNodeDescriptor) error {
+func (mrm *mrManager) RegisterStorageNode(ctx context.Context, storageNodeMeta *varlogpb.StorageNodeDescriptor) (err error) {
 	mrm.mu.Lock()
 	defer func() {
-		mrm.dirty = true
+		if err == nil {
+			mrm.dirty = true
+		}
 		mrm.mu.Unlock()
 	}()
 
@@ -180,7 +184,8 @@ func (mrm *mrManager) RegisterStorageNode(ctx context.Context, storageNodeMeta *
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	if err := cli.RegisterStorageNode(ctx, storageNodeMeta); err != nil {
+	err = cli.RegisterStorageNode(ctx, storageNodeMeta)
+	if err != nil {
 		_ = cli.Close()
 		return err
 	}
@@ -188,10 +193,12 @@ func (mrm *mrManager) RegisterStorageNode(ctx context.Context, storageNodeMeta *
 	return err
 }
 
-func (mrm *mrManager) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error {
+func (mrm *mrManager) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (err error) {
 	mrm.mu.Lock()
 	defer func() {
-		mrm.dirty = true
+		if err == nil {
+			mrm.dirty = true
+		}
 		mrm.mu.Unlock()
 	}()
 
@@ -200,7 +207,8 @@ func (mrm *mrManager) UnregisterStorageNode(ctx context.Context, storageNodeID t
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	if err := cli.UnregisterStorageNode(ctx, storageNodeID); err != nil {
+	err = cli.UnregisterStorageNode(ctx, storageNodeID)
+	if err != nil {
 		_ = cli.Close()
 		return err
 	}
@@ -208,10 +216,12 @@ func (mrm *mrManager) UnregisterStorageNode(ctx context.Context, storageNodeID t
 	return err
 }
 
-func (mrm *mrManager) RegisterTopic(ctx context.Context, topicID types.TopicID) error {
+func (mrm *mrManager) RegisterTopic(ctx context.Context, topicID types.TopicID) (err error) {
 	mrm.mu.Lock()
 	defer func() {
-		mrm.dirty = true
+		if err == nil {
+			mrm.dirty = true
+		}
 		mrm.mu.Unlock()
 	}()
 
@@ -220,7 +230,8 @@ func (mrm *mrManager) RegisterTopic(ctx context.Context, topicID types.TopicID) 
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	if err := cli.RegisterTopic(ctx, topicID); err != nil {
+	err = cli.RegisterTopic(ctx, topicID)
+	if err != nil {
 		_ = cli.Close()
 		return err
 	}
@@ -228,10 +239,12 @@ func (mrm *mrManager) RegisterTopic(ctx context.Context, topicID types.TopicID) 
 	return err
 }
 
-func (mrm *mrManager) UnregisterTopic(ctx context.Context, topicID types.TopicID) error {
+func (mrm *mrManager) UnregisterTopic(ctx context.Context, topicID types.TopicID) (err error) {
 	mrm.mu.Lock()
 	defer func() {
-		mrm.dirty = true
+		if err == nil {
+			mrm.dirty = true
+		}
 		mrm.mu.Unlock()
 	}()
 
@@ -240,7 +253,8 @@ func (mrm *mrManager) UnregisterTopic(ctx context.Context, topicID types.TopicID
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	if err := cli.UnregisterTopic(ctx, topicID); err != nil {
+	err = cli.UnregisterTopic(ctx, topicID)
+	if err != nil {
 		_ = cli.Close()
 		return err
 	}
@@ -248,10 +262,12 @@ func (mrm *mrManager) UnregisterTopic(ctx context.Context, topicID types.TopicID
 	return err
 }
 
-func (mrm *mrManager) RegisterLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error {
+func (mrm *mrManager) RegisterLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) (err error) {
 	mrm.mu.Lock()
 	defer func() {
-		mrm.dirty = true
+		if err == nil {
+			mrm.dirty = true
+		}
 		mrm.mu.Unlock()
 	}()
 
@@ -260,17 +276,20 @@ func (mrm *mrManager) RegisterLogStream(ctx context.Context, logStreamDesc *varl
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	if err := cli.RegisterLogStream(ctx, logStreamDesc); err != nil {
+	err = cli.RegisterLogStream(ctx, logStreamDesc)
+	if err != nil {
 		_ = cli.Close()
 		return err
 	}
 	return nil
 }
 
-func (mrm *mrManager) UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error {
+func (mrm *mrManager) UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) (err error) {
 	mrm.mu.Lock()
 	defer func() {
-		mrm.dirty = true
+		if err == nil {
+			mrm.dirty = true
+		}
 		mrm.mu.Unlock()
 	}()
 
@@ -279,17 +298,20 @@ func (mrm *mrManager) UnregisterLogStream(ctx context.Context, logStreamID types
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	if err := cli.UnregisterLogStream(ctx, logStreamID); err != nil {
+	err = cli.UnregisterLogStream(ctx, logStreamID)
+	if err != nil {
 		_ = cli.Close()
 		return err
 	}
 	return err
 }
 
-func (mrm *mrManager) UpdateLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error {
+func (mrm *mrManager) UpdateLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) (err error) {
 	mrm.mu.Lock()
 	defer func() {
-		mrm.dirty = true
+		if err == nil {
+			mrm.dirty = true
+		}
 		mrm.mu.Unlock()
 	}()
 
@@ -298,7 +320,8 @@ func (mrm *mrManager) UpdateLogStream(ctx context.Context, logStreamDesc *varlog
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	if err := cli.UpdateLogStream(ctx, logStreamDesc); err != nil {
+	err = cli.UpdateLogStream(ctx, logStreamDesc)
+	if err != nil {
 		_ = cli.Close()
 		return err
 	}
@@ -309,7 +332,9 @@ func (mrm *mrManager) UpdateLogStream(ctx context.Context, logStreamDesc *varlog
 func (mrm *mrManager) Seal(ctx context.Context, logStreamID types.LogStreamID) (lastCommittedGLSN types.GLSN, err error) {
 	mrm.mu.Lock()
 	defer func() {
-		mrm.dirty = true
+		if err == nil {
+			mrm.dirty = true
+		}
 		mrm.mu.Unlock()
 	}()
 
@@ -325,10 +350,12 @@ func (mrm *mrManager) Seal(ctx context.Context, logStreamID types.LogStreamID) (
 	return lastCommittedGLSN, err
 }
 
-func (mrm *mrManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
+func (mrm *mrManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) (err error) {
 	mrm.mu.Lock()
 	defer func() {
-		mrm.dirty = true
+		if err == nil {
+			mrm.dirty = true
+		}
 		mrm.mu.Unlock()
 	}()
 
@@ -337,7 +364,8 @@ func (mrm *mrManager) Unseal(ctx context.Context, logStreamID types.LogStreamID)
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	if err := cli.Unseal(ctx, logStreamID); err != nil {
+	err = cli.Unseal(ctx, logStreamID)
+	if err != nil {
 		_ = cli.Close()
 		return err
 	}
@@ -345,8 +373,8 @@ func (mrm *mrManager) Unseal(ctx context.Context, logStreamID types.LogStreamID)
 }
 
 func (mrm *mrManager) GetClusterInfo(ctx context.Context) (*mrpb.ClusterInfo, error) {
-	mrm.mu.Lock()
-	defer mrm.mu.Unlock()
+	mrm.mu.RLock()
+	defer mrm.mu.RUnlock()
 
 	cli, err := mrm.mc()
 	if err != nil {
@@ -401,19 +429,37 @@ func (mrm *mrManager) RemovePeer(ctx context.Context, nodeID types.NodeID) error
 }
 
 func (mrm *mrManager) ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
-	mrm.mu.Lock()
-	defer mrm.mu.Unlock()
+	// fail-fast
+	if err := ctx.Err(); err != nil {
+		return nil, ctx.Err()
+	}
 
-	if mrm.dirty || time.Since(mrm.updated) > ReloadInterval {
+	// fast path
+	mrm.mu.RLock()
+	if !mrm.dirty && time.Since(mrm.updated) <= ReloadInterval {
+		meta := mrm.meta
+		mrm.mu.RUnlock()
+		return meta, nil
+	}
+	mrm.mu.RUnlock()
+
+	// slow path
+	md, err, _ := mrm.sfg.Do("cluster_metadata", func() (interface{}, error) {
 		meta, err := mrm.clusterMetadata(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("cluster metadata: %w", err)
 		}
+		mrm.mu.Lock()
 		mrm.meta = meta
 		mrm.dirty = false
 		mrm.updated = time.Now()
+		mrm.mu.Unlock()
+		return meta, nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return mrm.meta, nil
+	return md.(*varlogpb.MetadataDescriptor), nil
 }
 
 func (mrm *mrManager) StorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*varlogpb.StorageNodeDescriptor, error) {

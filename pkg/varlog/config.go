@@ -3,6 +3,10 @@ package varlog
 import (
 	"context"
 	"time"
+
+	"github.com/kakao/varlog/internal/storagenode"
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 type adminConfig struct {
@@ -89,5 +93,90 @@ func WithTimeout(timeout time.Duration) AdminCallOption {
 	return newFuncAdminCallOption(func(cfg *adminCallConfig) {
 		cfg.timeout.Duration = timeout
 		cfg.timeout.set = true
+	})
+}
+
+const (
+	defaultPipelineSize = 2
+	minPipelineSize     = storagenode.MinAppendPipelineSize
+	maxPipelineSize     = storagenode.MaxAppendPipelineSize
+)
+
+type logStreamAppenderConfig struct {
+	defaultBatchCallback BatchCallback
+	tpid                 types.TopicID
+	lsid                 types.LogStreamID
+	pipelineSize         int
+	callTimeout          time.Duration
+}
+
+func newLogStreamAppenderConfig(opts []LogStreamAppenderOption) logStreamAppenderConfig {
+	cfg := logStreamAppenderConfig{
+		pipelineSize:         defaultPipelineSize,
+		defaultBatchCallback: func([]varlogpb.LogEntryMeta, error) {},
+	}
+	for _, opt := range opts {
+		opt.applyLogStreamAppender(&cfg)
+	}
+	cfg.ensureDefault()
+	return cfg
+}
+
+func (cfg *logStreamAppenderConfig) ensureDefault() {
+	if cfg.pipelineSize < minPipelineSize {
+		cfg.pipelineSize = minPipelineSize
+	}
+	if cfg.pipelineSize > maxPipelineSize {
+		cfg.pipelineSize = maxPipelineSize
+	}
+}
+
+type funcLogStreamAppenderOption struct {
+	f func(*logStreamAppenderConfig)
+}
+
+func newFuncLogStreamAppenderOption(f func(config *logStreamAppenderConfig)) *funcLogStreamAppenderOption {
+	return &funcLogStreamAppenderOption{f: f}
+}
+
+func (fo *funcLogStreamAppenderOption) applyLogStreamAppender(cfg *logStreamAppenderConfig) {
+	fo.f(cfg)
+}
+
+// LogStreamAppenderOption configures a LogStreamAppender.
+type LogStreamAppenderOption interface {
+	applyLogStreamAppender(config *logStreamAppenderConfig)
+}
+
+// WithPipelineSize sets request pipeline size. The default pipeline size is
+// two. Any value below one will be set to one, and any above eight will be
+// limited to eight.
+func WithPipelineSize(pipelineSize int) LogStreamAppenderOption {
+	return newFuncLogStreamAppenderOption(func(cfg *logStreamAppenderConfig) {
+		cfg.pipelineSize = pipelineSize
+	})
+}
+
+// WithDefaultBatchCallback sets the default callback function. The default callback
+// function can be overridden by the argument callback of the AppendBatch
+// method.
+func WithDefaultBatchCallback(defaultBatchCallback BatchCallback) LogStreamAppenderOption {
+	return newFuncLogStreamAppenderOption(func(cfg *logStreamAppenderConfig) {
+		cfg.defaultBatchCallback = defaultBatchCallback
+	})
+}
+
+// WithCallTimeout configures a timeout for each AppendBatch call. If the
+// timeout has elapsed, the AppendBatch and callback functions may result in an
+// ErrCallTimeout error.
+//
+// ErrCallTimeout may be returned in the following scenarios:
+// - Waiting for the pipeline too long since it is full.
+// - Sending RPC requests to the varlog is blocked for too long.
+// - Receiving RPC response from the varlog is blocked too long.
+// - User codes for callback take time too long.
+func WithCallTimeout(callTimeout time.Duration) LogStreamAppenderOption {
+	return newFuncLogStreamAppenderOption(func(cfg *logStreamAppenderConfig) {
+		cfg.callTimeout = callTimeout
 	})
 }

@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kakao/varlog/internal/storage"
+	snerrors "github.com/kakao/varlog/internal/storagenode/errors"
 	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
@@ -39,8 +40,8 @@ type Executor struct {
 	cm      *committer
 	bw      *backupWriter
 
-	inflight       int64
-	inflightAppend int64
+	inflight       atomic.Int64
+	inflightAppend atomic.Int64
 
 	// FIXME: move to lsc
 	globalLowWatermark struct {
@@ -147,13 +148,21 @@ func NewExecutor(opts ...ExecutorOption) (lse *Executor, err error) {
 		lse:           lse,
 		logger:        lse.logger.Named("backup writer"),
 	})
+	if err != nil {
+		return
+	}
+
+	err = lse.restoreCommitWaitTasks(rp)
+	if err != nil {
+		return
+	}
 
 	return lse, err
 }
 
 func (lse *Executor) Replicate(ctx context.Context, llsnList []types.LLSN, dataList [][]byte) error {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	switch lse.esm.load() {
 	case executorStateSealing, executorStateSealed, executorStateLearning:
@@ -174,11 +183,11 @@ func (lse *Executor) Replicate(ctx context.Context, llsnList []types.LLSN, dataL
 		if lse.lsm == nil {
 			return
 		}
-		atomic.AddInt64(&lse.lsm.ReplicateLogs, int64(batchSize))
-		atomic.AddInt64(&lse.lsm.ReplicateBytes, dataBytes)
-		atomic.AddInt64(&lse.lsm.ReplicateDuration, time.Since(startTime).Microseconds())
-		atomic.AddInt64(&lse.lsm.ReplicateOperations, 1)
-		atomic.AddInt64(&lse.lsm.ReplicatePreparationMicro, preparationDuration.Microseconds())
+		lse.lsm.ReplicateLogs.Add(int64(batchSize))
+		lse.lsm.ReplicateBytes.Add(dataBytes)
+		lse.lsm.ReplicateDuration.Add(time.Since(startTime).Microseconds())
+		lse.lsm.ReplicateOperations.Add(1)
+		lse.lsm.ReplicatePreparationMicro.Add(preparationDuration.Microseconds())
 	}()
 
 	oldLLSN, newLLSN := llsnList[0], llsnList[batchSize-1]+1
@@ -200,7 +209,7 @@ func (lse *Executor) Replicate(ctx context.Context, llsnList []types.LLSN, dataL
 		return err
 	}
 
-	if err := lse.cm.sendCommitWaitTask(ctx, cwts); err != nil {
+	if err := lse.cm.sendCommitWaitTask(ctx, cwts, false /*ignoreSealing*/); err != nil {
 		lse.logger.Error("could not send commit wait task list", zap.Error(err))
 		cwtListNode := cwts.Back()
 		for cwtListNode != nil {
@@ -213,16 +222,23 @@ func (lse *Executor) Replicate(ctx context.Context, llsnList []types.LLSN, dataL
 	return nil
 }
 
+// Seal checks whether the log stream replica has committed the log entry
+// confirmed lastly by the metadata repository. Since Trim can remove the last
+// log entry, Seal compares the argument lastCommittedGLSN to the
+// uncommittedBegin of the log stream context instead of the local high
+// watermark.
+//
+// FIXME: No need to return localHWM.
 func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (status varlogpb.LogStreamStatus, localHWM types.GLSN, err error) {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	lse.muAdmin.Lock()
 	defer lse.muAdmin.Unlock()
 
 	if lse.esm.load() == executorStateClosed {
 		// FIXME: strange logstream status
-		err = verrors.ErrClosed
+		err = snerrors.ErrClosed
 		return
 	}
 
@@ -231,13 +247,12 @@ func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (stat
 		return varlogpb.LogStreamStatusSealed, lastCommittedGLSN, nil
 	}
 
-	// TODO: We can deduplicate uncommittedLLSNBegin and local high
-	// watermark.
-	_, _, _, invalid := lse.lsc.reportCommitBase()
-	localHighWatermark := lse.lsc.localHighWatermark()
-	localHWM = localHighWatermark.GLSN
-	if localHighWatermark.GLSN > lastCommittedGLSN {
-		panic("log stream: seal: metadata repository may be behind of log stream")
+	_, _, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
+	if uncommittedBegin.GLSN-1 > lastCommittedGLSN {
+		lse.logger.Panic("log stream: seal: metadata repository may be behind of log stream",
+			zap.Any("local", uncommittedBegin.GLSN-1),
+			zap.Any("mr", lastCommittedGLSN),
+		)
 	}
 	if lastCommittedGLSN.Invalid() && invalid {
 		// NOTE: Invalid last committed GLSN means this log stream just
@@ -247,11 +262,15 @@ func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (stat
 		// log stream.
 		lse.logger.Panic("log stream: seal: unexpected last committed GLSN")
 	}
+
+	_, localHighWatermark, _ := lse.lsc.localWatermarks()
+	localHWM = localHighWatermark.GLSN
+
 	if lse.esm.load() == executorStateLearning {
 		return varlogpb.LogStreamStatusSealing, localHWM, nil
 	}
 
-	if localHighWatermark.GLSN < lastCommittedGLSN || invalid {
+	if uncommittedBegin.GLSN-1 < lastCommittedGLSN || invalid {
 		status = varlogpb.LogStreamStatusSealing
 		return status, localHWM, nil
 	}
@@ -262,15 +281,15 @@ func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (stat
 		return status, localHWM, nil
 	}
 
-	lse.resetInternalState(localHighWatermark.LLSN, true)
+	lse.resetInternalState(uncommittedBegin.LLSN-1, true)
 
 	lse.esm.store(executorStateSealed)
 	return status, localHWM, nil
 }
 
 func (lse *Executor) Unseal(_ context.Context, replicas []varlogpb.LogStreamReplica) (err error) {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	lse.muAdmin.Lock()
 	defer lse.muAdmin.Unlock()
@@ -333,10 +352,12 @@ func (lse *Executor) Unseal(_ context.Context, replicas []varlogpb.LogStreamRepl
 }
 
 func (lse *Executor) resetInternalState(lastCommittedLLSN types.LLSN, discardCommitWaitTasks bool) {
-	lse.logger.Debug("resetting internal state",
-		zap.Int64("inflight", atomic.LoadInt64(&lse.inflight)),
-		zap.Int64("inflight_append", atomic.LoadInt64(&lse.inflightAppend)),
-	)
+	if ce := lse.logger.Check(zap.DebugLevel, "resetting internal state"); ce != nil {
+		ce.Write(
+			zap.Int64("inflight", lse.inflight.Load()),
+			zap.Int64("inflight_append", lse.inflightAppend.Load()),
+		)
+	}
 
 	// close replicClients in replica connector
 	lse.rcs.close()
@@ -366,8 +387,8 @@ func (lse *Executor) resetInternalState(lastCommittedLLSN types.LLSN, discardCom
 }
 
 func (lse *Executor) Report(_ context.Context) (report snpb.LogStreamUncommitReport, err error) {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	if lse.esm.load() == executorStateClosed {
 		return snpb.LogStreamUncommitReport{}, verrors.ErrClosed
@@ -395,7 +416,9 @@ func (lse *Executor) Report(_ context.Context) (report snpb.LogStreamUncommitRep
 	}
 	prevUncommittedLLSNEnd := lse.prevUncommittedLLSNEnd.Load()
 	if prevUncommittedLLSNEnd != uncommittedLLSNEnd {
-		lse.logger.Debug("log stream: report", zap.Any("report", report))
+		if ce := lse.logger.Check(zap.DebugLevel, "log stream: report"); ce != nil {
+			ce.Write(zap.Any("report", report))
+		}
 		lse.prevUncommittedLLSNEnd.Store(uncommittedLLSNEnd)
 	}
 
@@ -406,8 +429,8 @@ func (lse *Executor) Report(_ context.Context) (report snpb.LogStreamUncommitRep
 }
 
 func (lse *Executor) Commit(ctx context.Context, commitResult snpb.LogStreamCommitResult) error {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	if lse.esm.load() == executorStateClosed {
 		return verrors.ErrClosed
@@ -422,7 +445,9 @@ func (lse *Executor) Commit(ctx context.Context, commitResult snpb.LogStreamComm
 	}
 
 	if types.Version(atomic.LoadUint64(&lse.prevCommitVersion)) != commitResult.Version {
-		lse.logger.Debug("commit", zap.String("commit_result", commitResult.String()))
+		if ce := lse.logger.Check(zap.DebugLevel, "commit"); ce != nil {
+			ce.Write(zap.String("commit_result", commitResult.String()))
+		}
 		atomic.StoreUint64(&lse.prevCommitVersion, uint64(commitResult.Version))
 	}
 
@@ -440,8 +465,8 @@ func (lse *Executor) Commit(ctx context.Context, commitResult snpb.LogStreamComm
 }
 
 func (lse *Executor) Metadata() (snpb.LogStreamReplicaMetadataDescriptor, error) {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	ret, err, _ := lse.sf.Do(singleflightKeyMetadata, func() (interface{}, error) {
 		state := lse.esm.load()
@@ -467,8 +492,7 @@ func (lse *Executor) metadataDescriptor(state executorState) snpb.LogStreamRepli
 		status = varlogpb.LogStreamStatusSealed
 	}
 
-	localLowWatermark := lse.lsc.localLowWatermark()
-	localHighWatermark := lse.lsc.localHighWatermark()
+	localLowWatermark, localHighWatermark, _ := lse.lsc.localWatermarks()
 	version, globalHighWatermark, _, _ := lse.lsc.reportCommitBase()
 	return snpb.LogStreamReplicaMetadataDescriptor{
 		LogStreamReplica: varlogpb.LogStreamReplica{
@@ -498,8 +522,8 @@ func (lse *Executor) metadataDescriptor(state executorState) snpb.LogStreamRepli
 }
 
 func (lse *Executor) Trim(_ context.Context, glsn types.GLSN) error {
-	atomic.AddInt64(&lse.inflight, 1)
-	defer atomic.AddInt64(&lse.inflight, -1)
+	lse.inflight.Add(1)
+	defer lse.inflight.Add(-1)
 
 	lse.muAdmin.Lock()
 	defer lse.muAdmin.Unlock()
@@ -520,46 +544,45 @@ func (lse *Executor) Trim(_ context.Context, glsn types.GLSN) error {
 		return fmt.Errorf("log stream: trim: %d not appended, global high watermark %d", glsn, globalHWM)
 	}
 
-	const safetyGap = 1
-	localHighWatermark := lse.lsc.localHighWatermark()
-	if glsn > localHighWatermark.GLSN-safetyGap {
-		return fmt.Errorf("log stream: trim: too high to trim %d, local high watermark %d, safety gap: %d",
-			glsn, localHighWatermark.GLSN, safetyGap)
-	}
-
-	// find next low watermark
-	sr, err := lse.SubscribeWithGLSN(glsn+1, localHighWatermark.GLSN+1)
-	if err != nil {
-		return fmt.Errorf("log stream: trim: %w", err)
-	}
-	nextLowWatermark, ok := <-sr.Result()
-	sr.Stop()
-	if !ok {
-		return fmt.Errorf("log stream: trim: too high to trim %d", glsn)
-	}
-
-	lse.globalLowWatermark.mu.Lock()
-	if glsn < lse.globalLowWatermark.glsn {
-		lse.globalLowWatermark.mu.Unlock()
+	localLowWatermark, localHighWatermark, _ := lse.lsc.localWatermarks()
+	if localHighWatermark.Invalid() || glsn < localLowWatermark.GLSN {
 		// already trimmed
 		return nil
 	}
-	lse.globalLowWatermark.mu.Unlock()
+
+	var nextLocalLWM varlogpb.LogSequenceNumber
+	if localHighWatermark.GLSN <= glsn {
+		// delete all log entries, so no local lwm
+		nextLocalLWM = varlogpb.LogSequenceNumber{LLSN: types.InvalidLLSN, GLSN: types.InvalidGLSN}
+	} else {
+		// find next low watermark
+		sr, err := lse.SubscribeWithGLSN(glsn+1, localHighWatermark.GLSN+1)
+		if err != nil {
+			return fmt.Errorf("log stream: trim: %w", err)
+		}
+		entry, ok := <-sr.Result()
+		if !ok {
+			return fmt.Errorf("log stream: trim: too high to trim %d", glsn)
+		}
+		sr.Stop()
+
+		nextLocalLWM = varlogpb.LogSequenceNumber{
+			LLSN: entry.LLSN,
+			GLSN: entry.GLSN,
+		}
+	}
 
 	if err := lse.stg.Trim(glsn); err != nil {
 		return err
 	}
+
+	lse.lsc.setLocalLowWatermark(nextLocalLWM)
 
 	// update global low watermark
 	lse.globalLowWatermark.mu.Lock()
 	defer lse.globalLowWatermark.mu.Unlock()
 	lse.globalLowWatermark.glsn = glsn + 1
 
-	// update local low watermark
-	lse.lsc.setLocalLowWatermark(varlogpb.LogSequenceNumber{
-		LLSN: nextLowWatermark.LLSN,
-		GLSN: nextLowWatermark.GLSN,
-	})
 	return nil
 }
 
@@ -606,7 +629,7 @@ func (lse *Executor) waitForDrainage() {
 	timer := time.NewTimer(tick)
 	defer timer.Stop()
 
-	for atomic.LoadInt64(&lse.inflight) > 0 {
+	for lse.inflight.Load() > 0 {
 		<-timer.C
 		timer.Reset(tick)
 	}
@@ -628,11 +651,41 @@ func (lse *Executor) restoreLogStreamContext(rp storage.RecoveryPoints) *logStre
 		lse.logger.Info("restore log stream context", zap.String("mode", restoreMode))
 	}()
 
-	if cc == nil && last == nil { // new log stream replica
+	// Log stream replica that has not committed any logs yet. For example, a
+	// new log stream replica.
+	if cc == nil && last == nil {
+		uncommittedLLSNEnd := lsc.uncommittedLLSNEnd.Load()
+		if !rp.UncommittedLLSN.End.Invalid() {
+			uncommittedLLSNEnd = rp.UncommittedLLSN.End
+		}
+		lsc.uncommittedLLSNEnd.Store(uncommittedLLSNEnd)
+
 		return lsc
 	}
 
-	if cc != nil && last != nil { // recovery
+	// Log stream replica with a commit context but no log entry. For instance,
+	// the log stream replica that trimmed all log entries.
+	if cc != nil && last == nil {
+		restoreMode = "recovered"
+		uncommittedLLSNBegin := cc.CommittedLLSNBegin + types.LLSN(cc.CommittedGLSNEnd-cc.CommittedGLSNBegin)
+		uncommittedBegin := varlogpb.LogSequenceNumber{
+			LLSN: uncommittedLLSNBegin,
+			GLSN: cc.CommittedGLSNEnd,
+		}
+		lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedBegin, false /*invalid*/)
+
+		uncommittedLLSNEnd := uncommittedLLSNBegin
+		if !rp.UncommittedLLSN.End.Invalid() {
+			uncommittedLLSNEnd = rp.UncommittedLLSN.End
+		}
+		lsc.uncommittedLLSNEnd.Store(uncommittedLLSNEnd)
+
+		return lsc
+	}
+
+	// Log stream replica that has a commit context and log entries. The commit
+	// context specifies the last log entry exactly.
+	if cc != nil && last != nil {
 		restoreMode = "recovered"
 		uncommittedLLSNBegin := cc.CommittedLLSNBegin + types.LLSN(cc.CommittedGLSNEnd-cc.CommittedGLSNBegin)
 		if uncommittedLLSNBegin-1 == last.LLSN {
@@ -640,8 +693,14 @@ func (lse *Executor) restoreLogStreamContext(rp storage.RecoveryPoints) *logStre
 				LLSN: last.LLSN + 1,
 				GLSN: last.GLSN + 1,
 			}
-			lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedBegin, false)
-			lsc.uncommittedLLSNEnd.Store(uncommittedLLSNBegin)
+			lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedBegin, false /*invalid*/)
+
+			uncommittedLLSNEnd := uncommittedLLSNBegin
+			if !rp.UncommittedLLSN.End.Invalid() {
+				uncommittedLLSNEnd = rp.UncommittedLLSN.End
+			}
+			lsc.uncommittedLLSNEnd.Store(uncommittedLLSNEnd)
+
 			lsc.setLocalLowWatermark(varlogpb.LogSequenceNumber{
 				LLSN: first.LLSN,
 				GLSN: first.GLSN,
@@ -650,15 +709,25 @@ func (lse *Executor) restoreLogStreamContext(rp storage.RecoveryPoints) *logStre
 		}
 	}
 
-	// something wrong
+	// Log stream replica is invalid:
+	//
+	// - It has committed log entries but no commit context.
+	// - It has a commit context and committed log entries, but the commit
+	//   context doesn't specify the last log entry.
+	//
+	// Invalid log stream replica should be resolved by synchronization from
+	// the sealed source replica. Log stream context should be set carefully to
+	// receive copies of log entries through synchronization. To restore the
+	// log stream replica restarted during the synchronization phase, the log
+	// stream context is initiated by the committed log entries.
 	restoreMode = "invalid"
-	lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, varlogpb.LogSequenceNumber{}, true)
+	lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, varlogpb.LogSequenceNumber{}, true /*invalid*/)
 	if last != nil {
 		uncommittedBegin := varlogpb.LogSequenceNumber{
 			LLSN: last.LLSN + 1,
 			GLSN: last.GLSN + 1,
 		}
-		lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, uncommittedBegin, true)
+		lsc.storeReportCommitBase(types.InvalidVersion, types.InvalidGLSN, uncommittedBegin, true /*invalid*/)
 		lsc.uncommittedLLSNEnd.Store(last.LLSN + 1)
 		lsc.setLocalLowWatermark(varlogpb.LogSequenceNumber{
 			LLSN: first.LLSN,
@@ -666,4 +735,34 @@ func (lse *Executor) restoreLogStreamContext(rp storage.RecoveryPoints) *logStre
 		})
 	}
 	return lsc
+}
+
+func (lse *Executor) restoreCommitWaitTasks(rp storage.RecoveryPoints) error {
+	// Invalid log stream replica does not receive commit messages from the metadata repository since synchronization can resolve it only.
+	_, _, _, invalid := lse.lsc.reportCommitBase()
+	if invalid {
+		return nil
+	}
+
+	// No uncommitted logs, so no CommitWaitTasks.
+	if rp.UncommittedLLSN.Begin.Invalid() {
+		return nil
+	}
+
+	cwts := newListQueue()
+	for i := rp.UncommittedLLSN.Begin; i < rp.UncommittedLLSN.End; i++ {
+		cwts.PushFront(newCommitWaitTask(nil))
+	}
+	err := lse.cm.sendCommitWaitTask(context.Background(), cwts, true /*ignoreSealing*/)
+	if err != nil {
+		lse.logger.Error("could not send commit wait task list", zap.Error(err))
+		cwtListNode := cwts.Back()
+		for cwtListNode != nil {
+			cwt := cwtListNode.value.(*commitWaitTask)
+			cwt.release()
+			cwtListNode = cwtListNode.Prev()
+		}
+		return err
+	}
+	return nil
 }

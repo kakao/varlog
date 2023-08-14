@@ -1,6 +1,11 @@
 package main
 
 import (
+	"strings"
+
+	"github.com/urfave/cli/v2"
+
+	"github.com/kakao/varlog/internal/admin"
 	"github.com/kakao/varlog/internal/flags"
 )
 
@@ -29,6 +34,13 @@ var (
 		Name:    "auto-unseal",
 		Aliases: []string{"enable-auto-unseal", "with-auto-unseal"},
 		Envs:    []string{"AUTO_UNSEAL", "ENABLE_AUTO_UNSEAL", "WITH_AUTO_UNSEAL"},
+	}
+	flagReplicaSelector = &cli.StringFlag{
+		Name:    "replica-selector",
+		Aliases: []string{"repsel"},
+		EnvVars: []string{"REPLICA_SELECTOR"},
+		Value:   admin.ReplicaSelectorNameLFU,
+		Usage:   strings.Join([]string{admin.ReplicaSelectorNameRandom, admin.ReplicaSelectorNameLFU}, " | "),
 	}
 
 	flagInitMRConnRetryCount = flags.FlagDesc{
@@ -59,31 +71,5 @@ var (
 	flagSNWatcherReportDeadline = flags.FlagDesc{
 		Name: "sn-watcher-report-deadline",
 		Envs: []string{"SN_WATCHER_REPORT_DEADLINE"},
-	}
-
-	flagLogDir = flags.FlagDesc{
-		Name:    "logdir",
-		Aliases: []string{"log-dir"},
-		Envs:    []string{"LOG_DIR", "LOGDIR"},
-	}
-	flagLogToStderr = flags.FlagDesc{
-		Name:    "logtostderr",
-		Aliases: []string{"log-to-stderr"},
-		Envs:    []string{"LOGTOSTDERR", "LOG_TO_STDERR"},
-	}
-	flagLogFileRetentionDays = flags.FlagDesc{
-		Name:    "logfile-retention-days",
-		Aliases: []string{"log-file-retention-days"},
-		Envs:    []string{"LOGFILE_RETENTION_DAYS", "LOG_FILE_RETENTION_DAYS"},
-	}
-	flagLogFileCompression = flags.FlagDesc{
-		Name:    "logfile-compression",
-		Aliases: []string{"log-file-compression"},
-		Envs:    []string{"LOGFILE_COMPRESSION", "LOG_FILE_COMPRESSION"},
-	}
-	flagLogLevel = flags.FlagDesc{
-		Name:    "loglevel",
-		Aliases: []string{"log-level"},
-		Envs:    []string{"LOGLEVEL", "LOG_LEVEL"},
 	}
 )

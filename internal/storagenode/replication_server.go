@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"sync/atomic"
 
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
@@ -40,7 +39,7 @@ func (rs *replicationServer) SyncInit(ctx context.Context, req *snpb.SyncInitReq
 	if !loaded {
 		return nil, fmt.Errorf("replication server: no log stream %v", req.Destination.LogStreamID)
 	}
-	syncRange, err := lse.SyncInit(ctx, req.Source, req.Range)
+	syncRange, err := lse.SyncInit(ctx, req.Source, req.Range, req.LastCommittedLLSN)
 	return &snpb.SyncInitResponse{Range: syncRange}, err
 }
 
@@ -61,8 +60,9 @@ func (rs *replicationServer) SyncReplicateStream(stream snpb.Replicator_SyncRepl
 		if err != nil {
 			if err == io.EOF {
 				err = nil
+			} else {
+				err = fmt.Errorf("replication server: sync replicate stream: %w", err)
 			}
-			err = fmt.Errorf("replication server: sync replicate stream: %w", err)
 			break
 		}
 
@@ -165,7 +165,7 @@ func (rs *replicationServer) replicate(ctx context.Context, requestC <-chan *rep
 				}
 			}
 
-			atomic.AddInt64(&lse.Metrics().ReplicateServerOperations, 1)
+			lse.Metrics().ReplicateServerOperations.Add(1)
 
 			err = lse.Replicate(ctx, rst.req.LLSN, rst.req.Data)
 			if err != nil {

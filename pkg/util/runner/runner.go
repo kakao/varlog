@@ -25,11 +25,11 @@ type Runner struct {
 	wg sync.WaitGroup
 
 	mu      sync.RWMutex
-	taskID  uint64
+	taskID  atomic.Uint64
 	cancels map[uint64]context.CancelFunc
 	state   State
 
-	numTasks uint64
+	numTasks atomic.Uint64
 
 	logger *zap.Logger
 }
@@ -65,7 +65,7 @@ func (r *Runner) WithManagedCancel(parent context.Context) (context.Context, con
 		return ctx, cancel
 	}
 
-	taskID := atomic.AddUint64(&r.taskID, 1)
+	taskID := r.taskID.Add(1)
 	managedCancel := func() {
 		cancel()
 		r.mu.Lock()
@@ -147,15 +147,15 @@ func (r *Runner) NumTasks() uint64 {
 	if r == nil {
 		return 0
 	}
-	return atomic.LoadUint64(&r.numTasks)
+	return r.numTasks.Load()
 }
 
 func (r *Runner) plusTask() {
-	atomic.AddUint64(&r.numTasks, 1)
+	r.numTasks.Add(1)
 }
 
 func (r *Runner) minusTask() {
-	atomic.AddUint64(&r.numTasks, ^uint64(0))
+	r.numTasks.Add(^uint64(0))
 }
 
 func (r *Runner) String() string {

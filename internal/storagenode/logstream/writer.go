@@ -15,7 +15,7 @@ import (
 type writer struct {
 	writerConfig
 	queue    chan *sequenceTask
-	inflight int64
+	inflight atomic.Int64
 	runner   *runner.Runner
 }
 
@@ -37,15 +37,17 @@ func newWriter(cfg writerConfig) (*writer, error) {
 
 // send sends a sequenceTask to the queue.
 func (w *writer) send(ctx context.Context, st *sequenceTask) (err error) {
-	inflight := atomic.AddInt64(&w.inflight, 1)
+	inflight := w.inflight.Add(1)
 	defer func() {
 		if err != nil {
-			inflight = atomic.AddInt64(&w.inflight, -1)
+			inflight = w.inflight.Add(-1)
 		}
-		w.logger.Debug("sent writer a task",
-			zap.Int64("inflight", inflight),
-			zap.Error(err),
-		)
+		if ce := w.logger.Check(zap.DebugLevel, "sent writer a task"); ce != nil {
+			ce.Write(
+				zap.Int64("inflight", inflight),
+				zap.Error(err),
+			)
+		}
 	}()
 
 	switch w.lse.esm.load() {
@@ -89,13 +91,13 @@ func (w *writer) writeLoopInternal(_ context.Context, st *sequenceTask) {
 		// _ = st.dwb.Close()
 		_ = st.wb.Close()
 		st.release()
-		inflight := atomic.AddInt64(&w.inflight, -1)
+		inflight := w.inflight.Add(-1)
 		if w.lse.lsm == nil {
 			return
 		}
-		atomic.AddInt64(&w.lse.lsm.WriterOperationDuration, time.Since(startTime).Microseconds())
-		atomic.AddInt64(&w.lse.lsm.WriterOperations, 1)
-		atomic.StoreInt64(&w.lse.lsm.WriterInflightOperations, inflight)
+		w.lse.lsm.WriterOperationDuration.Add(time.Since(startTime).Microseconds())
+		w.lse.lsm.WriterOperations.Add(1)
+		w.lse.lsm.WriterInflightOperations.Store(inflight)
 	}()
 
 	// err = st.dwb.Apply()
@@ -131,12 +133,14 @@ func (w *writer) waitForDrainage(cause error, forceDrain bool) {
 	timer := time.NewTimer(tick)
 	defer timer.Stop()
 
-	w.logger.Debug("draining writer tasks",
-		zap.Int64("inflight", atomic.LoadInt64(&w.inflight)),
-		zap.Error(cause),
-	)
+	if ce := w.logger.Check(zap.DebugLevel, "draining writer tasks"); ce != nil {
+		ce.Write(
+			zap.Int64("inflight", w.inflight.Load()),
+			zap.Error(cause),
+		)
+	}
 
-	for atomic.LoadInt64(&w.inflight) > 0 {
+	for w.inflight.Load() > 0 {
 		if !forceDrain {
 			<-timer.C
 			timer.Reset(tick)
@@ -151,7 +155,7 @@ func (w *writer) waitForDrainage(cause error, forceDrain bool) {
 				st.awgs[i].writeDone(cause)
 			}
 			st.release()
-			atomic.AddInt64(&w.inflight, -1)
+			w.inflight.Add(-1)
 		}
 	}
 }

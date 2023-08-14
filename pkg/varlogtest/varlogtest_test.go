@@ -16,10 +16,132 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/pkg/varlog/x/mlsa"
 	"github.com/kakao/varlog/pkg/varlogtest"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
+
+func TestVarlotTest_LogStreamAppender(t *testing.T) {
+	const (
+		cid               = types.ClusterID(1)
+		numLogs           = 10
+		replicationFactor = 3
+	)
+
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID)
+	}{
+		{
+			name: "Closed",
+			testf: func(t *testing.T, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID) {
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid)
+				require.NoError(t, err)
+
+				lsa.Close()
+				err = lsa.AppendBatch([][]byte{[]byte("foo")}, nil)
+				require.Equal(t, varlog.ErrClosed, err)
+			},
+		},
+		{
+			name: "AppendLogs",
+			testf: func(t *testing.T, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID) {
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid)
+				require.NoError(t, err)
+				defer lsa.Close()
+
+				cb := func(_ []varlogpb.LogEntryMeta, err error) {
+					assert.NoError(t, err)
+				}
+				for i := 0; i < numLogs; i++ {
+					err := lsa.AppendBatch([][]byte{[]byte("foo")}, cb)
+					require.NoError(t, err)
+				}
+			},
+		},
+		{
+			name: "Manager",
+			testf: func(t *testing.T, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID) {
+				mgr := mlsa.New(vcli)
+
+				_, err := mgr.Get(tpid+1, lsid)
+				require.Error(t, err)
+
+				_, err = mgr.Get(tpid, lsid+1)
+				require.Error(t, err)
+
+				lsa1, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+				lsa2, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+
+				var wg sync.WaitGroup
+				wg.Add(2)
+				cb := func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+				}
+				err = lsa1.AppendBatch([][]byte{[]byte("foo")}, cb)
+				require.NoError(t, err)
+				err = lsa2.AppendBatch([][]byte{[]byte("foo")}, cb)
+				require.NoError(t, err)
+				wg.Wait()
+
+				lsa1.Close()
+				err = lsa2.AppendBatch([][]byte{[]byte("foo")}, nil)
+				require.Equal(t, varlog.ErrClosed, err)
+
+				lsa1, err = mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+				wg.Add(1)
+				err = lsa1.AppendBatch([][]byte{[]byte("foo")}, cb)
+				require.NoError(t, err)
+				err = lsa2.AppendBatch([][]byte{[]byte("foo")}, nil)
+				require.Equal(t, varlog.ErrClosed, err)
+				wg.Wait()
+				lsa1.Close()
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			vt := varlogtest.New(cid, replicationFactor)
+			adm := vt.Admin()
+			vlg := vt.Log()
+			defer func() {
+				require.NoError(t, vlg.Close())
+				require.NoError(t, adm.Close())
+			}()
+
+			for i := 0; i < replicationFactor; i++ {
+				snid := types.StorageNodeID(i + 1)
+				addr := fmt.Sprintf("sn%03d", i+1)
+				snMetaDesc, err := adm.AddStorageNode(context.Background(), snid, addr)
+				require.NoError(t, err)
+				require.Equal(t, cid, snMetaDesc.ClusterID)
+				require.Empty(t, snMetaDesc.LogStreamReplicas)
+				require.Equal(t, varlogpb.StorageNodeStatusRunning, snMetaDesc.Status)
+				require.Equal(t, addr, snMetaDesc.StorageNode.Address)
+				require.NotEmpty(t, snMetaDesc.Storages)
+			}
+
+			td, err := adm.AddTopic(context.Background())
+			require.NoError(t, err)
+			require.Equal(t, varlogpb.TopicStatusRunning, td.Status)
+
+			lsd, err := adm.AddLogStream(context.Background(), td.TopicID, nil)
+			require.NoError(t, err)
+			require.Equal(t, td.TopicID, lsd.TopicID)
+			require.Equal(t, varlogpb.LogStreamStatusRunning, lsd.Status)
+			require.Len(t, lsd.Replicas, replicationFactor)
+
+			tc.testf(t, vlg, td.TopicID, lsd.LogStreamID)
+		})
+	}
+}
 
 func TestVarlogTest(t *testing.T) {
 	defer goleak.VerifyNone(t)

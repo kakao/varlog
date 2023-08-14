@@ -169,6 +169,12 @@ def start(args: argparse.Namespace) -> None:
             for volume in volumes:
                 cmd.append(f"--volumes={volume}")
 
+            if args.ballast_size:
+                cmd.append(f"--ballast-size={args.ballast_size}")
+
+            if args.append_pipeline_size:
+                cmd.append(f"--append-pipeline-size={args.append_pipeline_size}")
+
             # grpc options
             if args.server_read_buffer_size:
                 cmd.append(
@@ -176,6 +182,12 @@ def start(args: argparse.Namespace) -> None:
             if args.server_write_buffer_size:
                 cmd.append(
                     f"--server-write-buffer-size={args.server_write_buffer_size}")
+            if args.server_initial_conn_window_size:
+                cmd.append(
+                        f"--server-initial-conn-window-size={args.server_initial_conn_window_size}")
+            if args.server_initial_stream_window_size:
+                cmd.append(
+                        f"--server-initial-stream-window-size={args.server_initial_stream_window_size}")
             if args.replication_client_read_buffer_size:
                 cmd.append(
                     f"--replication-client-read-buffer-size={args.replication_client_read_buffer_size}")
@@ -184,16 +196,27 @@ def start(args: argparse.Namespace) -> None:
                     f"--replication-client-write-buffer-size={args.replication_client_write_buffer_size}")
 
             # storage options
+            if args.experimental_storage_separate_db:
+                cmd.append("--experimental-storage-separate-db")
             if args.storage_disable_wal:
                 cmd.append("--storage-disable-wal")
             if args.storage_no_sync:
                 cmd.append("--storage-no-sync")
+            if args.storage_l0_compaction_file_threshold:
+                cmd.append(
+                    f"--storage-l0-compaction-file-threshold={args.storage_l0_compaction_file_threshold}")
             if args.storage_l0_compaction_threshold:
                 cmd.append(
                     f"--storage-l0-compaction-threshold={args.storage_l0_compaction_threshold}")
             if args.storage_l0_stop_writes_threshold:
                 cmd.append(
                     f"--storage-l0-stop-writes-threshold={args.storage_l0_stop_writes_threshold}")
+            if args.storage_l0_target_file_size:
+                cmd.append(
+                    f"--storage-l0-target-file-size={args.storage_l0_target_file_size}")
+            if args.storage_flush_split_bytes:
+                cmd.append(
+                    f"--storage-flush-split-bytes={args.storage_flush_split_bytes}")
             if args.storage_lbase_max_bytes:
                 cmd.append(
                     f"--storage-lbase-max-bytes={args.storage_lbase_max_bytes}")
@@ -209,6 +232,8 @@ def start(args: argparse.Namespace) -> None:
             if args.storage_max_concurrent_compaction:
                 cmd.append(
                     f"--storage-max-concurrent-compaction={args.storage_max_concurrent_compaction}")
+            if args.storage_metrics_log_interval:
+                cmd.append(f"--storage-metrics-log-interval={args.storage_metrics_log_interval}")
             if args.storage_verbose:
                 cmd.append("--storage-verbose")
 
@@ -246,23 +271,31 @@ def main() -> None:
     parser.add_argument("--volumes", nargs="+", required=True, action="extend",
                         type=str)
     parser.add_argument("--ballast-size", type=str)
+    parser.add_argument("--append-pipeline-size", type=int)
 
     # grpc options
     parser.add_argument("--server-read-buffer-size", type=str)
     parser.add_argument("--server-write-buffer-size", type=str)
+    parser.add_argument("--server-initial-conn-window-size", type=str)
+    parser.add_argument("--server-initial-stream-window-size", type=str)
     parser.add_argument("--replication-client-read-buffer-size", type=str)
     parser.add_argument("--replication-client-write-buffer-size", type=str)
 
     # storage options
+    parser.add_argument("--experimental-storage-separate-db", action="store_true")
     parser.add_argument("--storage-disable-wal", action="store_true")
     parser.add_argument("--storage-no-sync", action="store_true")
-    parser.add_argument("--storage-l0-compaction-threshold", type=int)
-    parser.add_argument("--storage-l0-stop-writes-threshold", type=int)
+    parser.add_argument("--storage-l0-compaction-file-threshold", type=str)
+    parser.add_argument("--storage-l0-compaction-threshold", type=str)
+    parser.add_argument("--storage-l0-stop-writes-threshold", type=str)
+    parser.add_argument("--storage-l0-target-file-size", type=str)
+    parser.add_argument("--storage-flush-split-bytes", type=str)
     parser.add_argument("--storage-lbase-max-bytes", type=str)
-    parser.add_argument("--storage-max-open-files", type=int)
+    parser.add_argument("--storage-max-open-files", type=str)
     parser.add_argument("--storage-mem-table-size", type=str)
-    parser.add_argument("--storage-mem-table-stop-writes-threshold", type=int)
-    parser.add_argument("--storage-max-concurrent-compaction", type=int)
+    parser.add_argument("--storage-mem-table-stop-writes-threshold", type=str)
+    parser.add_argument("--storage-max-concurrent-compaction", type=str)
+    parser.add_argument("--storage-metrics-log-interval", type=str)
     parser.add_argument("--storage-verbose", action="store_true")
 
     # logging options

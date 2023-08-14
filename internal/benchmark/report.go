@@ -17,7 +17,7 @@ func NewAppendReportFromMetrics(metrics AppendMetrics, interval time.Duration) A
 		bps = float64(metrics.bytes) / itv
 	}
 	if metrics.requests > 0 {
-		dur = float64(metrics.durationMS / metrics.requests)
+		dur = metrics.durationMS / float64(metrics.requests)
 	}
 	return AppendReport{
 		RequestsPerSecond: rps,

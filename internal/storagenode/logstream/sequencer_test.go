@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -80,6 +79,8 @@ func testSequenceTask(stg *storage.Storage) *sequenceTask {
 
 	st.cwts = newListQueue()
 	st.cwts.PushFront(newCommitWaitTask(awg))
+
+	st.rts = &replicateTaskSlice{}
 
 	return st
 }
@@ -192,8 +193,10 @@ func TestSequencer_FailToSendToReplicateClient(t *testing.T) {
 	}
 
 	st := testSequenceTask(stg)
-	st.rts = []*replicateTask{
-		{},
+	st.rts = &replicateTaskSlice{
+		tasks: []*replicateTask{
+			{},
+		},
 	}
 	sq.sequenceLoopInternal(context.Background(), st)
 	assert.Len(t, wr.queue, 1)
@@ -237,7 +240,7 @@ func TestSequencer_Drain(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	assert.EqualValues(t, numTasks, atomic.LoadInt64(&sq.inflight))
+	assert.EqualValues(t, numTasks, sq.inflight.Load())
 	assert.Len(t, sq.queue, numTasks)
 
 	lse.esm.store(executorStateSealing)
@@ -254,7 +257,7 @@ func TestSequencer_Drain(t *testing.T) {
 	}()
 
 	assert.Eventually(t, func() bool {
-		return atomic.LoadInt64(&sq.inflight) == 0 && len(sq.queue) == 0
+		return sq.inflight.Load() == 0 && len(sq.queue) == 0
 	}, time.Second, 10*time.Millisecond)
 
 	cancel()
@@ -285,11 +288,11 @@ func TestSequencer_ForceDrain(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	assert.EqualValues(t, numTasks, atomic.LoadInt64(&sq.inflight))
+	assert.EqualValues(t, numTasks, sq.inflight.Load())
 	assert.Len(t, sq.queue, numTasks)
 
 	sq.waitForDrainage(errors.New("force drain"), true)
 
-	assert.Zero(t, atomic.LoadInt64(&sq.inflight))
+	assert.Zero(t, sq.inflight.Load())
 	assert.Empty(t, sq.queue)
 }

@@ -12,31 +12,28 @@ import (
 	"sync/atomic"
 	"time"
 
-	grpcmiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpczap "github.com/grpc-ecosystem/go-grpc-middleware/logging/zap"
-	grpcctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
+	"github.com/puzpuzpuz/xsync/v2"
 	"github.com/soheilhy/cmux"
-	"go.opentelemetry.io/otel/metric/global"
+	"go.opentelemetry.io/otel"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
-	"google.golang.org/grpc/status"
 
 	"github.com/kakao/varlog/internal/storage"
+	snerrors "github.com/kakao/varlog/internal/storagenode/errors"
 	"github.com/kakao/varlog/internal/storagenode/executorsmap"
 	"github.com/kakao/varlog/internal/storagenode/logstream"
 	"github.com/kakao/varlog/internal/storagenode/pprof"
 	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/internal/storagenode/volume"
+	"github.com/kakao/varlog/pkg/rpc/interceptors/logging"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/fputil"
 	"github.com/kakao/varlog/pkg/util/netutil"
-	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
@@ -53,7 +50,7 @@ type StorageNode struct {
 
 	executors *executorsmap.ExecutorsMap
 
-	mu           sync.RWMutex
+	mu           *xsync.RBMutex
 	lis          net.Listener
 	server       *grpc.Server
 	healthServer *health.Server
@@ -74,6 +71,8 @@ type StorageNode struct {
 	limits struct {
 		logStreamReplicasCount atomic.Int32
 	}
+
+	wgAppenders sync.WaitGroup
 }
 
 func NewStorageNode(opts ...Option) (*StorageNode, error) {
@@ -82,7 +81,7 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 		return nil, err
 	}
 
-	metrics, err := telemetry.RegisterMetrics(global.Meter("varlogsn"), cfg.snid)
+	metrics, err := telemetry.RegisterMetrics(otel.Meter("varlogsn"))
 	if err != nil {
 		return nil, err
 	}
@@ -101,27 +100,25 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 	}
 	dataDirs = filterValidDataDirectories(dataDirs, cfg.cid, cfg.snid, cfg.logger)
 
-	grpcServer := grpc.NewServer(
+	grpcServerOpts := []grpc.ServerOption{
 		grpc.ReadBufferSize(int(cfg.grpcServerReadBufferSize)),
 		grpc.WriteBufferSize(int(cfg.grpcServerWriteBufferSize)),
 		grpc.MaxRecvMsgSize(int(cfg.grpcServerMaxRecvMsgSize)),
-		grpcmiddleware.WithUnaryServerChain(
-			grpcctxtags.UnaryServerInterceptor(),
-			grpczap.UnaryServerInterceptor(cfg.logger, grpczap.WithDecider(
-				func(fullMethodName string, err error) bool {
-					return err != nil || grpcHandlerLogAllowList[fullMethodName]
-				},
-			)),
-			grpczap.PayloadUnaryServerInterceptor(cfg.logger, func(_ context.Context, fullMethodName string, _ any) bool {
-				return grpcPayloadLogAllowList[fullMethodName]
-			}),
+		grpc.ChainUnaryInterceptor(
+			logging.UnaryServerInterceptor(cfg.logger),
 		),
-	)
+	}
+	if opt := cfg.grpcServerInitialConnWindowSize; opt.set {
+		grpcServerOpts = append(grpcServerOpts, grpc.InitialConnWindowSize(opt.value))
+	}
+	if opt := cfg.grpcServerInitialWindowSize; opt.set {
+		grpcServerOpts = append(grpcServerOpts, grpc.InitialWindowSize(opt.value))
+	}
 
 	sn := &StorageNode{
 		config:       cfg,
 		executors:    executorsmap.New(hintNumExecutors),
-		server:       grpcServer,
+		server:       grpc.NewServer(grpcServerOpts...),
 		healthServer: health.NewServer(),
 		closedC:      make(chan struct{}),
 		snPaths:      snPaths,
@@ -129,6 +126,7 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 		metrics:      metrics,
 		startTime:    time.Now().UTC(),
 	}
+	sn.mu = xsync.NewRBMutex()
 	if sn.ballastSize > 0 {
 		sn.ballast = make([]byte, sn.ballastSize)
 	}
@@ -196,6 +194,8 @@ func (sn *StorageNode) Serve() error {
 		zap.Int64("grpcServerReadBufferSize", sn.grpcServerReadBufferSize),
 		zap.Int64("grpcServerWriteBufferSize", sn.grpcServerWriteBufferSize),
 		zap.Int64("grpcServerMaxRecvMsgSize", sn.grpcServerMaxRecvMsgSize),
+		zap.Int32("grpcServerInitialConnWindowSize", sn.grpcServerInitialConnWindowSize.value),
+		zap.Int32("grpcServerInitialStreamWindowSize", sn.grpcServerInitialWindowSize.value),
 		zap.Int64("grpcReplicateClientReadBufferSize", sn.replicateClientReadBufferSize),
 		zap.Int64("grpcReplicateClientWriteBufferSize", sn.replicateClientWriteBufferSize),
 	)
@@ -244,15 +244,16 @@ func (sn *StorageNode) Close() (err error) {
 		return true
 	})
 	sn.server.Stop() // TODO: sn.server.GracefulStop() -> need not to use mutex
+	sn.wgAppenders.Wait()
 	sn.logger.Info("closed")
 	return err
 }
 
 func (sn *StorageNode) getMetadata(_ context.Context) (*snpb.StorageNodeMetadataDescriptor, error) {
-	sn.mu.RLock()
-	defer sn.mu.RUnlock()
+	rt := sn.mu.RLock()
+	defer sn.mu.RUnlock(rt)
 	if sn.closed {
-		return nil, errors.New("storage node: closed")
+		return nil, snerrors.ErrClosed
 	}
 
 	ret, _, _ := sn.sf.Do(singleflightKeyMetadata, func() (interface{}, error) {
@@ -290,14 +291,20 @@ func (sn *StorageNode) getMetadata(_ context.Context) (*snpb.StorageNodeMetadata
 }
 
 func (sn *StorageNode) addLogStreamReplica(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, snPath string) (snpb.LogStreamReplicaMetadataDescriptor, error) {
-	sn.mu.RLock()
-	defer sn.mu.RUnlock()
+	rt := sn.mu.RLock()
+	defer sn.mu.RUnlock(rt)
 	if sn.closed {
-		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.New("storage node: closed")
+		return snpb.LogStreamReplicaMetadataDescriptor{}, snerrors.ErrClosed
 	}
 
 	lsDirName := volume.LogStreamDirName(tpid, lsid)
 	lsPath := path.Join(snPath, lsDirName)
+	// If flag `--experimental-storage-seprate-db` is turned on, the data
+	// directory should be created first because it might not exist currently.
+	// The storage engine will create subdirectories within the data directory
+	// while the flag is set.
+	// If the directory already exists, the error can be ignored silently.
+	_ = os.Mkdir(lsPath, volume.VolumeFileMode)
 
 	lse, err := sn.runLogStreamReplica(ctx, tpid, lsid, lsPath)
 	if err != nil {
@@ -310,10 +317,10 @@ func (sn *StorageNode) addLogStreamReplica(ctx context.Context, tpid types.Topic
 func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID, lsid types.LogStreamID, lsPath string) (*logstream.Executor, error) {
 	if added := sn.limits.logStreamReplicasCount.Add(1); sn.maxLogStreamReplicasCount >= 0 && added > sn.maxLogStreamReplicasCount {
 		sn.limits.logStreamReplicasCount.Add(-1)
-		return nil, status.Errorf(codes.ResourceExhausted, "storagenode: too many logstream replicas (tpid=%d, lsid=%d)", tpid, lsid)
+		return nil, snerrors.ErrTooManyReplicas
 	}
 
-	lsm, err := telemetry.RegisterLogStreamMetrics(sn.metrics, lsid)
+	lsm, err := telemetry.RegisterLogStreamMetrics(sn.metrics, tpid, lsid)
 	if err != nil {
 		return nil, err
 	}
@@ -357,15 +364,15 @@ func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID
 }
 
 func (sn *StorageNode) removeLogStreamReplica(_ context.Context, tpid types.TopicID, lsid types.LogStreamID) error {
-	sn.mu.RLock()
-	defer sn.mu.RUnlock()
+	rt := sn.mu.RLock()
+	defer sn.mu.RUnlock(rt)
 	if sn.closed {
-		return errors.New("storage node: closed")
+		return snerrors.ErrClosed
 	}
 
 	lse, loaded := sn.executors.LoadAndDelete(tpid, lsid)
 	if !loaded {
-		return verrors.ErrNotExist
+		return snerrors.ErrNotExist
 	}
 	if err := lse.Close(); err != nil {
 		sn.logger.Warn("error while closing log stream replica")
@@ -379,45 +386,45 @@ func (sn *StorageNode) removeLogStreamReplica(_ context.Context, tpid types.Topi
 }
 
 func (sn *StorageNode) seal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
-	sn.mu.RLock()
-	defer sn.mu.RUnlock()
+	rt := sn.mu.RLock()
+	defer sn.mu.RUnlock(rt)
 	if sn.closed {
-		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, errors.New("storage node: closed")
+		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, snerrors.ErrClosed
 	}
 
 	lse, loaded := sn.executors.Load(tpid, lsid)
 	if !loaded {
-		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, errors.New("storage node: no log stream")
+		return varlogpb.LogStreamStatusRunning, types.InvalidGLSN, snerrors.ErrNotExist
 	}
 
 	return lse.Seal(ctx, lastCommittedGLSN)
 }
 
 func (sn *StorageNode) unseal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, replicas []varlogpb.LogStreamReplica) error {
-	sn.mu.RLock()
-	defer sn.mu.RUnlock()
+	rt := sn.mu.RLock()
+	defer sn.mu.RUnlock(rt)
 	if sn.closed {
-		return errors.New("storage node: closed")
+		return snerrors.ErrClosed
 	}
 
 	lse, loaded := sn.executors.Load(tpid, lsid)
 	if !loaded {
-		return errors.New("storage node: no log stream")
+		return snerrors.ErrNotExist
 	}
 
 	return lse.Unseal(ctx, replicas)
 }
 
 func (sn *StorageNode) sync(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, dst varlogpb.LogStreamReplica) (*snpb.SyncStatus, error) {
-	sn.mu.RLock()
-	defer sn.mu.RUnlock()
+	rt := sn.mu.RLock()
+	defer sn.mu.RUnlock(rt)
 	if sn.closed {
-		return nil, errors.New("storage node: closed")
+		return nil, snerrors.ErrClosed
 	}
 
 	lse, loaded := sn.executors.Load(tpid, lsid)
 	if !loaded {
-		return nil, errors.New("storage node: no log stream")
+		return nil, snerrors.ErrNotExist
 	}
 
 	return lse.Sync(ctx, dst)

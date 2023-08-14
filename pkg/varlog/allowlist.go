@@ -18,6 +18,7 @@ import (
 
 // Allowlist represents selectable log streams.
 type Allowlist interface {
+	GetAll(topicID types.TopicID) []types.LogStreamID
 	Pick(topicID types.TopicID) (types.LogStreamID, bool)
 	Deny(topicID types.TopicID, logStreamID types.LogStreamID)
 	Contains(topicID types.TopicID, logStreamID types.LogStreamID) bool
@@ -144,6 +145,24 @@ func (adl *transientAllowlist) warmup() {
 		})
 		return nil, nil
 	})
+}
+
+func (adl *transientAllowlist) GetAll(topicID types.TopicID) []types.LogStreamID {
+	cacheIf, ok := adl.cache.Load(topicID)
+	if !ok {
+		return nil
+	}
+
+	cache := cacheIf.([]types.LogStreamID)
+	cacheLen := len(cache)
+	if cacheLen == 0 {
+		return nil
+	}
+
+	ret := make([]types.LogStreamID, cacheLen)
+	copy(ret, cache)
+
+	return ret
 }
 
 func (adl *transientAllowlist) Pick(topicID types.TopicID) (types.LogStreamID, bool) {

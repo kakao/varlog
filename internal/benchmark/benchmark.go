@@ -18,6 +18,7 @@ type Benchmark struct {
 	config
 	loaders []*Loader
 	metrics Metrics
+	stopC   chan struct{}
 }
 
 // New creates a new Benchmark and returns it. Users must call Close to release resources if it returns successfully.
@@ -34,6 +35,7 @@ func New(opts ...Option) (bm *Benchmark, err error) {
 
 	bm = &Benchmark{
 		config: cfg,
+		stopC:  make(chan struct{}),
 	}
 
 	defer func() {
@@ -47,10 +49,12 @@ func New(opts ...Option) (bm *Benchmark, err error) {
 		target := bm.targets[idx]
 		loaderMetrics := &LoaderMetrics{tgt: target}
 		loader, err = NewLoader(loaderConfig{
-			Target:  target,
-			cid:     bm.cid,
-			mraddrs: bm.mraddrs,
-			metrics: loaderMetrics,
+			Target:              target,
+			cid:                 bm.cid,
+			mraddrs:             bm.mraddrs,
+			metrics:             loaderMetrics,
+			singleConnPerTarget: bm.singleConnPerTarget,
+			stopC:               bm.stopC,
 		})
 		if err != nil {
 			return bm, err
@@ -64,8 +68,7 @@ func New(opts ...Option) (bm *Benchmark, err error) {
 
 // Run starts Loaders and metric reporter. It blocks until the loaders are finished.
 func (bm *Benchmark) Run() error {
-	ctx, cancel := context.WithCancel(context.Background())
-	g, ctx := errgroup.WithContext(ctx)
+	g, ctx := errgroup.WithContext(context.Background())
 
 	benchmarkTimer := time.NewTimer(bm.duration)
 
@@ -80,7 +83,7 @@ func (bm *Benchmark) Run() error {
 	wg.Add(1)
 	go func() {
 		defer func() {
-			cancel()
+			close(bm.stopC)
 			wg.Done()
 			fmt.Println(MustEncode(bm.reportEncoder, bm.metrics.Flush()))
 		}()

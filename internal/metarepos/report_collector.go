@@ -636,6 +636,7 @@ func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
 	}
 
 	report := rce.processReport(response)
+	defer report.Release()
 	if report.Len() > 0 {
 		if err := rce.helper.ProposeReport(rce.storageNodeID, report.UncommitReports); err != nil {
 			rce.reportCtx.setExpire()
@@ -646,10 +647,8 @@ func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
 }
 
 func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse) *mrpb.StorageNodeUncommitReport {
-	report := &mrpb.StorageNodeUncommitReport{
-		StorageNodeID:   response.StorageNodeID,
-		UncommitReports: response.UncommitReports,
-	}
+	report := mrpb.NewStorageNodeUncommitReport(response.StorageNodeID)
+	report.UncommitReports = response.UncommitReports
 
 	if report.Len() == 0 {
 		return report
@@ -657,16 +656,15 @@ func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse
 
 	report.Sort()
 
-	prevReport := rce.reportCtx.getReport()
-	rce.reportCtx.saveReport(report)
-	if prevReport == nil || rce.reportCtx.isExpire() {
+	prevReport, ok := rce.reportCtx.swapReport(report)
+	if !ok || rce.reportCtx.isExpire() {
 		rce.reportCtx.reload()
 		return report
 	}
 
-	diff := &mrpb.StorageNodeUncommitReport{
-		StorageNodeID: report.StorageNodeID,
-	}
+	diff := mrpb.NewStorageNodeUncommitReport(report.StorageNodeID)
+	diff.UncommitReports = make([]snpb.LogStreamUncommitReport, 0, len(report.UncommitReports))
+	defer report.Release()
 
 	i := 0
 	j := 0
@@ -747,8 +745,8 @@ func (rce *reportCollectExecutor) getClient(ctx context.Context) (reportcommitte
 }
 
 func (rce *reportCollectExecutor) getReportedVersion(lsID types.LogStreamID) (types.Version, bool) {
-	report := rce.reportCtx.getReport()
-	if report == nil {
+	report, ok := rce.reportCtx.getReport()
+	if !ok {
 		return types.InvalidVersion, false
 	}
 
@@ -870,11 +868,8 @@ CatchupLoop:
 
 		min, max, recordable := lc.sampleTracer.commit(lc.lsID, cr.CommittedLLSNOffset, cr.CommittedLLSNOffset+types.LLSN(cr.CommittedGLSNLength))
 		if recordable {
-			lc.tmStub.mb.Records("mr.report_commit.delay").Record(ctx,
-				float64(time.Since(min).Nanoseconds())/float64(time.Millisecond))
-
-			lc.tmStub.mb.Records("mr.replicate.delay").Record(ctx,
-				float64(max.Sub(min).Nanoseconds())/float64(time.Millisecond))
+			lc.tmStub.mb.Records("mr.report_commit.delay").Record(ctx, float64(time.Since(min).Nanoseconds())/float64(time.Millisecond))
+			lc.tmStub.mb.Records("mr.replicate.delay").Record(ctx, float64(max.Sub(min).Nanoseconds())/float64(time.Millisecond))
 		}
 
 		lc.setSentVersion(crs.Version)
@@ -922,14 +917,36 @@ func (rc *reportContext) saveReport(report *mrpb.StorageNodeUncommitReport) {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
-	rc.report = report
+	rc.report = mrpb.NewStorageNodeUncommitReport(report.StorageNodeID)
+	rc.report.UncommitReports = report.UncommitReports
 }
 
-func (rc *reportContext) getReport() *mrpb.StorageNodeUncommitReport {
+func (rc *reportContext) swapReport(newReport *mrpb.StorageNodeUncommitReport) (old mrpb.StorageNodeUncommitReport, ok bool) {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+
+	if rc.report != nil {
+		old = *rc.report
+		ok = true
+		rc.report.Release()
+	}
+
+	rc.report = mrpb.NewStorageNodeUncommitReport(newReport.StorageNodeID)
+	rc.report.UncommitReports = newReport.UncommitReports
+
+	return old, ok
+}
+
+func (rc *reportContext) getReport() (report mrpb.StorageNodeUncommitReport, ok bool) {
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 
-	return rc.report
+	if rc.report != nil {
+		report = *rc.report
+		ok = true
+	}
+
+	return report, ok
 }
 
 func (rc *reportContext) reload() {

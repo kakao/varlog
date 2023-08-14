@@ -29,7 +29,6 @@ message AppendRequest {
     (gogoproto.customname) = "LogStreamID"
   ];
   repeated bytes payload = 3;
-  repeated varlogpb.StorageNode backups = 4 [(gogoproto.nullable) = false];
 }
 
 message AppendResult {
@@ -176,11 +175,47 @@ message LogStreamReplicaMetadataResponse {
 }
 
 service LogIO {
-  rpc Append(AppendRequest) returns (AppendResponse) {}
+  // Append stores a list of log entries to the end of the log stream
+  // specified by AppendRequest. The log entries are appended partially; that
+  // is, some of the log entries could not be stored due to failures.
+  //
+  // It returns the following gRPC errors:
+  // - InvalidArgument: AppendRequest has invalid fields; for instance, TopicID
+  // is invalid.
+  // - NotFound: The log stream replica specified by the AppendRequest does not
+  // exist in the storage node. Note that it does not mean that the log stream
+  // does not exist in the cluster.
+  // - FailedPrecondition: The log stream may be sealed; thus, clients cannot
+  // write the log entry. Clients should unseal the log stream to append a log
+  // entry to the log stream.
+  // - Unavailable: The storage node is shutting down, or the log stream replica
+  // is not primary.
+  // - Canceled: The client canceled the request.
+  // - DeadlineExceeded: The client's timeout has expired.
+  //
+  // FIXME: Partial failures are not specified by the gRPC error codes.
+  rpc Append(stream AppendRequest) returns (stream AppendResponse) {}
+
+  // Read reads a log entry from the log stream specified by ReadRequest.
+  // Deprecated: Use Subscribe or SubscribeTo.
   rpc Read(ReadRequest) returns (ReadResponse) {}
+  // Subscribe reads a range of log entries specified by SubscribeRequest.
+  //
+  // It returns the following gRPC errors:
+  // - NotFound: The log stream replica specified by the SubscribeRequest does
+  // not exist in the storage node. Note that it does not mean that the log
+  // stream does not exist in the cluster.
+  // - Unavailable: The storage node is shutting down.
+  // - InvalidArgument: The range is invalid; for example, the beginning of the
+  // range is greater than or equal to the end.
+  // - OutOfRange: The parts or whole range are already trimmed.
   rpc Subscribe(SubscribeRequest) returns (stream SubscribeResponse) {}
+  // SubscribeTo is similar to Subscribe except that it specifies the range with
+  // LLSN.
   rpc SubscribeTo(SubscribeToRequest) returns (stream SubscribeToResponse) {}
   rpc TrimDeprecated(TrimDeprecatedRequest) returns (google.protobuf.Empty) {}
+  // LogStreamReplicaMetadata returns metadata of the log stream replica
+  // specified by the LogStreamReplicaMetadataRequest.
   rpc LogStreamReplicaMetadata(LogStreamReplicaMetadataRequest)
     returns (LogStreamReplicaMetadataResponse) {}
 }

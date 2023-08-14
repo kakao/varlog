@@ -2,6 +2,7 @@ package mrpb
 
 import (
 	"sort"
+	"sync"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
@@ -75,6 +76,24 @@ func (l *LogStreamUncommitReports) Deleted() bool {
 	return l.Status == varlogpb.LogStreamStatusDeleted
 }
 
+var storageNodeUncommitReportPool = sync.Pool{
+	New: func() any {
+		return new(StorageNodeUncommitReport)
+	},
+}
+
+func NewStorageNodeUncommitReport(snid types.StorageNodeID) *StorageNodeUncommitReport {
+	r := storageNodeUncommitReportPool.Get().(*StorageNodeUncommitReport)
+	r.StorageNodeID = snid
+	return r
+}
+
+func (l *StorageNodeUncommitReport) Release() {
+	l.StorageNodeID = types.StorageNodeID(0)
+	l.UncommitReports = nil
+	storageNodeUncommitReportPool.Put(l)
+}
+
 func (l *StorageNodeUncommitReport) Len() int {
 	return len(l.UncommitReports)
 }
@@ -127,7 +146,7 @@ func (crs *LogStreamCommitResults) LastHighWatermark(topicID types.TopicID, hint
 		return crs.CommitResults[i].TopicID >= topicID+1
 	})
 
-	if i > 0 {
+	if i > 0 && crs.GetCommitResults()[i-1].TopicID == topicID {
 		return crs.GetCommitResults()[i-1].GetHighWatermark(), i - 1
 	}
 

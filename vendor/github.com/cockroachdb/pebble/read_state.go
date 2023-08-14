@@ -20,14 +20,14 @@ import "sync/atomic"
 // in Go.
 type readState struct {
 	db        *DB
-	refcnt    int32
+	refcnt    atomic.Int32
 	current   *version
 	memtables flushableList
 }
 
 // ref adds a reference to the readState.
 func (s *readState) ref() {
-	atomic.AddInt32(&s.refcnt, 1)
+	s.refcnt.Add(1)
 }
 
 // unref removes a reference to the readState. If this was the last reference,
@@ -35,12 +35,12 @@ func (s *readState) ref() {
 // is NOT held as version.unref() will acquire it. See unrefLocked() if DB.mu
 // is held by the caller.
 func (s *readState) unref() {
-	if atomic.AddInt32(&s.refcnt, -1) != 0 {
+	if s.refcnt.Add(-1) != 0 {
 		return
 	}
 	s.current.Unref()
 	for _, mem := range s.memtables {
-		mem.readerUnref()
+		mem.readerUnref(true)
 	}
 
 	// The last reference to the readState was released. Check to see if there
@@ -50,20 +50,20 @@ func (s *readState) unref() {
 
 // unrefLocked removes a reference to the readState. If this was the last
 // reference, the reference the readState holds on the version is
-// released. Requires DB.mu is held as version.unrefLocked() requires it. See
-// unref() if DB.mu is NOT held by the caller.
+// released.
+//
+// DB.mu must be held. See unref() if DB.mu is NOT held by the caller.
 func (s *readState) unrefLocked() {
-	if atomic.AddInt32(&s.refcnt, -1) != 0 {
+	if s.refcnt.Add(-1) != 0 {
 		return
 	}
 	s.current.UnrefLocked()
 	for _, mem := range s.memtables {
-		mem.readerUnref()
+		mem.readerUnrefLocked(true)
 	}
 
-	// NB: Unlike readState.unref(), we don't attempt to cleanup newly obsolete
-	// tables as unrefLocked() is only called during DB shutdown to release the
-	// current readState.
+	// In this code path, the caller is responsible for scheduling obsolete table
+	// deletion as necessary.
 }
 
 // loadReadState returns the current readState. The returned readState must be
@@ -78,15 +78,14 @@ func (d *DB) loadReadState() *readState {
 
 // updateReadStateLocked creates a new readState from the current version and
 // list of memtables. Requires DB.mu is held. If checker is not nil, it is
-// called after installing the new readState. If atomicFunc is not nil, it is
-// executed atomically with the transition to the new read state.
+// called after installing the new readState.
 func (d *DB) updateReadStateLocked(checker func(*DB) error) {
 	s := &readState{
 		db:        d,
-		refcnt:    1,
 		current:   d.mu.versions.currentVersion(),
 		memtables: d.mu.mem.queue,
 	}
+	s.refcnt.Store(1)
 	s.current.Ref()
 	for _, mem := range s.memtables {
 		mem.readerRef()

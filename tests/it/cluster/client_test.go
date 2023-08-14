@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/varlog"
+	"github.com/kakao/varlog/pkg/varlog/x/mlsa"
 	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/tests/it"
 )
@@ -231,7 +233,7 @@ func TestClientAppendCancel(t *testing.T) {
 	client := clus.ClientAtIndex(t, 0)
 
 	var (
-		atomicGLSN types.AtomicGLSN
+		atomicGLSN atomic.Uint64
 		wg         sync.WaitGroup
 	)
 	wg.Add(1)
@@ -244,7 +246,7 @@ func TestClientAppendCancel(t *testing.T) {
 			if res.Err == nil {
 				require.Equal(t, expectedGLSN, res.Metadata[0].GLSN)
 				expectedGLSN++
-				atomicGLSN.Store(res.Metadata[0].GLSN)
+				atomicGLSN.Store(uint64(res.Metadata[0].GLSN))
 			} else {
 				t.Logf("canceled")
 				return
@@ -574,7 +576,21 @@ func TestVarlogSubscribeWithUpdateLS(t *testing.T) {
 
 				env.UpdateLS(t, topicID, lsID, snID, addedSN)
 
-				for i := 0; i < nrLogs/2; i++ {
+				for i := 0; i < nrLogs/4; i++ {
+					res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
+					require.NoError(t, res.Err)
+				}
+
+				require.Eventually(t, func() bool {
+					lsDesc, err := env.Unseal(topicID, lsID)
+					if err != nil {
+						return false
+					}
+
+					return lsDesc.Status == varlogpb.LogStreamStatusRunning
+				}, 5*time.Second, 10*time.Millisecond)
+
+				for i := 0; i < nrLogs/4; i++ {
 					res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
 					require.NoError(t, res.Err)
 				}
@@ -641,4 +657,508 @@ func TestClientPeekLogStream(t *testing.T) {
 
 	_, _, err = client.PeekLogStream(context.Background(), tpid, lsid)
 	require.Error(t, err)
+}
+
+func TestClientAppendWithAllowedLogStream(t *testing.T) {
+	const numLogs = 100
+	const numLogStreams = 10
+
+	clus := it.NewVarlogCluster(t,
+		it.WithNumberOfStorageNodes(1),
+		it.WithNumberOfLogStreams(numLogStreams),
+		it.WithNumberOfClients(1),
+		it.WithVMSOptions(it.NewTestVMSOptions()...),
+		it.WithNumberOfTopics(1),
+	)
+
+	defer func() {
+		clus.Close(t)
+		testutil.GC()
+	}()
+
+	topicID := clus.TopicIDs()[0]
+	logStreamID := clus.LogStreamIDs(topicID)[0]
+	sealedLogStreamID := clus.LogStreamIDs(topicID)[1]
+	client := clus.ClientAtIndex(t, 0)
+
+	allowedLogStreams := make(map[types.LogStreamID]struct{})
+	allowedLogStreams[logStreamID] = struct{}{}
+	allowedLogStreams[sealedLogStreamID] = struct{}{}
+
+	rsp, err := clus.Seal(topicID, sealedLogStreamID)
+	require.NoError(t, err)
+	require.Len(t, rsp.LogStreams, 1)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, rsp.LogStreams[0].Status)
+
+	for i := 0; i < numLogs; i++ {
+		res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")}, varlog.WithAllowedLogStreams(allowedLogStreams))
+		require.NoError(t, res.Err)
+	}
+
+	// SubscribeTo [1, 101)
+	subscriber := client.SubscribeTo(context.Background(), topicID, logStreamID, types.MinLLSN, types.LLSN(numLogs+1))
+	for i := 0; i < numLogs; i++ {
+		logEntry, err := subscriber.Next()
+		require.NoError(t, err)
+		require.Equal(t, topicID, logEntry.TopicID)
+		require.Equal(t, logStreamID, logEntry.LogStreamID)
+		require.Equal(t, types.LLSN(i+1), logEntry.LLSN)
+	}
+	_, err = subscriber.Next()
+	require.ErrorIs(t, err, io.EOF)
+	require.NoError(t, subscriber.Close())
+}
+
+func TestLogStreamAppender(t *testing.T) {
+	const (
+		pipelineSize = 2
+		calls        = pipelineSize * 5
+		batchSize    = 2
+	)
+
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log)
+	}{
+		{
+			name: "CloseBeforeAppendLogs",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid, varlog.WithPipelineSize(pipelineSize))
+				require.NoError(t, err)
+				lsa.Close()
+				err = lsa.AppendBatch([][]byte{[]byte("foo")}, nil)
+				require.Equal(t, varlog.ErrClosed, err)
+			},
+		},
+		{
+			name: "CloseAfterProcessingCallbacks",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				var (
+					llsn types.LLSN
+					glsn types.GLSN
+					wg   sync.WaitGroup
+				)
+				cb := func(metas []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+					assert.Len(t, metas, batchSize)
+					assert.Less(t, llsn, metas[batchSize-1].LLSN)
+					assert.Less(t, glsn, metas[batchSize-1].GLSN)
+					llsn = metas[batchSize-1].LLSN
+					glsn = metas[batchSize-1].GLSN
+				}
+
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid, varlog.WithPipelineSize(pipelineSize))
+				require.NoError(t, err)
+				defer func() {
+					wg.Wait()
+					lsa.Close()
+				}()
+
+				wg.Add(calls)
+				for i := 0; i < calls; i++ {
+					data := make([][]byte, batchSize)
+					for j := 0; j < batchSize; j++ {
+						data[j] = []byte(fmt.Sprintf("%d,%d", i, j))
+					}
+					err := lsa.AppendBatch(data, cb)
+					require.NoError(t, err)
+				}
+			},
+		},
+		{
+			name: "CloseWhileProcessingCallbacks",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				var (
+					llsn types.LLSN
+					glsn types.GLSN
+					wg   sync.WaitGroup
+				)
+				cb := func(metas []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					if err != nil {
+						assert.Equal(t, varlog.ErrClosed, err)
+						return
+					}
+					assert.NoError(t, err)
+					assert.Len(t, metas, batchSize)
+					assert.Less(t, llsn, metas[batchSize-1].LLSN)
+					assert.Less(t, glsn, metas[batchSize-1].GLSN)
+					llsn = metas[batchSize-1].LLSN
+					glsn = metas[batchSize-1].GLSN
+				}
+
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid, varlog.WithPipelineSize(pipelineSize))
+				require.NoError(t, err)
+				defer func() {
+					lsa.Close()
+					wg.Wait()
+				}()
+
+				wg.Add(calls)
+				for i := 0; i < calls; i++ {
+					data := make([][]byte, batchSize)
+					for j := 0; j < batchSize; j++ {
+						data[j] = []byte(fmt.Sprintf("%d,%d", i, j))
+					}
+					err := lsa.AppendBatch(data, cb)
+					require.NoError(t, err)
+				}
+			},
+		},
+		{
+			name: "CloseInCallback",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid, varlog.WithPipelineSize(pipelineSize))
+				require.NoError(t, err)
+				defer func() {
+					lsa.Close()
+				}()
+
+				var wg sync.WaitGroup
+				dataBatch := [][]byte{[]byte("foo")}
+				wg.Add(1)
+				err = lsa.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+					lsa.Close()
+				})
+				require.NoError(t, err)
+				wg.Wait()
+
+				err = lsa.AppendBatch(dataBatch, func([]varlogpb.LogEntryMeta, error) {
+					assert.Fail(t, "unexpected callback")
+				})
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "AppendChain_DoNotDoThis",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				var called atomic.Int32
+
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid, varlog.WithPipelineSize(pipelineSize))
+				require.NoError(t, err)
+				defer func() {
+					lsa.Close()
+					require.EqualValues(t, calls, called.Load())
+				}()
+
+				dataBatch := [][]byte{[]byte("foo")}
+				callback := testCallbackGen(t, lsa, dataBatch, calls, &called)
+				err = lsa.AppendBatch(dataBatch, callback)
+				require.NoError(t, err)
+
+				require.Eventually(t, func() bool {
+					return called.Load() == calls
+				}, 5*time.Second, 100*time.Millisecond)
+			},
+		},
+		{
+			name: "ConcurrentAppendBatch",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid, varlog.WithPipelineSize(pipelineSize))
+				require.NoError(t, err)
+				defer func() {
+					lsa.Close()
+				}()
+
+				var wg sync.WaitGroup
+				wg.Add(calls * 2)
+				expected := 0
+				dataBatch := [][]byte{[]byte("foo")}
+				cb := func(metas []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+					assert.Len(t, metas, 1)
+					expected++
+					assert.EqualValues(t, expected, metas[0].LLSN)
+					assert.EqualValues(t, expected, metas[0].GLSN)
+				}
+				for i := 0; i < calls; i++ {
+					go func() {
+						defer wg.Done()
+						err := lsa.AppendBatch(dataBatch, cb)
+						require.NoError(t, err)
+					}()
+				}
+				wg.Wait()
+			},
+		},
+		{
+			name: "CallTimeoutCausedBySemaphore",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				const (
+					callTimeout         = 500 * time.Millisecond
+					blockedPipelineSize = 1
+				)
+
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid,
+					varlog.WithPipelineSize(blockedPipelineSize),
+					varlog.WithCallTimeout(callTimeout),
+				)
+				require.NoError(t, err)
+				defer lsa.Close()
+
+				var wg sync.WaitGroup
+				dataBatch := [][]byte{[]byte("foo")}
+
+				wg.Add(1)
+				err = lsa.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+					time.Sleep(callTimeout * 2)
+				})
+				require.NoError(t, err)
+
+				err = lsa.AppendBatch(dataBatch, func([]varlogpb.LogEntryMeta, error) {
+					assert.Fail(t, "unexpected callback")
+				})
+				require.Error(t, err)
+				require.Equal(t, varlog.ErrCallTimeout, err)
+
+				wg.Wait()
+			},
+		},
+		{
+			name: "CallTimeoutCausedSlowCallback",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				const callTimeout = 500 * time.Millisecond
+
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid,
+					varlog.WithCallTimeout(callTimeout),
+					varlog.WithPipelineSize(5),
+				)
+				require.NoError(t, err)
+				defer lsa.Close()
+
+				var wg sync.WaitGroup
+				dataBatch := [][]byte{[]byte("foo")}
+
+				var failfast atomic.Bool
+				for err == nil {
+					wg.Add(1)
+					err = lsa.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, cerr error) {
+						defer wg.Done()
+						if cerr != nil {
+							assert.Equal(t, varlog.ErrCallTimeout, cerr)
+							failfast.Store(true)
+							return
+						}
+						time.Sleep(callTimeout * 2)
+					})
+					if err == nil {
+						require.True(t, failfast.CompareAndSwap(false, false))
+					} else {
+						wg.Done()
+						require.Equal(t, varlog.ErrCallTimeout, err)
+					}
+					time.Sleep(callTimeout)
+				}
+
+				wg.Wait()
+			},
+		},
+		{
+			name: "Manager_NoSuchTopic",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				mgr := mlsa.New(vcli)
+				_, err := mgr.Get(tpid+1, lsid)
+				require.Error(t, err)
+
+				_, err = mgr.Any(tpid+1, nil)
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "Manager_NoSuchLogStream",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				mgr := mlsa.New(vcli)
+				_, err := mgr.Get(tpid, lsid+1)
+				require.Error(t, err)
+
+				_, err = mgr.Any(tpid, map[types.LogStreamID]struct{}{
+					lsid + 1: {},
+				})
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "Manager_AppendBatch",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				mgr := mlsa.New(vcli)
+
+				lsa1, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+				lsa2, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+
+				var wg sync.WaitGroup
+				dataBatch := [][]byte{[]byte("foo")}
+
+				wg.Add(2)
+				err = lsa1.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+				})
+				require.NoError(t, err)
+				err = lsa2.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+				})
+				require.NoError(t, err)
+				wg.Wait()
+
+				lsa1.Close()
+				lsa2.Close()
+			},
+		},
+		{
+			name: "Manager_Close",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				mgr := mlsa.New(vcli)
+
+				lsa1, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+				lsa2, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+
+				dataBatch := [][]byte{[]byte("foo")}
+
+				lsa1.Close()
+				err = lsa1.AppendBatch(dataBatch, func([]varlogpb.LogEntryMeta, error) {
+					assert.Fail(t, "unexpected callback")
+				})
+				require.Error(t, err)
+				err = lsa2.AppendBatch(dataBatch, func([]varlogpb.LogEntryMeta, error) {
+					assert.Fail(t, "unexpected callback")
+				})
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "Manager_CloseAndGet",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				mgr := mlsa.New(vcli)
+
+				lsa1, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+				lsa2, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+
+				lsa1.Close()
+				lsa1, err = mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+
+				var wg sync.WaitGroup
+				dataBatch := [][]byte{[]byte("foo")}
+				wg.Add(1)
+				err = lsa1.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+				})
+				require.NoError(t, err)
+				err = lsa2.AppendBatch(dataBatch, func([]varlogpb.LogEntryMeta, error) {
+					assert.Fail(t, "unexpected callback")
+				})
+				require.Error(t, err)
+				wg.Wait()
+
+				lsa1.Close()
+			},
+		},
+		{
+			name: "Manager_Any",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				mgr := mlsa.New(vcli)
+
+				lsa, err := mgr.Any(tpid, map[types.LogStreamID]struct{}{
+					lsid: {},
+				})
+				require.NoError(t, err)
+
+				var wg sync.WaitGroup
+				dataBatch := [][]byte{[]byte("foo")}
+				wg.Add(1)
+				err = lsa.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+				})
+				require.NoError(t, err)
+				wg.Wait()
+
+				lsa.Close()
+			},
+		},
+		{
+			name: "Manager_Clear",
+			testf: func(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, vcli varlog.Log) {
+				mgr := mlsa.New(vcli)
+
+				lsa, err := mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+
+				var wg sync.WaitGroup
+				dataBatch := [][]byte{[]byte("foo")}
+				wg.Add(1)
+				err = lsa.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+				})
+				require.NoError(t, err)
+				wg.Wait()
+
+				mgr.Clear()
+				err = lsa.AppendBatch(dataBatch, func([]varlogpb.LogEntryMeta, error) {
+					assert.Fail(t, "unexpected callback")
+				})
+				require.Error(t, err)
+
+				lsa, err = mgr.Get(tpid, lsid)
+				require.NoError(t, err)
+
+				wg.Add(1)
+				err = lsa.AppendBatch(dataBatch, func(_ []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+				})
+				require.NoError(t, err)
+				wg.Wait()
+
+				mgr.Clear()
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			clus := it.NewVarlogCluster(t,
+				it.WithReplicationFactor(3),
+				it.WithNumberOfStorageNodes(3),
+				it.WithNumberOfLogStreams(1),
+				it.WithNumberOfClients(1),
+				it.WithVMSOptions(it.NewTestVMSOptions()...),
+				it.WithNumberOfTopics(1),
+			)
+			defer clus.Close(t)
+
+			tpid := clus.TopicIDs()[0]
+			lsid := clus.LogStreamID(t, tpid, 0)
+			client := clus.ClientAtIndex(t, 0)
+
+			tc.testf(t, tpid, lsid, client)
+		})
+	}
+}
+
+func testCallbackGen(t *testing.T, lsa varlog.LogStreamAppender, dataBatch [][]byte, limit int32, called *atomic.Int32) varlog.BatchCallback {
+	return func(metas []varlogpb.LogEntryMeta, err error) {
+		require.NoError(t, err)
+		called.Add(1)
+		if called.Load() < limit {
+			err = lsa.AppendBatch(dataBatch, testCallbackGen(t, lsa, dataBatch, limit, called))
+			require.NoError(t, err)
+		}
+	}
 }

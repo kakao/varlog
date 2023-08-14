@@ -18,7 +18,8 @@ const (
 	topicDirPrefix     = "tpid"
 	logStreamDirPrefix = "lsid"
 	dirNameSeparator   = "_"
-	volumeFileMode     = os.FileMode(0700)
+
+	VolumeFileMode = os.FileMode(0700)
 )
 
 // DataDir represents data directory by using various identifiers.
@@ -231,7 +232,7 @@ func readVolume(vol string) ([]DataDir, error) {
 func CreateStorageNodePaths(volumes []string, cid types.ClusterID, snid types.StorageNodeID) (snPaths []string, err error) {
 	for _, volume := range volumes {
 		snPath := filepath.Join(volume, StorageNodeDirName(cid, snid))
-		if err := os.MkdirAll(snPath, volumeFileMode); err != nil {
+		if err := os.MkdirAll(snPath, VolumeFileMode); err != nil {
 			return nil, err
 		}
 		snPaths = append(snPaths, snPath)

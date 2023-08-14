@@ -5,6 +5,7 @@ package varlog
 import (
 	"context"
 	"io"
+	"sync/atomic"
 
 	"go.uber.org/zap"
 
@@ -12,7 +13,6 @@ import (
 	"github.com/kakao/varlog/pkg/mrc/mrconnector"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
-	"github.com/kakao/varlog/pkg/util/syncutil/atomicutil"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
@@ -42,6 +42,13 @@ type Log interface {
 	// replica. If none of the replicas' statuses is either appendable or
 	// sealed, it returns an error.
 	PeekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, err error)
+
+	// NewLogStreamAppender returns a new LogStreamAppender.
+	NewLogStreamAppender(tpid types.TopicID, lsid types.LogStreamID, opts ...LogStreamAppenderOption) (LogStreamAppender, error)
+
+	// AppendableLogStreams returns all writable log streams belonging to the
+	// topic specified by the argument tpid.
+	AppendableLogStreams(tpid types.TopicID) map[types.LogStreamID]struct{}
 }
 
 type AppendResult struct {
@@ -64,7 +71,7 @@ type logImpl struct {
 
 	runner *runner.Runner
 
-	closed atomicutil.AtomicBool
+	closed atomic.Bool
 }
 
 var _ Log = (*logImpl)(nil)
@@ -177,6 +184,19 @@ func (v *logImpl) PeekLogStream(ctx context.Context, tpid types.TopicID, lsid ty
 	return v.peekLogStream(ctx, tpid, lsid)
 }
 
+func (v *logImpl) NewLogStreamAppender(tpid types.TopicID, lsid types.LogStreamID, opts ...LogStreamAppenderOption) (LogStreamAppender, error) {
+	return v.newLogStreamAppender(context.Background(), tpid, lsid, opts...)
+}
+
+func (v *logImpl) AppendableLogStreams(tpid types.TopicID) map[types.LogStreamID]struct{} {
+	ids := v.lsSelector.GetAll(tpid)
+	ret := make(map[types.LogStreamID]struct{})
+	for _, id := range ids {
+		ret[id] = struct{}{}
+	}
+	return ret
+}
+
 func (v *logImpl) Close() (err error) {
 	if v.closed.Load() {
 		return
@@ -191,5 +211,6 @@ func (v *logImpl) Close() (err error) {
 		err = e
 	}
 	v.closed.Store(true)
+	v.runner.Stop()
 	return
 }

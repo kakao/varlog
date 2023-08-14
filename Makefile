@@ -11,19 +11,19 @@ PKGS := $(shell $(GO) list ./... | \
 
 ifneq ($(shell echo $$OSTYPE | egrep "darwin"),)
 	export CGO_CFLAGS=-Wno-undef-prefix
+	export MallocNanoZone=0
 endif
 
 PYTHON := python3
 
 .DEFAULT_GOAL := all
 .PHONY: all
-all: generate precommit build
+all: precommit
 
 
 # precommit
-.PHONY: precommit precommit_lint
-precommit: fmt tidy vet test test_py
-precommit_lint: fmt tidy vet lint test test_py
+.PHONY: precommit
+precommit: mod-tidy mod-vendor proto generate fmt vet lint build test test_py
 
 
 # build
@@ -55,7 +55,7 @@ benchmark:
 
 
 # testing
-TEST_FLAGS := -race -failfast -count=1
+TEST_FLAGS := -race -failfast -count=1 -timeout=20m -p=1
 GO_COVERAGE_OUTPUT := coverage.out
 GO_COVERAGE_OUTPUT_TMP := $(GO_COVERAGE_OUTPUT).tmp
 PYTEST := pytest
@@ -91,7 +91,7 @@ PROTO_SRCS := $(shell find . -name "*.proto" -not -path "./vendor/*")
 PROTO_PBS := $(PROTO_SRCS:.proto=.pb.go)
 PROTO_INCS := -I$(GOPATH)/src -I$(CURDIR)/proto -I$(CURDIR)/vendor
 
-.PHONY: proto
+.PHONY: proto proto-check
 proto: $(PROTO_PBS)
 $(PROTO_PBS): $(PROTO_SRCS)
 	@echo $(PROTOC)
@@ -100,15 +100,30 @@ $(PROTO_PBS): $(PROTO_SRCS)
 		--gogo_out=plugins=grpc,Mgoogle/protobuf/empty.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,paths=source_relative:. $$src ; \
 	done
 
+proto-check:
+	$(MAKE) proto
+	$(MAKE) fmt
+	git diff --exit-code $(PROTO_PBS)
+
 
 # go:generate
-.PHONY: generate
+.PHONY: generate generate-check
 generate:
 	$(GO) generate ./...
 
+generate-check:
+	$(MAKE) generate
+	$(MAKE) fmt
+	git diff --exit-code
+
 
 # tools: lint, fmt, vet
-.PHONY: fmt lint vet
+.PHONY: tools fmt lint vet mod-tidy mod-tidy-check mod-vendor mod-vendor-check
+tools:
+	$(GO) install golang.org/x/tools/cmd/goimports@latest
+	$(GO) install golang.org/x/lint/golint@latest
+	$(GO) install github.com/golang/mock/mockgen@v1.6.0
+
 fmt:
 	@echo goimports
 	@$(foreach path,$(PKGS),goimports -w -local $(shell $(GO) list -m) ./$(path);)
@@ -122,8 +137,19 @@ vet:
 	@echo govet
 	@$(foreach path,$(PKGS),$(GO) vet ./$(path);)
 
-tidy:
+mod-tidy:
 	$(GO) mod tidy
+
+mod-tidy-check:
+	$(MAKE) mod-tidy
+	git diff --exit-code go.mod
+
+mod-vendor:
+	$(GO) mod vendor
+
+mod-vendor-check:
+	$(MAKE) mod-vendor
+	git diff --exit-code vendor
 
 
 # cleanup

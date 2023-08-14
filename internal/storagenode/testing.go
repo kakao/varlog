@@ -132,14 +132,7 @@ func TestAppend(t *testing.T, tpid types.TopicID, lsid types.LogStreamID, dataBa
 	lc, closer := TestNewLogIOClient(t, replicas[0].StorageNodeID, replicas[0].Address)
 	defer closer()
 
-	var backups []varlogpb.StorageNode
-	for _, replica := range replicas[1:] {
-		backups = append(backups, varlogpb.StorageNode{
-			StorageNodeID: replica.StorageNodeID,
-			Address:       replica.Address,
-		})
-	}
-	res, err := lc.Append(context.Background(), tpid, lsid, dataBatch, backups...)
+	res, err := lc.Append(context.Background(), tpid, lsid, dataBatch)
 	assert.NoError(t, err)
 	return res
 }
@@ -209,6 +202,7 @@ type testRPCServer struct {
 
 	*mock.MockLogIOServer
 	*mock.MockManagementServer
+	*mock.MockLogStreamReporterServer
 }
 
 var _ snpb.LogIOServer = (*testRPCServer)(nil)
@@ -227,15 +221,17 @@ func TestNewRPCServer(t *testing.T, ctrl *gomock.Controller, snid types.StorageN
 	addr = lis.Addr().String()
 
 	trs := &testRPCServer{
-		listener:             lis,
-		grpcServer:           grpc.NewServer(),
-		address:              addr,
-		snid:                 snid,
-		MockLogIOServer:      mock.NewMockLogIOServer(ctrl),
-		MockManagementServer: mock.NewMockManagementServer(ctrl),
+		listener:                    lis,
+		grpcServer:                  grpc.NewServer(),
+		address:                     addr,
+		snid:                        snid,
+		MockLogIOServer:             mock.NewMockLogIOServer(ctrl),
+		MockManagementServer:        mock.NewMockManagementServer(ctrl),
+		MockLogStreamReporterServer: mock.NewMockLogStreamReporterServer(ctrl),
 	}
 	snpb.RegisterLogIOServer(trs.grpcServer, trs.MockLogIOServer)
 	snpb.RegisterManagementServer(trs.grpcServer, trs.MockManagementServer)
+	snpb.RegisterLogStreamReporterServer(trs.grpcServer, trs.MockLogStreamReporterServer)
 	return trs
 }
 

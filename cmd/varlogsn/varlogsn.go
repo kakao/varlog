@@ -4,25 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strings"
 	"syscall"
 
 	"github.com/urfave/cli/v2"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
-	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
-	"go.opentelemetry.io/otel/metric"
-	metricsdk "go.opentelemetry.io/otel/sdk/export/metric"
-	"go.opentelemetry.io/otel/sdk/metric/selector/simple"
-	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
+	_ "go.uber.org/automaxprocs"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/storagenode/logstream"
@@ -46,29 +39,11 @@ func run() int {
 }
 
 func start(c *cli.Context) error {
-	level, err := zapcore.ParseLevel(c.String(flagLogLevel.Name))
+	logOpts, err := flags.ParseLoggerFlags(c, "varlogsn.log")
 	if err != nil {
 		return err
 	}
-
-	logOpts := []log.Option{
-		log.WithHumanFriendly(),
-		log.WithZapLoggerOptions(zap.AddStacktrace(zap.DPanicLevel)),
-		log.WithLogLevel(level),
-	}
-	if c.Bool(flagLogFileCompression.Name) {
-		logOpts = append(logOpts, log.WithCompression())
-	}
-	if retention := c.Int(flagLogFileRetentionDays.Name); retention > 0 {
-		logOpts = append(logOpts, log.WithAgeDays(retention))
-	}
-	if logDir := c.String(flagLogDir.Name); len(logDir) != 0 {
-		absDir, err := filepath.Abs(logDir)
-		if err != nil {
-			return err
-		}
-		logOpts = append(logOpts, log.WithPath(filepath.Join(absDir, "storagenode.log")))
-	}
+	logOpts = append(logOpts, log.WithZapLoggerOptions(zap.AddStacktrace(zap.DPanicLevel)))
 	logger, err := log.New(logOpts...)
 	if err != nil {
 		return err
@@ -119,41 +94,27 @@ func start(c *cli.Context) error {
 
 	logger = logger.Named("sn").With(zap.Uint32("cid", uint32(clusterID)), zap.Int32("snid", int32(storageNodeID)))
 
-	mp, stop, err := initTelemetry(context.Background(), c, storageNodeID)
+	meterProviderOpts, err := flags.ParseTelemetryFlags(context.Background(), c, "sn", storageNodeID.String(), clusterID)
+	if err != nil {
+		return err
+	}
+	mp, stop, err := telemetry.NewMeterProvider(meterProviderOpts...)
 	if err != nil {
 		return err
 	}
 	telemetry.SetGlobalMeterProvider(mp)
 	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), c.Duration(flagExporterStopTimeout.Name))
+		ctx, cancel := context.WithTimeout(context.Background(), c.Duration(flags.TelemetryExporterStopTimeout.Name))
 		defer cancel()
-		stop(ctx)
+		_ = stop(ctx)
 	}()
 
-	lbaseMaxBytes, err := units.FromByteSizeString(c.String(flagStorageLBaseMaxBytes.Name))
+	storageOpts, err := parseStorageOptions(c)
 	if err != nil {
 		return err
 	}
-	storageOpts := []storage.Option{
-		storage.WithL0CompactionThreshold(c.Int(flagStorageL0CompactionThreshold.Name)),
-		storage.WithL0StopWritesThreshold(c.Int(flagStorageL0StopWritesThreshold.Name)),
-		storage.WithLBaseMaxBytes(lbaseMaxBytes),
-		storage.WithMaxOpenFiles(c.Int(flagStorageMaxOpenFiles.Name)),
-		storage.WithMemTableSize(c.Int(flagStorageMemTableSize.Name)),
-		storage.WithMemTableStopWritesThreshold(c.Int(flagStorageMemTableStopWritesThreshold.Name)),
-		storage.WithMaxConcurrentCompaction(c.Int(flagStorageMaxConcurrentCompaction.Name)),
-	}
-	if c.Bool(flagStorageDisableWAL.Name) {
-		storageOpts = append(storageOpts, storage.WithoutWAL())
-	}
-	if c.Bool(flagStorageNoSync.Name) {
-		storageOpts = append(storageOpts, storage.WithoutSync())
-	}
-	if c.Bool(flagStorageVerbose.Name) {
-		storageOpts = append(storageOpts, storage.WithVerboseLogging())
-	}
 
-	sn, err := storagenode.NewStorageNode(
+	snOpts := []storagenode.Option{
 		storagenode.WithClusterID(clusterID),
 		storagenode.WithStorageNodeID(storageNodeID),
 		storagenode.WithListenAddress(c.String(flagListen.Name)),
@@ -172,9 +133,26 @@ func start(c *cli.Context) error {
 			logstream.WithReplicateClientQueueCapacity(c.Int(flagLogStreamExecutorReplicateclientQueueCapacity.Name)),
 		),
 		storagenode.WithMaxLogStreamReplicasCount(int32(c.Int(flagMaxLogStreamReplicasCount.Name))),
+		storagenode.WithAppendPipelineSize(int32(c.Int(flagAppendPipelineSize.Name))),
 		storagenode.WithDefaultStorageOptions(storageOpts...),
 		storagenode.WithLogger(logger),
-	)
+	}
+	if initialConnWindowSize := c.String(flagServerInitialConnWindowSize.Name); initialConnWindowSize != "" {
+		size, err := units.FromByteSizeString(initialConnWindowSize, 0, math.MaxInt32)
+		if err != nil {
+			return err
+		}
+		snOpts = append(snOpts, storagenode.WithGRPCServerInitialConnWindowSize(int32(size)))
+	}
+	if initialStreamWindowSize := c.String(flagServerInitialStreamWindowSize.Name); initialStreamWindowSize != "" {
+		size, err := units.FromByteSizeString(initialStreamWindowSize, 0, math.MaxInt32)
+		if err != nil {
+			return err
+		}
+		snOpts = append(snOpts, storagenode.WithGRPCServerInitialWindowSize(int32(size)))
+	}
+
+	sn, err := storagenode.NewStorageNode(snOpts...)
 	if err != nil {
 		return err
 	}
@@ -198,55 +176,143 @@ func start(c *cli.Context) error {
 	return g.Wait()
 }
 
-func initTelemetry(ctx context.Context, c *cli.Context, snid types.StorageNodeID) (metric.MeterProvider, telemetry.StopMeterProvider, error) {
-	var (
-		err      error
-		exporter metricsdk.Exporter
-		shutdown telemetry.ShutdownExporter
-	)
-
-	res, err := resource.New(ctx,
-		resource.WithFromEnv(),
-		resource.WithHost(),
-		resource.WithAttributes(
-			semconv.ServiceNameKey.String("sn"),
-			semconv.ServiceNamespaceKey.String("varlog"),
-			semconv.ServiceInstanceIDKey.String(snid.String()),
-		))
+func parseStorageOptions(c *cli.Context) (opts []storage.Option, err error) {
+	l0CompactionFileThreshold, err := getStorageDBFlagValues(c.IntSlice(flagStorageL0CompactionFileThreshold.Name))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-
-	meterProviderOpts := []telemetry.MeterProviderOption{
-		telemetry.WithResource(res),
-		telemetry.WithRuntimeInstrumentation(),
-		telemetry.WithAggregatorSelector(simple.NewWithInexpensiveDistribution()),
-	}
-	switch strings.ToLower(c.String(flagExporterType.Name)) {
-	case "stdout":
-		var opts []stdoutmetric.Option
-		if c.Bool(flagStdoutExporterPrettyPrint.Name) {
-			opts = append(opts, stdoutmetric.WithPrettyPrint())
-		}
-		exporter, shutdown, err = telemetry.NewStdoutExporter(opts...)
-	case "otlp":
-		var opts []otlpmetricgrpc.Option
-		if c.Bool(flagOTLPExporterInsecure.Name) {
-			opts = append(opts, otlpmetricgrpc.WithInsecure())
-		}
-		if !c.IsSet(flagOTLPExporterEndpoint.Name) {
-			return nil, nil, errors.New("no exporter endpoint")
-		}
-		opts = append(opts, otlpmetricgrpc.WithEndpoint(c.String(flagOTLPExporterEndpoint.Name)))
-		exporter, shutdown, err = telemetry.NewOLTPExporter(context.Background(), opts...)
-	}
+	l0CompactionThreshold, err := getStorageDBFlagValues(c.IntSlice(flagStorageL0CompactionThreshold.Name))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
+	}
+	l0StopWritesThreshold, err := getStorageDBFlagValues(c.IntSlice(flagStorageL0StopWritesThreshold.Name))
+	if err != nil {
+		return nil, err
+	}
+	l0TargetFileSizeStr, err := getStorageDBFlagValues(c.StringSlice(flagStorageL0TargetFileSize.Name))
+	if err != nil {
+		return nil, err
+	}
+	l0TargetFileSize, err := mapf(l0TargetFileSizeStr[:], func(s string) (int64, error) {
+		return units.FromByteSizeString(s)
+	})
+	if err != nil {
+		return nil, err
+	}
+	flushSplitBytesStr, err := getStorageDBFlagValues(c.StringSlice(flagStorageFlushSplitBytes.Name))
+	if err != nil {
+		return nil, err
+	}
+	flushSplitBytes, err := mapf(flushSplitBytesStr[:], func(s string) (int64, error) {
+		return units.FromByteSizeString(s)
+	})
+	if err != nil {
+		return nil, err
+	}
+	lbaseMaxBytesStr, err := getStorageDBFlagValues(c.StringSlice(flagStorageLBaseMaxBytes.Name))
+	if err != nil {
+		return nil, err
+	}
+	lbaseMaxBytes, err := mapf(lbaseMaxBytesStr[:], func(s string) (int64, error) {
+		return units.FromByteSizeString(s)
+	})
+	if err != nil {
+		return nil, err
+	}
+	memTableSizeStr, err := getStorageDBFlagValues(c.StringSlice(flagStorageMemTableSize.Name))
+	if err != nil {
+		return nil, err
+	}
+	memTableSize, err := mapf(memTableSizeStr[:], func(s string) (int, error) {
+		size, err := units.FromByteSizeString(s)
+		return int(size), err
+	})
+	if err != nil {
+		return nil, err
+	}
+	memTableStopWriteThreshold, err := getStorageDBFlagValues(c.IntSlice(flagStorageMemTableStopWritesThreshold.Name))
+	if err != nil {
+		return nil, err
+	}
+	maxConcurrentCompaction, err := getStorageDBFlagValues(c.IntSlice(flagStorageMaxConcurrentCompaction.Name))
+	if err != nil {
+		return nil, err
+	}
+	maxOpenFiles, err := getStorageDBFlagValues(c.IntSlice(flagStorageMaxOpenFiles.Name))
+	if err != nil {
+		return nil, err
 	}
 
-	if exporter != nil {
-		meterProviderOpts = append(meterProviderOpts, telemetry.WithExporter(exporter, shutdown))
+	getStorageDBOptions := func(i int) []storage.DBOption {
+		return []storage.DBOption{
+			storage.WithL0CompactionFileThreshold(l0CompactionFileThreshold[i]),
+			storage.WithL0CompactionThreshold(l0CompactionThreshold[i]),
+			storage.WithL0StopWritesThreshold(l0StopWritesThreshold[i]),
+			storage.WithL0TargetFileSize(l0TargetFileSize[i]),
+			storage.WithFlushSplitBytes(flushSplitBytes[i]),
+			storage.WithLBaseMaxBytes(lbaseMaxBytes[i]),
+			storage.WithMaxOpenFiles(maxOpenFiles[i]),
+			storage.WithMemTableSize(memTableSize[i]),
+			storage.WithMemTableStopWritesThreshold(memTableStopWriteThreshold[i]),
+			storage.WithMaxConcurrentCompaction(maxConcurrentCompaction[i]),
+		}
 	}
 
-	return telemetry.NewMeterProvider(meterProviderOpts...)
+	opts = []storage.Option{
+		storage.WithDataDBOptions(getStorageDBOptions(0)...),
+		storage.WithMetricsLogInterval(c.Duration(flagStorageMetricsLogInterval.Name)),
+	}
+	if c.Bool(flagExperimentalStorageSeparateDB.Name) {
+		opts = append(opts,
+			storage.SeparateDatabase(),
+			storage.WithCommitDBOptions(getStorageDBOptions(1)...),
+		)
+	}
+	if c.Bool(flagStorageDisableWAL.Name) {
+		opts = append(opts, storage.WithoutWAL())
+	}
+	if c.Bool(flagStorageNoSync.Name) {
+		opts = append(opts, storage.WithoutSync())
+	}
+	if c.Bool(flagStorageVerbose.Name) {
+		opts = append(opts, storage.WithVerboseLogging())
+	}
+	if name := flagStorageTrimDelay.Name; c.IsSet(name) {
+		opts = append(opts, storage.WithTrimDelay(c.Duration(name)))
+	}
+	if name := flagStorageTrimRate.Name; c.IsSet(name) {
+		rate, err := units.FromByteSizeString(c.String(name))
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, storage.WithTrimRateByte(int(rate)))
+	}
+	return opts, nil
+}
+
+func getStorageDBFlagValues[T any](values []T) (ret [2]T, err error) {
+	if len(values) == 0 {
+		return ret, errors.New("no values")
+	}
+	if len(values) > 2 {
+		return ret, errors.New("too many values")
+	}
+	if len(values) == 1 {
+		ret[0], ret[1] = values[0], values[0]
+	} else {
+		ret[0], ret[1] = values[0], values[1]
+	}
+	return ret, nil
+}
+
+func mapf[S, T any](ss []S, f func(S) (T, error)) ([]T, error) {
+	var err error
+	ts := make([]T, len(ss))
+	for i := range ss {
+		ts[i], err = f(ss[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return ts, nil
 }

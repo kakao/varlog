@@ -95,23 +95,19 @@ func (lsc *logStreamContext) storeReportCommitBase(commitVersion types.Version, 
 	lsc.base.mu.Unlock()
 }
 
-// localLowWatermark returns the local low watermark.
-func (lsc *logStreamContext) localLowWatermark() varlogpb.LogSequenceNumber {
-	if lsn := lsc.localLWM.Load().(varlogpb.LogSequenceNumber); !lsn.Invalid() {
-		return lsn
+// localWatermarks returns the local low and high watermarks. When the log stream replica does not have log entries since the log stream replica is either new or trimmed, the results lwm and hwm are zero values.
+func (lsc *logStreamContext) localWatermarks() (lwm varlogpb.LogSequenceNumber, hwm varlogpb.LogSequenceNumber, ok bool) {
+	lsn := lsc.localLWM.Load().(varlogpb.LogSequenceNumber)
+	if lsn.Invalid() {
+		return lwm, hwm, false
 	}
-	return varlogpb.LogSequenceNumber{}
-}
-
-// localHighWatermark returns the local high watermark.
-func (lsc *logStreamContext) localHighWatermark() varlogpb.LogSequenceNumber {
-	if _, _, uncommittedBegin, _ := lsc.reportCommitBase(); !uncommittedBegin.Invalid() {
-		return varlogpb.LogSequenceNumber{
-			LLSN: uncommittedBegin.LLSN - 1,
-			GLSN: uncommittedBegin.GLSN - 1,
-		}
+	lwm = lsn
+	_, _, uncommittedBegin, _ := lsc.reportCommitBase()
+	hwm = varlogpb.LogSequenceNumber{
+		LLSN: uncommittedBegin.LLSN - 1,
+		GLSN: uncommittedBegin.GLSN - 1,
 	}
-	return varlogpb.LogSequenceNumber{}
+	return lwm, hwm, true
 }
 
 // setLocalLowWatermark sets the local low watermark.

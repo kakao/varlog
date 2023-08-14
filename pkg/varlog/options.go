@@ -1,6 +1,7 @@
 package varlog
 
 import (
+	"math"
 	"time"
 
 	"go.uber.org/zap"
@@ -40,8 +41,13 @@ func defaultOptions() options {
 		logger:             zap.NewNop(),
 		grpcDialOptions: []grpc.DialOption{
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithReadBufferSize(1 << 20),
-			grpc.WithWriteBufferSize(1 << 20),
+			grpc.WithDefaultCallOptions(
+				// They set the maximum message size the client can read and
+				// write. We use the `math.MaxInt32` for those values, which
+				// are the full size possible.
+				grpc.MaxCallRecvMsgSize(math.MaxInt32),
+				grpc.MaxCallSendMsgSize(math.MaxInt32),
+			),
 		},
 	}
 }
@@ -134,9 +140,43 @@ func WithLogger(logger *zap.Logger) Option {
 	})
 }
 
-func WithGRPCDialOptions(grpcDialOptions ...grpc.DialOption) Option {
+// WithGRPCReadBufferSize sets the size of the gRPC read buffer. Internally, it
+// calls `google.golang.org/grpc.WithReadBufferSize`.
+func WithGRPCReadBufferSize(bytes int) Option {
 	return newOption(func(opts *options) {
-		opts.grpcDialOptions = append(opts.grpcDialOptions, grpcDialOptions...)
+		opts.grpcDialOptions = append(opts.grpcDialOptions,
+			grpc.WithReadBufferSize(bytes),
+		)
+	})
+}
+
+// WithGRPCWriteBufferSize sets the size of the gRPC write buffer. Internally,
+// it calls `google.golang.org/grpc.WithWriteBufferSize`.
+func WithGRPCWriteBufferSize(bytes int) Option {
+	return newOption(func(opts *options) {
+		opts.grpcDialOptions = append(opts.grpcDialOptions,
+			grpc.WithWriteBufferSize(bytes),
+		)
+	})
+}
+
+// WithGRPCInitialConnWindowSize sets the initial window size on a connection.
+// Internally, it calls `google.golang.org/grpc.WithInitialConnWindowSize`.
+func WithGRPCInitialConnWindowSize(bytes int32) Option {
+	return newOption(func(opts *options) {
+		opts.grpcDialOptions = append(opts.grpcDialOptions,
+			grpc.WithInitialConnWindowSize(bytes),
+		)
+	})
+}
+
+// WithGRPCInitialWindowSize sets the initial window size on a stream.
+// Internally, it calls `google.golang.org/grpc.WithInitialWindowSize`.
+func WithGRPCInitialWindowSize(bytes int32) Option {
+	return newOption(func(opts *options) {
+		opts.grpcDialOptions = append(opts.grpcDialOptions,
+			grpc.WithInitialWindowSize(bytes),
+		)
 	})
 }
 

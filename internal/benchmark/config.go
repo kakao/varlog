@@ -17,12 +17,13 @@ const (
 )
 
 type config struct {
-	cid            types.ClusterID
-	targets        []Target
-	mraddrs        []string
-	duration       time.Duration
-	reportInterval time.Duration
-	reportEncoder  ReportEncoder
+	cid                 types.ClusterID
+	targets             []Target
+	mraddrs             []string
+	duration            time.Duration
+	reportInterval      time.Duration
+	reportEncoder       ReportEncoder
+	singleConnPerTarget bool
 }
 
 func newConfig(opts []Option) (config, error) {
@@ -104,5 +105,11 @@ func WithReportInterval(reportInterval time.Duration) Option {
 func WithReportEncoder(enc ReportEncoder) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.reportEncoder = enc
+	})
+}
+
+func WithSingleConnPerTarget() Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.singleConnPerTarget = true
 	})
 }

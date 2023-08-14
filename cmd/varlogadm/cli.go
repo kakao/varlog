@@ -2,18 +2,18 @@ package main
 
 import (
 	"context"
-	"path/filepath"
 
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/kakao/varlog/internal/admin"
 	"github.com/kakao/varlog/internal/admin/mrmanager"
 	"github.com/kakao/varlog/internal/admin/snmanager"
 	"github.com/kakao/varlog/internal/admin/snwatcher"
+	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/log"
+	"github.com/kakao/varlog/pkg/util/telemetry"
 )
 
 func newAdminApp() *cli.App {
@@ -40,6 +40,7 @@ func newStartCommand() *cli.Command {
 			flagLogStreamGCTimeout.DurationFlag(false, admin.DefaultLogStreamGCTimeout),
 			flagDisableAutoLogStreamSync.BoolFlag(),
 			flagAutoUnseal.BoolFlag(),
+			flagReplicaSelector,
 
 			flagMetadataRepository.StringSliceFlag(true, nil),
 			flagInitMRConnRetryCount.IntFlag(false, mrmanager.DefaultInitialMRConnectRetryCount),
@@ -50,11 +51,24 @@ func newStartCommand() *cli.Command {
 			flagSNWatcherHeartbeatCheckDeadline.DurationFlag(false, snwatcher.DefaultHeartbeatDeadline),
 			flagSNWatcherReportDeadline.DurationFlag(false, snwatcher.DefaultReportDeadline),
 
-			flagLogDir.StringFlag(false, ""),
-			flagLogToStderr.BoolFlag(),
-			flagLogFileRetentionDays.IntFlag(false, 0),
-			flagLogFileCompression.BoolFlag(),
-			flagLogLevel.StringFlag(false, "info"),
+			// logger options
+			flags.LogDir,
+			flags.LogToStderr,
+			flags.LogFileMaxSizeMB,
+			flags.LogFileMaxBackups,
+			flags.LogFileRetentionDays,
+			flags.LogFileNameUTC,
+			flags.LogFileCompression,
+			flags.LogHumanReadable,
+			flags.LogLevel,
+
+			// telemetry
+			flags.TelemetryExporter,
+			flags.TelemetryExporterStopTimeout,
+			flags.TelemetryOTLPEndpoint,
+			flags.TelemetryOTLPInsecure,
+			flags.TelemetryHost,
+			flags.TelemetryRuntime,
 		},
 	}
 }
@@ -64,13 +78,34 @@ func start(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	logger, err := newLogger(c)
+
+	logOpts, err := flags.ParseLoggerFlags(c, "varlogadm.log")
+	if err != nil {
+		return err
+	}
+	logOpts = append(logOpts, log.WithZapLoggerOptions(zap.AddStacktrace(zap.DPanicLevel)))
+	logger, err := log.New(logOpts...)
 	if err != nil {
 		return err
 	}
 	logger = logger.Named("adm").With(zap.Uint32("cid", uint32(clusterID)))
 	defer func() {
 		_ = logger.Sync()
+	}()
+
+	meterProviderOpts, err := flags.ParseTelemetryFlags(context.Background(), c, "adm", clusterID.String(), clusterID)
+	if err != nil {
+		return err
+	}
+	mp, stop, err := telemetry.NewMeterProvider(meterProviderOpts...)
+	if err != nil {
+		return err
+	}
+	telemetry.SetGlobalMeterProvider(mp)
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), c.Duration(flags.TelemetryExporterStopTimeout.Name))
+		defer cancel()
+		_ = stop(ctx)
 	}()
 
 	mrMgr, err := mrmanager.New(context.TODO(),
@@ -95,10 +130,17 @@ func start(c *cli.Context) error {
 		return err
 	}
 
+	repfactor := c.Uint(flagReplicationFactor.Name)
+	repsel, err := admin.NewReplicaSelector(c.String(flagReplicaSelector.Name), mrMgr.ClusterMetadataView(), int(repfactor))
+	if err != nil {
+		return err
+	}
+
 	opts := []admin.Option{
 		admin.WithLogger(logger),
 		admin.WithListenAddress(c.String(flagListen.Name)),
-		admin.WithReplicationFactor(c.Uint(flagReplicationFactor.Name)),
+		admin.WithReplicationFactor(repfactor),
+		admin.WithReplicaSelector(repsel),
 		admin.WithLogStreamGCTimeout(c.Duration(flagLogStreamGCTimeout.Name)),
 		admin.WithMetadataRepositoryManager(mrMgr),
 		admin.WithStorageNodeManager(snMgr),
@@ -114,35 +156,4 @@ func start(c *cli.Context) error {
 		opts = append(opts, admin.WithAutoUnseal())
 	}
 	return Main(opts, logger)
-}
-
-func newLogger(c *cli.Context) (*zap.Logger, error) {
-	level, err := zapcore.ParseLevel(c.String(flagLogLevel.Name))
-	if err != nil {
-		return nil, err
-	}
-
-	opts := []log.Option{
-		log.WithHumanFriendly(),
-		log.WithLocalTime(),
-		log.WithZapLoggerOptions(zap.AddStacktrace(zap.DPanicLevel)),
-		log.WithLogLevel(level),
-	}
-	if !c.Bool(flagLogToStderr.Name) {
-		opts = append(opts, log.WithoutLogToStderr())
-	}
-	if logdir := c.String(flagLogDir.Name); len(logdir) != 0 {
-		absDir, err := filepath.Abs(logdir)
-		if err != nil {
-			return nil, err
-		}
-		opts = append(opts, log.WithPath(filepath.Join(absDir, "varlogadm.log")))
-	}
-	if c.Bool(flagLogFileCompression.Name) {
-		opts = append(opts, log.WithCompression())
-	}
-	if retention := c.Int(flagLogFileRetentionDays.Name); retention > 0 {
-		opts = append(opts, log.WithAgeDays(retention))
-	}
-	return log.New(opts...)
 }

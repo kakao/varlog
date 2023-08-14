@@ -1,6 +1,10 @@
 package snpb
 
-import "github.com/kakao/varlog/pkg/types"
+import (
+	"fmt"
+
+	"github.com/kakao/varlog/pkg/types"
+)
 
 func InvalidSyncPosition() SyncPosition {
 	return SyncPosition{LLSN: types.InvalidLLSN, GLSN: types.InvalidGLSN}
@@ -20,4 +24,14 @@ func InvalidSyncRange() SyncRange {
 
 func (sr SyncRange) Invalid() bool {
 	return sr.FirstLLSN.Invalid() || sr.LastLLSN.Invalid() || sr.FirstLLSN > sr.LastLLSN
+}
+
+func (sr SyncRange) Validate() error {
+	if sr.FirstLLSN > sr.LastLLSN {
+		return fmt.Errorf("invalid sync range: first %d, last %d", sr.FirstLLSN, sr.LastLLSN)
+	}
+	if sr.FirstLLSN.Invalid() && !sr.LastLLSN.Invalid() {
+		return fmt.Errorf("invalid sync range: only first invalid: first %d, last %d", sr.FirstLLSN, sr.LastLLSN)
+	}
+	return nil
 }
