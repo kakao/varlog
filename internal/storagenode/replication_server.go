@@ -56,6 +56,7 @@ func (rs *replicationServer) SyncReplicateStream(stream snpb.Replicator_SyncRepl
 	var err error
 	req := new(snpb.SyncReplicateRequest)
 	for {
+		req.Reset()
 		err = stream.RecvMsg(req)
 		if err != nil {
 			if err == io.EOF {
@@ -114,6 +115,7 @@ func (rs *replicationServer) recv(ctx context.Context, stream snpb.Replicator_Re
 		defer close(c)
 		req := &snpb.ReplicateRequest{}
 		for {
+			req.Reset()
 			err := stream.RecvMsg(req)
 			rst := newReplicationServerTask(*req, err)
 			select {
