@@ -19,7 +19,7 @@ option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
 message GetMetadataRequest {
-  uint32 cluster_id = 1 [
+  int32 cluster_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
@@ -30,7 +30,7 @@ message GetMetadataResponse {
 }
 
 message AddLogStreamReplicaRequest {
-  uint32 cluster_id = 1 [
+  int32 cluster_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
@@ -54,7 +54,7 @@ message AddLogStreamReplicaResponse {
 }
 
 message RemoveLogStreamRequest {
-  uint32 cluster_id = 1 [
+  int32 cluster_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
@@ -73,7 +73,7 @@ message RemoveLogStreamRequest {
 }
 
 message SealRequest {
-  uint32 cluster_id = 1 [
+  int32 cluster_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
@@ -104,7 +104,7 @@ message SealResponse {
 }
 
 message UnsealRequest {
-  uint32 cluster_id = 1 [
+  int32 cluster_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
@@ -133,7 +133,7 @@ message SyncRequest {
     ];
     string address = 2;
   }
-  uint32 cluster_id = 1 [
+  int32 cluster_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];

@@ -24,7 +24,7 @@ message StorageNodeMetadataDescriptor {
   option (gogoproto.equal) = true;
 
   // ClusterID is the identifier of the cluster.
-  uint32 cluster_id = 1 [
+  int32 cluster_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID",
     (gogoproto.jsontag) = "clusterId"

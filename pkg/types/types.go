@@ -10,17 +10,17 @@ import (
 	"sync/atomic"
 )
 
-type ClusterID uint32
+type ClusterID int32
 
 var _ fmt.Stringer = (*ClusterID)(nil)
 
 func ParseClusterID(s string) (ClusterID, error) {
-	id, err := strconv.ParseUint(s, 10, 32)
+	id, err := strconv.ParseInt(s, 10, 32)
 	return ClusterID(id), err
 }
 
 func (cid ClusterID) String() string {
-	return strconv.FormatUint(uint64(cid), 10)
+	return strconv.FormatInt(int64(cid), 10)
 }
 
 type StorageNodeID int32

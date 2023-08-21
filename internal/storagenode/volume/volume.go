@@ -45,7 +45,7 @@ func (dd *DataDir) String() string {
 // Valid if the cluster ID and storage node ID are correct and the data directory is writable.
 func (dd *DataDir) Valid(cid types.ClusterID, snid types.StorageNodeID) error {
 	if dd.ClusterID != cid {
-		return fmt.Errorf("unexpected cluster id %d", uint32(dd.ClusterID))
+		return fmt.Errorf("unexpected cluster id %d", dd.ClusterID)
 	}
 	if dd.StorageNodeID != snid {
 		return fmt.Errorf("unexpected storage node id %d", int32(dd.StorageNodeID))
