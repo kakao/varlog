@@ -34,7 +34,7 @@ func newStartCommand() *cli.Command {
 		Usage:   "start [flags]",
 		Action:  start,
 		Flags: []cli.Flag{
-			flagClusterID.StringFlag(false, types.ClusterID(1).String()),
+			flagClusterID,
 			flagListen.StringFlag(false, admin.DefaultListenAddress),
 			flagReplicationFactor,
 			flagLogStreamGCTimeout.DurationFlag(false, admin.DefaultLogStreamGCTimeout),

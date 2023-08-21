@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	flagClusterID          = flags.ClusterID()
+	flagClusterID          = flags.ClusterID
 	flagMetadataRepository = flags.MetadataRepositoryAddress()
 	flagListen             = flags.FlagDesc{
 		Name:    "listen",

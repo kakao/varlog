@@ -121,7 +121,7 @@ func initCLI() *cli.App {
 			Usage:   "start [flags]",
 			Action:  start,
 			Flags: []cli.Flag{
-				flagClusterID.StringFlag(false, metarepos.DefaultClusterID.String()),
+				flagClusterID,
 				flagRPCAddr.StringFlag(false, metarepos.DefaultRPCBindAddress),
 				flagRaftAddr.StringFlag(false, metarepos.DefaultRaftAddress),
 				flagDebugAddr.StringFlag(false, metarepos.DefaultDebugAddress),

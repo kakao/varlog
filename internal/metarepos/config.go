@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	DefaultClusterID                        = types.ClusterID(1)
+	defaultClusterID                        = flags.DefaultClusterID
 	DefaultRPCBindAddress                   = "0.0.0.0:9092"
 	DefaultDebugAddress                     = "0.0.0.0:9099"
 	DefaultRaftPort                         = 10000
@@ -99,7 +99,7 @@ func newConfig(opts []Option) (config, error) {
 			raftTick:          DefaultRaftTick,
 			raftDir:           DefaultRaftDir,
 		},
-		clusterID:                      DefaultClusterID,
+		clusterID:                      defaultClusterID,
 		rpcAddr:                        DefaultRPCBindAddress,
 		raftAddr:                       DefaultRaftAddress,
 		debugAddr:                      DefaultDebugAddress,

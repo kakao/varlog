@@ -4,11 +4,12 @@ import (
 	"errors"
 	"time"
 
+	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/pkg/types"
 )
 
 const (
-	DefaultClusterID      = types.ClusterID(1)
+	defaultClusterID      = flags.DefaultClusterID
 	DefaultMessageSize    = 0
 	DefaultBatchSize      = 1
 	DefaultConcurrency    = 0
@@ -28,7 +29,7 @@ type config struct {
 
 func newConfig(opts []Option) (config, error) {
 	cfg := config{
-		cid:            DefaultClusterID,
+		cid:            defaultClusterID,
 		duration:       DefaultDuration,
 		reportInterval: DefaultReportInterval,
 	}

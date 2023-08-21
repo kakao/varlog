@@ -8,12 +8,7 @@ import (
 )
 
 var (
-	flagClusterID = flags.FlagDesc{
-		Name:    "cluster-id",
-		Aliases: []string{"cid"},
-		Usage:   "cluster id",
-		Envs:    []string{"CLUSTER_ID"},
-	}
+	flagClusterID = flags.ClusterID
 
 	flagRPCAddr = flags.FlagDesc{
 		Name:    "rpc-address",

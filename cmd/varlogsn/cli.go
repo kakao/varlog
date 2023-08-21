@@ -32,7 +32,7 @@ func newStartCommand() *cli.Command {
 		Aliases: []string{"s"},
 		Action:  start,
 		Flags: []cli.Flag{
-			flagClusterID.StringFlag(false, types.ClusterID(1).String()),
+			flagClusterID,
 			flagStorageNodeID.StringFlag(false, types.StorageNodeID(1).String()),
 			flagListen.StringFlag(false, "127.0.0.1:9091"),
 			flagAdvertise.StringFlag(false, ""),

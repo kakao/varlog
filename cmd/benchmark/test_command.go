@@ -7,16 +7,13 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/kakao/varlog/internal/benchmark"
+	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/pkg/types"
 )
 
 var (
-	flagClusterID = &cli.StringFlag{
-		Name:  "cluster",
-		Usage: "Cluster ID",
-		Value: benchmark.DefaultClusterID.String(),
-	}
-	flagTarget = &cli.StringSliceFlag{
+	flagClusterID = flags.ClusterID
+	flagTarget    = &cli.StringSliceFlag{
 		Name:     "target",
 		Required: true,
 		Usage:    "The target of the benchmark load formatted by \"topic1:logstream1,topic2:logstream2,...<topic_id:logstream_id>\"",

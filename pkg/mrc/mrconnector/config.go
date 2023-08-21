@@ -6,13 +6,13 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
-	"github.com/kakao/varlog/pkg/vflag"
 )
 
 const (
-	defaultClusterID         = vflag.DefaultClusterID
+	defaultClusterID         = flags.DefaultClusterID
 	defaultConnTimeout       = 1 * time.Second
 	defaultRPCTimeout        = 1 * time.Second
 	defaultInitCount         = 10

@@ -16,7 +16,7 @@ const (
 )
 
 var (
-	flagClusterID     = flags.ClusterID()
+	flagClusterID     = flags.ClusterID
 	flagStorageNodeID = flags.StorageNodeID()
 	flagListen        = flags.FlagDesc{
 		Name:    "listen",

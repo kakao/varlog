@@ -14,6 +14,11 @@ type ClusterID int32
 
 var _ fmt.Stringer = (*ClusterID)(nil)
 
+const (
+	MinClusterID = ClusterID(1)
+	MaxClusterID = ClusterID(math.MaxInt32)
+)
+
 func ParseClusterID(s string) (ClusterID, error) {
 	id, err := strconv.ParseInt(s, 10, 32)
 	return ClusterID(id), err
@@ -21,6 +26,10 @@ func ParseClusterID(s string) (ClusterID, error) {
 
 func (cid ClusterID) String() string {
 	return strconv.FormatInt(int64(cid), 10)
+}
+
+func (cid ClusterID) Invalid() bool {
+	return cid < MinClusterID
 }
 
 type StorageNodeID int32

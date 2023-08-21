@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	DefaultClusterID          = types.ClusterID(1)
+	defaultClusterID          = flags.DefaultClusterID
 	DefaultListenAddress      = "127.0.0.1:9090"
 	DefaultReplicationFactor  = flags.DefaultReplicationFactor
 	DefaultLogStreamGCTimeout = 24 * time.Hour
@@ -39,7 +39,7 @@ type config struct {
 
 func newConfig(opts []Option) (config, error) {
 	cfg := config{
-		cid:                DefaultClusterID,
+		cid:                defaultClusterID,
 		listenAddress:      DefaultListenAddress,
 		replicationFactor:  DefaultReplicationFactor,
 		logStreamGCTimeout: DefaultLogStreamGCTimeout,
