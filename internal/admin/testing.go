@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
+	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/proto/admpb"
 )
 
@@ -67,7 +68,7 @@ func TestNewMockServer(t *testing.T, ctrl *gomock.Controller) *TestMockServer {
 
 	tms := &TestMockServer{
 		listener:                 lis,
-		grpcServer:               grpc.NewServer(),
+		grpcServer:               rpc.NewServer(),
 		address:                  addr,
 		MockClusterManagerServer: admpb.NewMockClusterManagerServer(ctrl),
 	}

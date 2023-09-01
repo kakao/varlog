@@ -43,7 +43,7 @@ func (trs *testReplicateServer) SyncReplicateStream(snpb.Replicator_SyncReplicat
 
 func TestNewReplicateServer(t *testing.T, mock *mock.MockReplicatorServer) (server snpb.ReplicatorServer, rpcConn *rpc.Conn, closer func()) {
 	trs := &testReplicateServer{
-		server: grpc.NewServer(),
+		server: rpc.NewServer(),
 		mock:   mock,
 	}
 

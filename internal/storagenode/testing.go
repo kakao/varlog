@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/internal/storagenode/client"
+	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/snpb/mock"
@@ -222,7 +223,7 @@ func TestNewRPCServer(t *testing.T, ctrl *gomock.Controller, snid types.StorageN
 
 	trs := &testRPCServer{
 		listener:                    lis,
-		grpcServer:                  grpc.NewServer(),
+		grpcServer:                  rpc.NewServer(),
 		address:                     addr,
 		snid:                        snid,
 		MockLogIOServer:             mock.NewMockLogIOServer(ctrl),

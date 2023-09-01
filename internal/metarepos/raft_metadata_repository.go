@@ -23,6 +23,7 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kakao/varlog/internal/reportcommitter"
+	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/pkg/util/netutil"
@@ -138,7 +139,7 @@ func NewRaftMetadataRepository(opts ...Option) *RaftMetadataRepository {
 
 	mr.reportCollector = NewReportCollector(mr, mr.rpcTimeout, mr.tmStub, mr.logger.Named("report"))
 
-	mr.server = grpc.NewServer()
+	mr.server = rpc.NewServer()
 	mr.healthServer = health.NewServer()
 	grpc_health_v1.RegisterHealthServer(mr.server, mr.healthServer)
 	NewMetadataRepositoryService(mr).Register(mr.server)

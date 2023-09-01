@@ -20,7 +20,7 @@ func testNewServer(t *testing.T) (addr string, closer func()) {
 	assert.NoError(t, err)
 	addr = lis.Addr().String()
 
-	server := grpc.NewServer()
+	server := NewServer()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
