@@ -1,8 +1,11 @@
 package varlogtest
 
 import (
+	"cmp"
 	"context"
+	"fmt"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -466,15 +469,50 @@ func (c *testAdmin) Trim(ctx context.Context, topicID types.TopicID, lastGLSN ty
 }
 
 func (c *testAdmin) GetMetadataRepositoryNode(ctx context.Context, nid types.NodeID, opts ...varlog.AdminCallOption) (*varlogpb.MetadataRepositoryNode, error) {
-	panic("not implemented")
+	if err := c.lock(); err != nil {
+		return nil, err
+	}
+	defer c.unlock()
+
+	mrn, ok := c.vt.mrns[nid]
+	if !ok {
+		return nil, fmt.Errorf("metadata repository node: %w", verrors.ErrNotExist)
+	}
+	return &mrn, nil
 }
 
 func (c *testAdmin) ListMetadataRepositoryNodes(ctx context.Context, opts ...varlog.AdminCallOption) ([]varlogpb.MetadataRepositoryNode, error) {
-	panic("not implemented")
+	if err := c.lock(); err != nil {
+		return nil, err
+	}
+	defer c.unlock()
+
+	ret := make([]varlogpb.MetadataRepositoryNode, 0, len(c.vt.mrns))
+	for _, mrn := range c.vt.mrns {
+		ret = append(ret, mrn)
+	}
+	slices.SortFunc(ret, func(a, b varlogpb.MetadataRepositoryNode) int {
+		return cmp.Compare(a.NodeID, b.NodeID)
+	})
+	return ret, nil
 }
 
 func (c *testAdmin) GetMRMembers(ctx context.Context, opts ...varlog.AdminCallOption) (*admpb.GetMRMembersResponse, error) {
-	panic("not implemented")
+	if err := c.lock(); err != nil {
+		return nil, err
+	}
+	defer c.unlock()
+
+	rsp := &admpb.GetMRMembersResponse{
+		Leader:            c.vt.leaderMR,
+		ReplicationFactor: int32(c.vt.replicationFactor),
+		Members:           make(map[types.NodeID]string, len(c.vt.mrns)),
+	}
+	for _, mrn := range c.vt.mrns {
+		rsp.Members[mrn.NodeID] = mrn.RaftURL
+	}
+
+	return rsp, nil
 }
 
 func (c *testAdmin) AddMetadataRepositoryNode(ctx context.Context, raftURL, rpcAddr string, opts ...varlog.AdminCallOption) (*varlogpb.MetadataRepositoryNode, error) {
