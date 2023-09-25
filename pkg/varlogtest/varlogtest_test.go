@@ -6,6 +6,7 @@ import (
 	"io"
 	"math/rand"
 	"slices"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -20,8 +21,127 @@ import (
 	"github.com/kakao/varlog/pkg/varlog/x/mlsa"
 	"github.com/kakao/varlog/pkg/varlogtest"
 	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
+
+func TestVarlogTestAddLogStream(t *testing.T) {
+	const (
+		cid       = types.MinClusterID
+		repfactor = 3
+	)
+
+	ctx := context.Background()
+
+	addStorageNodes := func(t *testing.T, adm varlog.Admin) []snpb.StorageNodeMetadataDescriptor {
+		snmds := make([]snpb.StorageNodeMetadataDescriptor, repfactor)
+		for i := 0; i < repfactor; i++ {
+			snid := types.MinStorageNodeID + types.StorageNodeID(i)
+			snaddr := "sn" + strconv.Itoa(i+1)
+			snm, err := adm.AddStorageNode(ctx, snid, snaddr)
+			require.NoError(t, err)
+			snmds[i] = snm.StorageNodeMetadataDescriptor
+		}
+		return snmds
+	}
+
+	tcs := []struct {
+		testf func(t *testing.T, adm varlog.Admin, tpid types.TopicID)
+		name  string
+	}{
+		{
+			name: "Succeed",
+			testf: func(t *testing.T, adm varlog.Admin, tpid types.TopicID) {
+				_ = addStorageNodes(t, adm)
+
+				_, err := adm.AddLogStream(ctx, tpid, nil)
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "CouldNotAddLogStream_NoSuchTopic",
+			testf: func(t *testing.T, adm varlog.Admin, tpid types.TopicID) {
+				_, err := adm.AddLogStream(ctx, tpid+1, nil)
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "CouldNotAddLogStream_NotEnoughStorageNodes",
+			testf: func(t *testing.T, adm varlog.Admin, tpid types.TopicID) {
+				_, err := adm.AddLogStream(ctx, tpid, nil)
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "CouldNotAddLogStream_DuplicateStorageNodeInReplicas",
+			testf: func(t *testing.T, adm varlog.Admin, tpid types.TopicID) {
+				snmds := addStorageNodes(t, adm)
+
+				replicas := make([]*varlogpb.ReplicaDescriptor, repfactor)
+				for i := range replicas {
+					replicas[i] = &varlogpb.ReplicaDescriptor{
+						StorageNodeID:   snmds[0].StorageNodeID,
+						StorageNodePath: snmds[0].Storages[0].Path,
+					}
+				}
+				_, err := adm.AddLogStream(ctx, tpid, replicas)
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "CouldNotAddLogStream_UnknownStorageNode",
+			testf: func(t *testing.T, adm varlog.Admin, tpid types.TopicID) {
+				snmds := addStorageNodes(t, adm)
+
+				replicas := make([]*varlogpb.ReplicaDescriptor, repfactor)
+				for i := range replicas {
+					replicas[i] = &varlogpb.ReplicaDescriptor{
+						StorageNodeID:   snmds[i].StorageNodeID + 10,
+						StorageNodePath: snmds[i].Storages[0].Path,
+					}
+				}
+				_, err := adm.AddLogStream(ctx, tpid, replicas)
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "CouldNotAddLogStream_ReplicasLengthLessThanReplicationFactor",
+			testf: func(t *testing.T, adm varlog.Admin, tpid types.TopicID) {
+				snmds := addStorageNodes(t, adm)
+
+				replicas := make([]*varlogpb.ReplicaDescriptor, repfactor-1)
+				for i := 0; i < repfactor-1; i++ {
+					replicas[i] = &varlogpb.ReplicaDescriptor{
+						StorageNodeID:   snmds[i].StorageNodeID,
+						StorageNodePath: snmds[i].Storages[0].Path,
+					}
+				}
+				_, err := adm.AddLogStream(ctx, tpid, replicas)
+				require.Error(t, err)
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			vt, err := varlogtest.New(
+				varlogtest.WithClusterID(cid),
+				varlogtest.WithReplicationFactor(repfactor),
+			)
+			require.NoError(t, err)
+
+			adm := vt.NewAdminClient()
+			t.Cleanup(func() {
+				require.NoError(t, adm.Close())
+			})
+
+			td, err := adm.AddTopic(ctx)
+			require.NoError(t, err)
+
+			tc.testf(t, adm, td.TopicID)
+		})
+	}
+}
 
 func TestVarlotTest_LogStreamAppender(t *testing.T) {
 	const (

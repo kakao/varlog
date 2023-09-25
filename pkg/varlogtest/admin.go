@@ -245,10 +245,11 @@ func (c *testAdmin) AddLogStream(_ context.Context, topicID types.TopicID, logSt
 		LogStreamID: logStreamID,
 		TopicID:     topicID,
 		Status:      varlogpb.LogStreamStatusRunning,
-		Replicas:    make([]*varlogpb.ReplicaDescriptor, c.vt.replicationFactor),
+		Replicas:    logStreamReplicas,
 	}
 
-	if logStreamReplicas == nil {
+	if lsd.Replicas == nil {
+		lsd.Replicas = make([]*varlogpb.ReplicaDescriptor, c.vt.replicationFactor)
 		snids := c.vt.storageNodeIDs()
 		for i, j := range c.vt.rng.Perm(len(snids))[:c.vt.replicationFactor] {
 			snid := snids[j]
@@ -260,8 +261,19 @@ func (c *testAdmin) AddLogStream(_ context.Context, topicID types.TopicID, logSt
 				DataPath:        dataPath,
 			}
 		}
-	} else {
-		lsd.Replicas = logStreamReplicas
+	}
+
+	if err := lsd.Validate(); err != nil {
+		return nil, err
+	}
+	if len(lsd.Replicas) < c.vt.replicationFactor {
+		return nil, errors.New("not enough replicas")
+	}
+	for _, rd := range lsd.Replicas {
+		_, ok := c.vt.storageNodes[rd.StorageNodeID]
+		if !ok {
+			return nil, fmt.Errorf("unknown storage node %d", rd.StorageNodeID)
+		}
 	}
 
 	c.vt.logStreams[logStreamID] = lsd
