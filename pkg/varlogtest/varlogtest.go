@@ -17,9 +17,6 @@ import (
 type VarlogTest struct {
 	config
 
-	admin *testAdmin
-	vlg   *testLog
-
 	rng *rand.Rand
 
 	mu               sync.Mutex
@@ -38,9 +35,6 @@ type VarlogTest struct {
 	nextTopicID       types.TopicID
 	nextStorageNodeID types.StorageNodeID
 	nextLogStreamID   types.LogStreamID
-
-	adminClientClosed  bool
-	varlogClientClosed bool
 }
 
 func New(opts ...Option) (*VarlogTest, error) {
@@ -62,8 +56,6 @@ func New(opts ...Option) (*VarlogTest, error) {
 		leaderMR:         types.InvalidNodeID,
 	}
 	vt.cond = sync.NewCond(&vt.mu)
-	vt.admin = &testAdmin{vt: vt}
-	vt.vlg = &testLog{vt: vt}
 
 	for _, mrn := range vt.initialMRNodes {
 		if vt.leaderMR == types.InvalidNodeID {
@@ -76,12 +68,12 @@ func New(opts ...Option) (*VarlogTest, error) {
 	return vt, nil
 }
 
-func (vt *VarlogTest) Admin() varlog.Admin {
-	return vt.admin
+func (vt *VarlogTest) NewAdminClient() varlog.Admin {
+	return &testAdmin{vt: vt}
 }
 
-func (vt *VarlogTest) Log() varlog.Log {
-	return vt.vlg
+func (vt *VarlogTest) NewLogClient() varlog.Log {
+	return &testLog{vt: vt}
 }
 
 func (vt *VarlogTest) generateTopicID() types.TopicID {

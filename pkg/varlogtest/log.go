@@ -14,14 +14,15 @@ import (
 )
 
 type testLog struct {
-	vt *VarlogTest
+	vt     *VarlogTest
+	closed bool
 }
 
 var _ varlog.Log = (*testLog)(nil)
 
 func (c *testLog) lock() error {
 	c.vt.cond.L.Lock()
-	if c.vt.varlogClientClosed {
+	if c.closed {
 		c.vt.cond.L.Unlock()
 		return verrors.ErrClosed
 	}
@@ -35,7 +36,7 @@ func (c *testLog) unlock() {
 func (c *testLog) Close() error {
 	c.vt.cond.L.Lock()
 	defer c.vt.cond.L.Unlock()
-	c.vt.varlogClientClosed = true
+	c.closed = true
 	c.vt.cond.Broadcast()
 	return nil
 }
@@ -247,7 +248,7 @@ func (c *testLog) SubscribeTo(ctx context.Context, topicID types.TopicID, logStr
 		return logEntries
 	}
 	s.vt.closedClient = func() bool {
-		return c.vt.varlogClientClosed
+		return c.closed
 	}
 
 	s.wg.Add(1)
