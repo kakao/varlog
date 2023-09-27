@@ -152,11 +152,11 @@ func TestVarlotTest_LogStreamAppender(t *testing.T) {
 
 	tcs := []struct {
 		name  string
-		testf func(t *testing.T, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID)
+		testf func(t *testing.T, vadm varlog.Admin, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID)
 	}{
 		{
 			name: "Closed",
-			testf: func(t *testing.T, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID) {
+			testf: func(t *testing.T, vadm varlog.Admin, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID) {
 				lsa, err := vcli.NewLogStreamAppender(tpid, lsid)
 				require.NoError(t, err)
 
@@ -167,7 +167,7 @@ func TestVarlotTest_LogStreamAppender(t *testing.T) {
 		},
 		{
 			name: "AppendLogs",
-			testf: func(t *testing.T, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID) {
+			testf: func(t *testing.T, vadm varlog.Admin, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID) {
 				lsa, err := vcli.NewLogStreamAppender(tpid, lsid)
 				require.NoError(t, err)
 				defer lsa.Close()
@@ -182,8 +182,25 @@ func TestVarlotTest_LogStreamAppender(t *testing.T) {
 			},
 		},
 		{
+			name: "CouldNotAppend_Sealed",
+			testf: func(t *testing.T, vadm varlog.Admin, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID) {
+				_, err := vadm.Seal(context.Background(), tpid, lsid)
+				require.NoError(t, err)
+
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid)
+				require.NoError(t, err)
+				defer lsa.Close()
+
+				cb := func(_ []varlogpb.LogEntryMeta, err error) {
+					assert.ErrorIs(t, err, verrors.ErrSealed)
+				}
+				err = lsa.AppendBatch([][]byte{[]byte("foo")}, cb)
+				require.NoError(t, err)
+			},
+		},
+		{
 			name: "Manager",
-			testf: func(t *testing.T, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID) {
+			testf: func(t *testing.T, vadm varlog.Admin, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID) {
 				mgr := mlsa.New(vcli)
 
 				_, err := mgr.Get(tpid+1, lsid)
@@ -264,7 +281,7 @@ func TestVarlotTest_LogStreamAppender(t *testing.T) {
 			require.Equal(t, varlogpb.LogStreamStatusRunning, lsd.Status)
 			require.Len(t, lsd.Replicas, replicationFactor)
 
-			tc.testf(t, vlg, td.TopicID, lsd.LogStreamID)
+			tc.testf(t, adm, vlg, td.TopicID, lsd.LogStreamID)
 		})
 	}
 }

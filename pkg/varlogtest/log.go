@@ -346,7 +346,7 @@ func (c *testLog) NewLogStreamAppender(tpid types.TopicID, lsid types.LogStreamI
 	go func() {
 		defer lsa.wg.Done()
 		for qe := range lsa.queue.ch {
-			qe.callback(qe.result.Metadata, nil)
+			qe.callback(qe.result.Metadata, qe.result.Err)
 			lsa.queue.cv.L.Lock()
 			lsa.queue.cv.Broadcast()
 			lsa.queue.cv.L.Unlock()
