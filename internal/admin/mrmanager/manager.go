@@ -400,7 +400,10 @@ func (mrm *mrManager) getClusterMetadataSlowly(ctx context.Context) (*varlogpb.M
 			return nil, fmt.Errorf("cluster metadata: %w", err)
 		}
 		if info.ClusterID != mrm.cid {
-			return nil, fmt.Errorf("unexpected cluster id: expected %v, got %v", mrm.cid, info.ClusterID)
+			return nil, fmt.Errorf("unexpected cluster id: admin %v, metadata repository %v", mrm.cid, info.ClusterID)
+		}
+		if int(info.ReplicationFactor) != mrm.repfactor {
+			return nil, fmt.Errorf("unexpected replication factor: admin %v, metadata repository %v", mrm.repfactor, info.ReplicationFactor)
 		}
 
 		mrm.mu.Lock()

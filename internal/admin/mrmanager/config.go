@@ -2,10 +2,12 @@ package mrmanager
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/pkg/types"
 )
 
@@ -18,6 +20,7 @@ const (
 
 type config struct {
 	cid                         types.ClusterID
+	repfactor                   int
 	metadataRepositoryAddresses []string
 	initialMRConnRetryCount     int
 	initialMRConnRetryBackoff   time.Duration
@@ -28,6 +31,7 @@ type config struct {
 
 func newConfig(opts []Option) (config, error) {
 	cfg := config{
+		repfactor:                 flags.DefaultReplicationFactor,
 		initialMRConnRetryCount:   DefaultInitialMRConnectRetryCount,
 		initialMRConnRetryBackoff: DefaultInitialMRConnectRetryBackoff,
 		connTimeout:               DefaultMRConnTimeout,
@@ -45,6 +49,9 @@ func newConfig(opts []Option) (config, error) {
 }
 
 func (cfg *config) validate() error {
+	if cfg.repfactor < 1 {
+		return fmt.Errorf("invalid replication factor %d", cfg.repfactor)
+	}
 	if len(cfg.metadataRepositoryAddresses) == 0 {
 		return errors.New("no metadata repository address")
 	}
@@ -73,6 +80,12 @@ func (fo *funcOption) apply(cfg *config) {
 func WithClusterID(cid types.ClusterID) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.cid = cid
+	})
+}
+
+func WithReplicationFactor(repfactor int) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.repfactor = repfactor
 	})
 }
 
