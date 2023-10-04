@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.16.0](https://github.com/kakao/varlog/compare/v0.15.0...v0.16.0) (2023-10-04)
+
+
+### Features
+
+* **admin:** check cluster id in mrmanager ([b958fe0](https://github.com/kakao/varlog/commit/b958fe0f5615370b8e84320e5df1d4bb59181a98))
+* **admin:** check cluster id in mrmanager ([#555](https://github.com/kakao/varlog/issues/555)) ([7794a6d](https://github.com/kakao/varlog/commit/7794a6dd9b6a50094fb1a3fdff0ff3a8c27e07ab))
+* **admin:** check replication factor in mrmanager ([a18b285](https://github.com/kakao/varlog/commit/a18b28513d5f8e813ca9e9a88b038edea5526d3d))
+* **admin:** check replication factor in mrmanager ([#556](https://github.com/kakao/varlog/issues/556)) ([2a1b5b6](https://github.com/kakao/varlog/commit/2a1b5b61ea3055c54e84ebf445ad4c238873a3b8))
+* **all:** add gogoproto codec to grpc servers ([5e1f344](https://github.com/kakao/varlog/commit/5e1f344a849e9ab2b7871e082e7564dcb6365ab3))
+* **all:** add gogoproto codec to grpc servers ([#581](https://github.com/kakao/varlog/issues/581)) ([6127cd2](https://github.com/kakao/varlog/commit/6127cd204e04f65ec0567f3150f5566cc92b8340))
+* **all:** change type of ClusterID from uint32 to int32 ([500a4bb](https://github.com/kakao/varlog/commit/500a4bbfda2cfe99661c013872d729ca7772cca4))
+* **all:** change type of ClusterID from uint32 to int32 ([#566](https://github.com/kakao/varlog/issues/566)) ([ac89e40](https://github.com/kakao/varlog/commit/ac89e40be8ac44026d8a1a26918736394215a7bf))
+* **varlogtest:** add functional options to varlogtest ([97dab98](https://github.com/kakao/varlog/commit/97dab98428956e3552d85484cc3359c747f91566))
+* **varlogtest:** add functional options to varlogtest ([#582](https://github.com/kakao/varlog/issues/582)) ([eb8a96f](https://github.com/kakao/varlog/commit/eb8a96f89665ff403fd4afa80d058a78bf5ef083))
+* **varlogtest:** add initial metadata repository and support fetch APIs ([c033d62](https://github.com/kakao/varlog/commit/c033d621660acb0344d0378a913d40ccdac7970f))
+* **varlogtest:** add initial metadata repository and support fetch APIs ([#583](https://github.com/kakao/varlog/issues/583)) ([626bdf8](https://github.com/kakao/varlog/commit/626bdf8a34762840be122ee8cdbb634ceb28eb45))
+* **varlogtest:** create new instance of admin and log ([2c98f7f](https://github.com/kakao/varlog/commit/2c98f7fd8fc58458d590c360af6a80754988903e))
+* **varlogtest:** create new instance of admin and log ([#591](https://github.com/kakao/varlog/issues/591)) ([385446d](https://github.com/kakao/varlog/commit/385446db861c9e53b0b9543c7914538064b6a9c5))
+
+
+### Bug Fixes
+
+* **admin:** refresh cluster metadata while adding storage node ([a2e0326](https://github.com/kakao/varlog/commit/a2e0326f13e7b844a0db3c8cc01469926e636844))
+* **admin:** refresh cluster metadata while adding storage node ([#558](https://github.com/kakao/varlog/issues/558)) ([4cb06f1](https://github.com/kakao/varlog/commit/4cb06f1b391a5164e049ff074597f64f6b32d0f0))
+* **rpc:** call Reset before unmarshaling protobuf ([aae2495](https://github.com/kakao/varlog/commit/aae24957d0e10a7af1c8c29bfba1e8b85d2d7ec0))
+* **varlogtest:** log stream appender can be closed in the callback ([e08371b](https://github.com/kakao/varlog/commit/e08371b3338ec3f3b570d0da4d8bee2efb3d9d7c))
+* **varlogtest:** log stream appender can be closed in the callback ([#595](https://github.com/kakao/varlog/issues/595)) ([2480922](https://github.com/kakao/varlog/commit/2480922be2637f227e65f2fb92e5ef6ae0ffc290))
+* **varlogtest:** log stream appender returns missing errors in the callback ([9d0b203](https://github.com/kakao/varlog/commit/9d0b2034b04b4bdc455c4341e679f0b5899364d9))
+* **varlogtest:** log stream appender returns missing errors in the callback ([#594](https://github.com/kakao/varlog/issues/594)) ([d2e88ee](https://github.com/kakao/varlog/commit/d2e88ee32ce8e90b288fed591d2c941cc2cd42df))
+* **varlogtest:** validate log stream descriptor to create it ([73d6a91](https://github.com/kakao/varlog/commit/73d6a9168c9dc0194b5ec11390949270f532d779))
+* **varlogtest:** validate log stream descriptor to create it ([#593](https://github.com/kakao/varlog/issues/593)) ([27cd3bb](https://github.com/kakao/varlog/commit/27cd3bb5a1e54fcdb16629fdbc794322752cb905))
+
+
+### Performance Improvements
+
+* **rpc:** use gogoproto codec ([#236](https://github.com/kakao/varlog/issues/236)) ([c4224c0](https://github.com/kakao/varlog/commit/c4224c05c1ceb2fabba8900475d2e24e51afba90))
+
 ## [0.15.0](https://github.com/kakao/varlog/compare/v0.14.1...v0.15.0) (2023-07-31)
 
 
