@@ -88,6 +88,28 @@ func (s TopicStatus) Deleted() bool {
 	return s == TopicStatusDeleted
 }
 
+func (lsd LogStreamDescriptor) Validate() error {
+	if len(lsd.Replicas) == 0 {
+		return errors.New("log stream descriptor: no replicas")
+	}
+
+	const size = 3
+	snids := make(map[types.StorageNodeID]struct{}, size)
+	for idx := range lsd.Replicas {
+		if lsd.Replicas[idx] == nil {
+			return errors.New("log stream descriptor: nil replica")
+		}
+		if err := lsd.Replicas[idx].Validate(); err != nil {
+			return fmt.Errorf("log stream descriptor: %w", err)
+		}
+		snids[lsd.Replicas[idx].StorageNodeID] = struct{}{}
+	}
+	if len(snids) != len(lsd.Replicas) {
+		return errors.New("log stream descriptor: duplicate storage nodes")
+	}
+	return nil
+}
+
 func (l *LogStreamDescriptor) Valid() bool {
 	if l == nil || len(l.Replicas) == 0 {
 		return false
@@ -110,6 +132,16 @@ func (l *LogStreamDescriptor) IsReplica(snID types.StorageNodeID) bool {
 	}
 
 	return false
+}
+
+func (rd ReplicaDescriptor) Validate() error {
+	if rd.StorageNodeID.Invalid() {
+		return errors.New("replica descriptor: invalid storage node id")
+	}
+	if len(rd.StorageNodePath) == 0 {
+		return fmt.Errorf("replica descriptor: no path in storage node %d", rd.StorageNodeID)
+	}
+	return nil
 }
 
 func (r *ReplicaDescriptor) valid() bool {
