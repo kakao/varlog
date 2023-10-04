@@ -79,7 +79,7 @@ func commandAction(c *cli.Context) error {
 		logStreamID types.LogStreamID
 	)
 	mrAddrs = c.StringSlice(flags.MetadataRepositoryAddress().Name)
-	clusterID, err = types.ParseClusterID(c.String(flags.ClusterID().Name))
+	clusterID, err = types.ParseClusterID(c.String(flags.ClusterID.Name))
 	if err != nil {
 		return err
 	}
@@ -116,8 +116,8 @@ func commandAction(c *cli.Context) error {
 
 func commonFlags() []cli.Flag {
 	return []cli.Flag{
+		flags.ClusterID,
 		flags.MetadataRepositoryAddress().StringSliceFlag(true, nil),
-		flags.ClusterID().StringFlag(false, types.ClusterID(1).String()),
 		flags.TopicID().StringFlag(true, ""),
 		flags.LogStreamID().StringFlag(false, ""),
 	}

@@ -103,13 +103,6 @@ func MetadataRepositoryAddress() *FlagDesc {
 	}
 }
 
-func ClusterID() *FlagDesc {
-	return &FlagDesc{
-		Name:    "cluster-id",
-		Aliases: []string{"cluster", "cid"},
-	}
-}
-
 func StorageNodeID() *FlagDesc {
 	return &FlagDesc{
 		Name:    "storage-node-id",

@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 
+	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/types"
 )
@@ -22,7 +23,7 @@ const (
 	flagAddress   = "address"
 	flagTimeout   = "timeout"
 
-	defaultClusterID = types.ClusterID(1)
+	defaultClusterID = flags.DefaultClusterID
 	defaultTimeout   = time.Second
 )
 

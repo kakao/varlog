@@ -6,11 +6,12 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/pkg/types"
 )
 
 const (
-	DefaultClusterID         = types.ClusterID(1)
+	defaultClusterID         = flags.DefaultClusterID
 	DefaultReplicationFactor = 3
 	DefaultNumMetaRepos      = 3
 )
@@ -25,7 +26,7 @@ type Config struct {
 
 func NewConfig(t *testing.T, opts ...Option) (Config, error) {
 	cfg := Config{
-		cid:               DefaultClusterID,
+		cid:               defaultClusterID,
 		replicationFactor: DefaultReplicationFactor,
 		numMetaRepos:      DefaultNumMetaRepos,
 		logger:            zaptest.NewLogger(t),
