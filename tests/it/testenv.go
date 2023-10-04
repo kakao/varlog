@@ -1185,6 +1185,7 @@ func (clus *VarlogCluster) initVMS(t *testing.T) {
 	mrMgrOpts := append(clus.mrMgrOpts,
 		mrmanager.WithAddresses(clus.mrRPCEndpoints...),
 		mrmanager.WithLogger(clus.logger.Logger),
+		mrmanager.WithClusterID(clus.clusterID),
 	)
 	mrMgr, err := mrmanager.New(context.TODO(), mrMgrOpts...)
 	require.NoError(t, err)

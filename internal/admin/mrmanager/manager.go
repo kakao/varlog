@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/singleflight"
 
 	"github.com/kakao/varlog/pkg/mrc"
@@ -126,6 +127,7 @@ func New(ctx context.Context, opts ...Option) (MetadataRepositoryManager, error)
 			continue
 		}
 		return &mrManager{
+			config:    cfg,
 			dirty:     true,
 			connector: connector,
 		}, nil
@@ -375,11 +377,32 @@ func (mrm *mrManager) ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDe
 	mrm.mu.RUnlock()
 
 	// slow path
+	return mrm.getClusterMetadataSlowly(ctx)
+}
+
+func (mrm *mrManager) getClusterMetadataSlowly(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	md, err, _ := mrm.sfg.Do("cluster_metadata", func() (interface{}, error) {
-		meta, err := mrm.clusterMetadata(ctx)
+		var (
+			meta *varlogpb.MetadataDescriptor
+			info *mrpb.ClusterInfo
+		)
+		eg, ctx := errgroup.WithContext(ctx)
+		eg.Go(func() (err error) {
+			meta, err = mrm.clusterMetadata(ctx)
+			return err
+		})
+		eg.Go(func() (err error) {
+			info, err = mrm.GetClusterInfo(ctx)
+			return err
+		})
+		err := eg.Wait()
 		if err != nil {
 			return nil, fmt.Errorf("cluster metadata: %w", err)
 		}
+		if info.ClusterID != mrm.cid {
+			return nil, fmt.Errorf("unexpected cluster id: expected %v, got %v", mrm.cid, info.ClusterID)
+		}
+
 		mrm.mu.Lock()
 		mrm.meta = meta
 		mrm.dirty = false
