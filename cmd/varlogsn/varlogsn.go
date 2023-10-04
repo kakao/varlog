@@ -92,7 +92,7 @@ func start(c *cli.Context) error {
 		return fmt.Errorf("flagReplicationClientWriteBufferSize: %w", err)
 	}
 
-	logger = logger.Named("sn").With(zap.Uint32("cid", uint32(clusterID)), zap.Int32("snid", int32(storageNodeID)))
+	logger = logger.Named("sn").With(zap.Int32("cid", int32(clusterID)), zap.Int32("snid", int32(storageNodeID)))
 
 	meterProviderOpts, err := flags.ParseTelemetryFlags(context.Background(), c, "sn", storageNodeID.String(), clusterID)
 	if err != nil {

@@ -127,7 +127,7 @@ func newConfig(opts []Option) (config, error) {
 	}
 
 	cfg.logger = cfg.logger.Named("mr").With(
-		zap.Uint32("cid", uint32(cfg.clusterID)),
+		zap.Int32("cid", int32(cfg.clusterID)),
 		zap.Uint64("nodeid", uint64(cfg.nodeID)),
 	)
 

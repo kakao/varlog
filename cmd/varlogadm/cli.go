@@ -88,7 +88,7 @@ func start(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	logger = logger.Named("adm").With(zap.Uint32("cid", uint32(clusterID)))
+	logger = logger.Named("adm").With(zap.Int32("cid", int32(clusterID)))
 	defer func() {
 		_ = logger.Sync()
 	}()
