@@ -108,7 +108,12 @@ func TestVarlotTest_LogStreamAppender(t *testing.T) {
 	for _, tc := range tcs {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			vt := varlogtest.New(cid, replicationFactor)
+			vt, err := varlogtest.New(
+				varlogtest.WithClusterID(cid),
+				varlogtest.WithReplicationFactor(replicationFactor),
+			)
+			require.NoError(t, err)
+
 			adm := vt.Admin()
 			vlg := vt.Log()
 			defer func() {
@@ -164,7 +169,12 @@ func TestVarlogTest(t *testing.T) {
 
 	rng := rand.New(rand.NewSource(time.Now().UnixMilli()))
 
-	vt := varlogtest.New(clusterID, replicationFactor)
+	vt, err := varlogtest.New(
+		varlogtest.WithClusterID(clusterID),
+		varlogtest.WithReplicationFactor(replicationFactor),
+	)
+	require.NoError(t, err)
+
 	adm := vt.Admin()
 	vlg := vt.Log()
 	defer func() {
@@ -181,7 +191,7 @@ func TestVarlogTest(t *testing.T) {
 	)
 
 	// No topic 1
-	_, err := adm.DescribeTopic(context.Background(), types.TopicID(1))
+	_, err = adm.DescribeTopic(context.Background(), types.TopicID(1))
 	require.Error(t, err)
 
 	// Add topics
@@ -577,7 +587,12 @@ func TestVarlogTest_Trim(t *testing.T) {
 		numLogs           = 10
 	)
 
-	vt := varlogtest.New(clusterID, replicationFactor)
+	vt, err := varlogtest.New(
+		varlogtest.WithClusterID(clusterID),
+		varlogtest.WithReplicationFactor(replicationFactor),
+	)
+	require.NoError(t, err)
+
 	adm := vt.Admin()
 	vlg := vt.Log()
 	defer func() {

@@ -15,11 +15,10 @@ import (
 )
 
 type VarlogTest struct {
+	config
+
 	admin *testAdmin
 	vlg   *testLog
-
-	clusterID         types.ClusterID
-	replicationFactor int
 
 	rng *rand.Rand
 
@@ -41,22 +40,26 @@ type VarlogTest struct {
 	varlogClientClosed bool
 }
 
-func New(clusterID types.ClusterID, replicationFactor int) *VarlogTest {
+func New(opts ...Option) (*VarlogTest, error) {
+	cfg, err := newConfig(opts)
+	if err != nil {
+		return nil, err
+	}
+
 	vt := &VarlogTest{
-		clusterID:         clusterID,
-		replicationFactor: replicationFactor,
-		rng:               rand.New(rand.NewSource(time.Now().UnixMilli())),
-		storageNodes:      make(map[types.StorageNodeID]snpb.StorageNodeMetadataDescriptor),
-		logStreams:        make(map[types.LogStreamID]varlogpb.LogStreamDescriptor),
-		topics:            make(map[types.TopicID]varlogpb.TopicDescriptor),
-		globalLogEntries:  make(map[types.TopicID][]*varlogpb.LogEntry),
-		localLogEntries:   make(map[types.LogStreamID][]*varlogpb.LogEntry),
-		trimGLSNs:         make(map[types.TopicID]types.GLSN),
+		config:           cfg,
+		rng:              rand.New(rand.NewSource(time.Now().UnixMilli())),
+		storageNodes:     make(map[types.StorageNodeID]snpb.StorageNodeMetadataDescriptor),
+		logStreams:       make(map[types.LogStreamID]varlogpb.LogStreamDescriptor),
+		topics:           make(map[types.TopicID]varlogpb.TopicDescriptor),
+		globalLogEntries: make(map[types.TopicID][]*varlogpb.LogEntry),
+		localLogEntries:  make(map[types.LogStreamID][]*varlogpb.LogEntry),
+		trimGLSNs:        make(map[types.TopicID]types.GLSN),
 	}
 	vt.cond = sync.NewCond(&vt.mu)
 	vt.admin = &testAdmin{vt: vt}
 	vt.vlg = &testLog{vt: vt}
-	return vt
+	return vt, nil
 }
 
 func (vt *VarlogTest) Admin() varlog.Admin {
