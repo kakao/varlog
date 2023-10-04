@@ -36,12 +36,7 @@ var (
 		Envs:    []string{"DEBUG_ADDRESS"},
 	}
 
-	flagReplicationFactor = flags.FlagDesc{
-		Name:    "log-rep-factor",
-		Aliases: []string{"replication-factor"},
-		Usage:   "Replication factor or log stream",
-		Envs:    []string{"LOG_REP_FACTOR"},
-	}
+	flagReplicationFactor = flags.ReplicationFactor
 
 	flagRaftProposeTimeout = flags.FlagDesc{
 		Name: "raft-propose-timeout",

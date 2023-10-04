@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
+	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/netutil"
 )
@@ -23,7 +24,7 @@ const (
 	DefaultSnapshotCatchUpCount      uint64 = 10000
 	DefaultSnapshotPurgeCount        uint   = 10
 	DefaultWalPurgeCount             uint   = 10
-	DefaultLogReplicationFactor      int    = 1
+	DefaultLogReplicationFactor      int    = flags.DefaultReplicationFactor
 	DefaultProposeTimeout                   = 100 * time.Millisecond
 	DefaultRaftTick                         = 100 * time.Millisecond
 	DefaultRPCTimeout                       = 100 * time.Millisecond

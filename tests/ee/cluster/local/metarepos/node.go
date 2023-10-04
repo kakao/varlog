@@ -96,7 +96,7 @@ func (node *Node) arguments(t *testing.T) []string {
 		"--cluster-id", node.cid.String(),
 		"--raft-address", node.raftURL,
 		"--bind", node.rpcAddr,
-		"--log-rep-factor", strconv.Itoa(node.replicationFactor),
+		"--replication-factor", strconv.Itoa(node.replicationFactor),
 		"--raft-dir", node.raftDir,
 		"--log-dir", node.logDir,
 	}

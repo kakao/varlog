@@ -1200,7 +1200,7 @@ func (clus *VarlogCluster) initVMS(t *testing.T) {
 	opts := append(clus.VMSOpts,
 		admin.WithListenAddress(listenAddress),
 		admin.WithClusterID(clus.clusterID),
-		admin.WithReplicationFactor(uint(clus.nrRep)),
+		admin.WithReplicationFactor(clus.nrRep),
 		admin.WithLogger(clus.logger.Named("admin")),
 		admin.WithMetadataRepositoryManager(mrMgr),
 		admin.WithStorageNodeManager(snMgr),
