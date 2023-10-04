@@ -7,6 +7,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/util/netutil"
 )
 
@@ -22,7 +23,7 @@ func WithServiceServer(s service, testf func(server *grpc.Server, addr string)) 
 		convey.So(err, convey.ShouldBeNil)
 		addr := addrs[0]
 
-		server := grpc.NewServer()
+		server := rpc.NewServer()
 		s.Register(server)
 
 		go func() {

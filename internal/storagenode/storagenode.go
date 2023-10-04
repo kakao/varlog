@@ -30,6 +30,7 @@ import (
 	"github.com/kakao/varlog/internal/storagenode/pprof"
 	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/internal/storagenode/volume"
+	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/rpc/interceptors/logging"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/fputil"
@@ -118,7 +119,7 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 	sn := &StorageNode{
 		config:       cfg,
 		executors:    executorsmap.New(hintNumExecutors),
-		server:       grpc.NewServer(grpcServerOpts...),
+		server:       rpc.NewServer(grpcServerOpts...),
 		healthServer: health.NewServer(),
 		closedC:      make(chan struct{}),
 		snPaths:      snPaths,

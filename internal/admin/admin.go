@@ -20,6 +20,7 @@ import (
 
 	"github.com/kakao/varlog/internal/admin/sfgkey"
 	"github.com/kakao/varlog/internal/admin/snwatcher"
+	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/rpc/interceptors/logging"
 	"github.com/kakao/varlog/pkg/rpc/interceptors/otelgrpc"
 	"github.com/kakao/varlog/pkg/types"
@@ -74,7 +75,7 @@ func New(ctx context.Context, opts ...Option) (*Admin, error) {
 		return nil, err
 	}
 
-	grpcServer := grpc.NewServer(
+	grpcServer := rpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			logging.UnaryServerInterceptor(cfg.logger),
 			otelgrpc.UnaryServerInterceptor(telemetry.GetGlobalMeterProvider()),
