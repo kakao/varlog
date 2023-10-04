@@ -16,9 +16,25 @@ import (
 type testLog struct {
 	vt     *VarlogTest
 	closed bool
+
+	lsaPool struct {
+		lsaMap map[int64]*logStreamAppender
+		nextID int64
+		mu     sync.Mutex
+
+		wg sync.WaitGroup
+	}
 }
 
 var _ varlog.Log = (*testLog)(nil)
+
+func newTestLog(vt *VarlogTest) *testLog {
+	c := &testLog{
+		vt: vt,
+	}
+	c.lsaPool.lsaMap = make(map[int64]*logStreamAppender)
+	return c
+}
 
 func (c *testLog) lock() error {
 	c.vt.cond.L.Lock()
@@ -38,6 +54,14 @@ func (c *testLog) Close() error {
 	defer c.vt.cond.L.Unlock()
 	c.closed = true
 	c.vt.cond.Broadcast()
+
+	c.lsaPool.mu.Lock()
+	defer c.lsaPool.mu.Unlock()
+	for _, lsa := range c.lsaPool.lsaMap {
+		lsa.Close()
+	}
+
+	c.lsaPool.wg.Wait()
 	return nil
 }
 
@@ -342,9 +366,22 @@ func (c *testLog) NewLogStreamAppender(tpid types.TopicID, lsid types.LogStreamI
 	lsa.queue.ch = make(chan *queueEntry, pipelineSize)
 	lsa.queue.cv = sync.NewCond(&lsa.queue.mu)
 
-	lsa.wg.Add(1)
+	c.lsaPool.mu.Lock()
+	defer c.lsaPool.mu.Unlock()
+	id := c.lsaPool.nextID
+	c.lsaPool.nextID++
+	c.lsaPool.lsaMap[id] = lsa
+
+	c.lsaPool.wg.Add(1)
 	go func() {
-		defer lsa.wg.Done()
+		defer func() {
+			c.lsaPool.wg.Done()
+
+			c.lsaPool.mu.Lock()
+			defer c.lsaPool.mu.Unlock()
+			delete(c.lsaPool.lsaMap, id)
+		}()
+
 		for qe := range lsa.queue.ch {
 			qe.callback(qe.result.Metadata, qe.result.Err)
 			lsa.queue.cv.L.Lock()
@@ -377,8 +414,6 @@ type logStreamAppender struct {
 		cv *sync.Cond
 		mu sync.Mutex
 	}
-
-	wg sync.WaitGroup
 }
 
 var _ varlog.LogStreamAppender = (*logStreamAppender)(nil)
@@ -417,7 +452,6 @@ func (lsa *logStreamAppender) Close() {
 	}
 	lsa.closed.value = true
 	close(lsa.queue.ch)
-	lsa.wg.Wait()
 }
 
 type errSubscriber struct {

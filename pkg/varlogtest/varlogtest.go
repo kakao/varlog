@@ -73,7 +73,7 @@ func (vt *VarlogTest) NewAdminClient() varlog.Admin {
 }
 
 func (vt *VarlogTest) NewLogClient() varlog.Log {
-	return &testLog{vt: vt}
+	return newTestLog(vt)
 }
 
 func (vt *VarlogTest) generateTopicID() types.TopicID {

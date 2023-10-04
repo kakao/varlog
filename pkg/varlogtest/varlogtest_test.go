@@ -199,6 +199,39 @@ func TestVarlotTest_LogStreamAppender(t *testing.T) {
 			},
 		},
 		{
+			name: "CloseInCallback",
+			testf: func(t *testing.T, vadm varlog.Admin, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID) {
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid)
+				require.NoError(t, err)
+
+				var wg sync.WaitGroup
+				wg.Add(1)
+				err = lsa.AppendBatch([][]byte{[]byte("foo")}, func(lem []varlogpb.LogEntryMeta, err error) {
+					defer wg.Done()
+					assert.NoError(t, err)
+					lsa.Close()
+				})
+				require.NoError(t, err)
+				wg.Wait()
+			},
+		},
+		{
+			name: "DoesNotCloseLogStreamAppender",
+			testf: func(t *testing.T, vadm varlog.Admin, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID) {
+				// Closing the log client will shut down the log stream appender forcefully.
+				lsa, err := vcli.NewLogStreamAppender(tpid, lsid)
+				require.NoError(t, err)
+
+				cb := func(_ []varlogpb.LogEntryMeta, err error) {
+					assert.NoError(t, err)
+				}
+				for i := 0; i < numLogs; i++ {
+					err := lsa.AppendBatch([][]byte{[]byte("foo")}, cb)
+					require.NoError(t, err)
+				}
+			},
+		},
+		{
 			name: "Manager",
 			testf: func(t *testing.T, vadm varlog.Admin, vcli varlog.Log, tpid types.TopicID, lsid types.LogStreamID) {
 				mgr := mlsa.New(vcli)
