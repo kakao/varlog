@@ -115,8 +115,8 @@ func TestVarlotTest_LogStreamAppender(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			adm := vt.Admin()
-			vlg := vt.Log()
+			adm := vt.NewAdminClient()
+			vlg := vt.NewLogClient()
 			defer func() {
 				require.NoError(t, vlg.Close())
 				require.NoError(t, adm.Close())
@@ -176,8 +176,8 @@ func TestVarlogTest(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	adm := vt.Admin()
-	vlg := vt.Log()
+	adm := vt.NewAdminClient()
+	vlg := vt.NewLogClient()
 	defer func() {
 		require.NoError(t, vlg.Close())
 		require.NoError(t, adm.Close())
@@ -594,8 +594,8 @@ func TestVarlogTest_Trim(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	adm := vt.Admin()
-	vlg := vt.Log()
+	adm := vt.NewAdminClient()
+	vlg := vt.NewLogClient()
 	defer func() {
 		require.NoError(t, vlg.Close())
 		require.NoError(t, adm.Close())
@@ -783,7 +783,7 @@ func TestVarlogTestAdminMetadataRepository(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			tc.testf(t, vt.Admin())
+			tc.testf(t, vt.NewAdminClient())
 		})
 	}
 }

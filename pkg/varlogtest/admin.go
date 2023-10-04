@@ -23,14 +23,15 @@ import (
 )
 
 type testAdmin struct {
-	vt *VarlogTest
+	vt     *VarlogTest
+	closed bool
 }
 
 var _ varlog.Admin = (*testAdmin)(nil)
 
 func (c *testAdmin) lock() error {
 	c.vt.cond.L.Lock()
-	if c.vt.adminClientClosed {
+	if c.closed {
 		c.vt.cond.L.Unlock()
 		return verrors.ErrClosed
 	}
@@ -534,6 +535,6 @@ func (c *testAdmin) RemoveMRPeer(ctx context.Context, raftURL string, opts ...va
 func (c *testAdmin) Close() error {
 	c.vt.cond.L.Lock()
 	defer c.vt.cond.L.Unlock()
-	c.vt.adminClientClosed = true
+	c.closed = true
 	return nil
 }
