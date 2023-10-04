@@ -10,7 +10,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	metricsdk "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/aggregation"
 )
 
 // StopMeterProvider is the type for stop function of meter provider.
@@ -39,7 +38,7 @@ func NewMeterProvider(opts ...MeterProviderOption) (metric.MeterProvider, StopMe
 				Name: "rpc.server.duration",
 			},
 			metricsdk.Stream{
-				Aggregation: aggregation.ExplicitBucketHistogram{
+				Aggregation: metricsdk.AggregationExplicitBucketHistogram{
 					// 50us, 100us,
 					// 1_000us(1ms), 2_000us(2ms), 4_000us(4ms),
 					// 8_000us(8ms), 16_000us(16ms), 32_000us(32ms),
@@ -57,7 +56,7 @@ func NewMeterProvider(opts ...MeterProviderOption) (metric.MeterProvider, StopMe
 					Name: "process.runtime.go.gc.pause_ns",
 				},
 				metricsdk.Stream{
-					Aggregation: aggregation.ExplicitBucketHistogram{
+					Aggregation: metricsdk.AggregationExplicitBucketHistogram{
 						// 1ns, 10ns, 100ns,
 						// 1_000ns(1us), 10_000ns(10us), 100_000ns(100us),
 						// 1_000_000ns(1ms), 10_000_000ns(10ms), 100_000_000ns(100ms)
