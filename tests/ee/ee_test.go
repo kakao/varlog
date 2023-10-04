@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
@@ -17,8 +17,7 @@ import (
 )
 
 func TestVarlogAppend(t *testing.T) {
-	logger, err := zap.NewDevelopment()
-	require.NoError(t, err)
+	logger := zaptest.NewLogger(t)
 	defer func() {
 		_ = logger.Sync()
 	}()
@@ -91,8 +90,7 @@ func TestVarlogAppend(t *testing.T) {
 func TestVarlogFailoverMR(t *testing.T) {
 	const numMRs = 3
 
-	logger, err := zap.NewDevelopment()
-	require.NoError(t, err)
+	logger := zaptest.NewLogger(t)
 	defer func() {
 		_ = logger.Sync()
 	}()
@@ -153,8 +151,7 @@ func TestVarlogFailoverMR(t *testing.T) {
 func TestVarlogFailoverSN(t *testing.T) {
 	const numMRs = 3
 
-	logger, err := zap.NewDevelopment()
-	require.NoError(t, err)
+	logger := zaptest.NewLogger(t)
 	defer func() {
 		_ = logger.Sync()
 	}()
@@ -220,8 +217,7 @@ func TestVarlogFailoverSN(t *testing.T) {
 }
 
 func TestVarlogEnduranceExample(t *testing.T) {
-	logger, err := zap.NewDevelopment()
-	require.NoError(t, err)
+	logger := zaptest.NewLogger(t)
 	defer func() {
 		_ = logger.Sync()
 	}()
