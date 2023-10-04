@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -682,6 +683,109 @@ func TestVarlogTest_Trim(t *testing.T) {
 		expectedLLSN++
 	}
 	assert.NoError(t, subscriber.Close())
+}
+
+func TestVarlogTestAdminMetadataRepository(t *testing.T) {
+	const (
+		cid       = types.ClusterID(1)
+		repfactor = 3
+	)
+
+	ctx := context.Background()
+	initialMRNs := []varlogpb.MetadataRepositoryNode{
+		{
+			NodeID:  types.NewNodeIDFromURL("http://127.0.20.1:9091"),
+			RaftURL: "http://127.0.20.1:9091",
+			RPCAddr: "127.0.20.1:9092",
+		},
+		{
+			NodeID:  types.NewNodeIDFromURL("http://127.0.20.2:9091"),
+			RaftURL: "http://127.0.20.2:9091",
+			RPCAddr: "127.0.20.2:9092",
+		},
+		{
+			NodeID:  types.NewNodeIDFromURL("http://127.0.20.3:9091"),
+			RaftURL: "http://127.0.20.3:9091",
+			RPCAddr: "127.0.20.3:9092",
+		},
+	}
+
+	tcs := []struct {
+		name        string
+		initialMRNs []varlogpb.MetadataRepositoryNode
+		testf       func(t *testing.T, vadm varlog.Admin)
+	}{
+		{
+			name:        "NoInitialMRs",
+			initialMRNs: []varlogpb.MetadataRepositoryNode{},
+			testf: func(t *testing.T, vadm varlog.Admin) {
+				mrns, err := vadm.ListMetadataRepositoryNodes(ctx)
+				require.NoError(t, err)
+				require.Empty(t, mrns)
+			},
+		},
+		{
+			name:        "ListMetadataRepositoryNodes",
+			initialMRNs: initialMRNs,
+			testf: func(t *testing.T, vadm varlog.Admin) {
+				mrns, err := vadm.ListMetadataRepositoryNodes(ctx)
+				require.NoError(t, err)
+				require.Len(t, mrns, 3)
+
+				for _, initMRN := range initialMRNs {
+					require.True(t, slices.ContainsFunc(mrns, func(mrn varlogpb.MetadataRepositoryNode) bool {
+						return mrn.NodeID == initMRN.NodeID
+					}))
+				}
+
+				numLeaders := 0
+				for _, mrn := range mrns {
+					if mrn.Leader {
+						numLeaders++
+					}
+				}
+				require.Equal(t, 1, numLeaders)
+			},
+		},
+		{
+			name:        "GetMetadataRepositoryNode",
+			initialMRNs: initialMRNs,
+			testf: func(t *testing.T, vadm varlog.Admin) {
+				for _, initialMRN := range initialMRNs {
+					_, err := vadm.GetMetadataRepositoryNode(ctx, initialMRN.NodeID)
+					require.NoError(t, err)
+				}
+			},
+		},
+		{
+			name:        "GetMetadataRepositoryNode",
+			initialMRNs: initialMRNs,
+			testf: func(t *testing.T, vadm varlog.Admin) {
+				rsp, err := vadm.GetMRMembers(ctx)
+				require.NoError(t, err)
+
+				require.NotEqual(t, types.InvalidNodeID, rsp.Leader)
+				require.EqualValues(t, repfactor, rsp.ReplicationFactor)
+				require.Len(t, rsp.Members, len(initialMRNs))
+				for _, initialMRN := range initialMRNs {
+					require.Contains(t, rsp.Members, initialMRN.NodeID)
+				}
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			vt, err := varlogtest.New(
+				varlogtest.WithClusterID(cid),
+				varlogtest.WithReplicationFactor(repfactor),
+				varlogtest.WithInitialMetadataRepositoryNodes(tc.initialMRNs...),
+			)
+			require.NoError(t, err)
+
+			tc.testf(t, vt.Admin())
+		})
+	}
 }
 
 func TestMain(m *testing.M) {

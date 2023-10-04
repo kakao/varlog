@@ -32,6 +32,9 @@ type VarlogTest struct {
 	version          types.Version
 	trimGLSNs        map[types.TopicID]types.GLSN
 
+	mrns     map[types.NodeID]varlogpb.MetadataRepositoryNode
+	leaderMR types.NodeID
+
 	nextTopicID       types.TopicID
 	nextStorageNodeID types.StorageNodeID
 	nextLogStreamID   types.LogStreamID
@@ -55,10 +58,21 @@ func New(opts ...Option) (*VarlogTest, error) {
 		globalLogEntries: make(map[types.TopicID][]*varlogpb.LogEntry),
 		localLogEntries:  make(map[types.LogStreamID][]*varlogpb.LogEntry),
 		trimGLSNs:        make(map[types.TopicID]types.GLSN),
+		mrns:             make(map[types.NodeID]varlogpb.MetadataRepositoryNode, len(cfg.initialMRNodes)),
+		leaderMR:         types.InvalidNodeID,
 	}
 	vt.cond = sync.NewCond(&vt.mu)
 	vt.admin = &testAdmin{vt: vt}
 	vt.vlg = &testLog{vt: vt}
+
+	for _, mrn := range vt.initialMRNodes {
+		if vt.leaderMR == types.InvalidNodeID {
+			vt.leaderMR = mrn.NodeID
+			mrn.Leader = true
+		}
+		vt.mrns[mrn.NodeID] = mrn
+	}
+
 	return vt, nil
 }
 
