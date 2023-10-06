@@ -11,6 +11,7 @@ import (
 	_ "go.uber.org/automaxprocs"
 	"go.uber.org/zap"
 
+	"github.com/kakao/varlog/internal/buildinfo"
 	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/internal/metarepos"
 	"github.com/kakao/varlog/pkg/types"
@@ -111,10 +112,14 @@ func start(c *cli.Context) error {
 }
 
 func initCLI() *cli.App {
+	buildInfo := buildinfo.ReadVersionInfo()
+	cli.VersionPrinter = func(*cli.Context) {
+		fmt.Println(buildInfo.String())
+	}
 	return &cli.App{
 		Name:    "metadata_repository",
 		Usage:   "run metadata repository",
-		Version: "v0.0.1",
+		Version: buildInfo.Version,
 		Commands: []*cli.Command{{
 			Name:    "start",
 			Aliases: []string{"s"},

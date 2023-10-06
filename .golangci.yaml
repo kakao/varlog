@@ -54,6 +54,8 @@ linters-settings:
           - "fmt.Print"
           - "fmt.Printf"
           - "fmt.Println"
+          - "strings.Builder.WriteString"
+          - "strings.Builder.WriteByte"
 
 
 issues:
