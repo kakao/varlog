@@ -1,12 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 
+	"github.com/kakao/varlog/internal/buildinfo"
 	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/internal/varlogcli"
 	"github.com/kakao/varlog/pkg/types"
@@ -26,9 +28,14 @@ func run() int {
 }
 
 func newApp() *cli.App {
+	buildInfo := buildinfo.ReadVersionInfo()
+	cli.VersionPrinter = func(*cli.Context) {
+		fmt.Println(buildInfo.String())
+	}
 	app := &cli.App{
-		Name:  "varlogcli",
-		Usage: "Varlog client",
+		Name:    "varlogcli",
+		Usage:   "Varlog client",
+		Version: buildInfo.Version,
 		Commands: []*cli.Command{
 			newAppend(),
 			newSubscribe(),

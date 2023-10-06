@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/urfave/cli/v2"
 	"go.uber.org/zap"
@@ -10,6 +11,7 @@ import (
 	"github.com/kakao/varlog/internal/admin/mrmanager"
 	"github.com/kakao/varlog/internal/admin/snmanager"
 	"github.com/kakao/varlog/internal/admin/snwatcher"
+	"github.com/kakao/varlog/internal/buildinfo"
 	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/log"
@@ -17,10 +19,14 @@ import (
 )
 
 func newAdminApp() *cli.App {
+	buildInfo := buildinfo.ReadVersionInfo()
+	cli.VersionPrinter = func(*cli.Context) {
+		fmt.Println(buildInfo.String())
+	}
 	return &cli.App{
 		Name:    "varlogadm",
 		Usage:   "run varlog admin server",
-		Version: "0.0.1",
+		Version: buildInfo.Version,
 		Commands: []*cli.Command{
 			newStartCommand(),
 		},

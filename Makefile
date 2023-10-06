@@ -3,6 +3,8 @@ SHELL := /bin/bash
 
 GO := go
 GCFLAGS := -gcflags=all='-N -l'
+LDFLAGS := -X 'github.com/kakao/varlog/internal/buildinfo.version=$(shell git describe --abbrev=0 --tags)'
+LDFLAGS := -ldflags "$(LDFLAGS)"
 GOPATH := $(shell $(GO) env GOPATH)
 PKGS := $(shell $(GO) list ./... | \
 	egrep -v "github.com/kakao/varlog/vendor" | \
@@ -39,19 +41,19 @@ BENCHMARK := $(BIN_DIR)/benchmark
 .PHONY: build vmr varlogadm varlogsn varlogctl varlogcli mrtool benchmark
 build: vmr varlogadm varlogsn varlogctl varlogcli mrtool benchmark
 vmr:
-	$(GO) build $(GCFLAGS) -o $(VMR) $(CURDIR)/cmd/varlogmr
+	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(VMR) $(CURDIR)/cmd/varlogmr
 varlogadm:
-	$(GO) build $(GCFLAGS) -o $(VARLOGADM) $(CURDIR)/cmd/varlogadm
+	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(VARLOGADM) $(CURDIR)/cmd/varlogadm
 varlogsn:
-	$(GO) build $(GCFLAGS) -o $(VARLOGSN) $(CURDIR)/cmd/varlogsn
+	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(VARLOGSN) $(CURDIR)/cmd/varlogsn
 varlogctl:
-	$(GO) build $(GCFLAGS) -o $(VARLOGCTL) $(CURDIR)/cmd/varlogctl
+	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(VARLOGCTL) $(CURDIR)/cmd/varlogctl
 varlogcli:
-	$(GO) build $(GCFLAGS) -o $(VARLOGCLI) $(CURDIR)/cmd/varlogcli
+	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(VARLOGCLI) $(CURDIR)/cmd/varlogcli
 mrtool:
-	$(GO) build $(GCFLAGS) -o $(MRTOOL) $(CURDIR)/cmd/mrtool
+	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(MRTOOL) $(CURDIR)/cmd/mrtool
 benchmark:
-	$(GO) build $(GCFLAGS) -o $(BENCHMARK) $(CURDIR)/cmd/benchmark
+	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(BENCHMARK) $(CURDIR)/cmd/benchmark
 
 
 # testing

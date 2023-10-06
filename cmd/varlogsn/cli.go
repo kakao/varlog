@@ -1,8 +1,11 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/urfave/cli/v2"
 
+	"github.com/kakao/varlog/internal/buildinfo"
 	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/storagenode/logstream"
@@ -12,14 +15,17 @@ import (
 
 const (
 	appName = "varlogsn"
-	version = "0.0.1"
 )
 
 func newStorageNodeApp() *cli.App {
+	buildInfo := buildinfo.ReadVersionInfo()
+	cli.VersionPrinter = func(*cli.Context) {
+		fmt.Println(buildInfo.String())
+	}
 	return &cli.App{
 		Name:    appName,
 		Usage:   "storage node",
-		Version: version,
+		Version: buildInfo.Version,
 		Commands: []*cli.Command{
 			newStartCommand(),
 		},
