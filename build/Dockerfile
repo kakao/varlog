@@ -27,7 +27,7 @@ COPY . .
 RUN CGO_ENABLED=0 make build GCFLAGS=""
 
 
-FROM python:3.11 AS base-cgo
+FROM python:3.12 AS base-cgo
 ARG DEBIAN_FRONTEND
 RUN groupadd -r varlog && useradd -r -g varlog varlog --home-dir=/varlog \
     && mkdir /varlog \
@@ -37,7 +37,7 @@ USER varlog
 ENV PATH=/varlog/bin:$PATH
 
 
-FROM python:3.11-alpine AS base-noncgo
+FROM python:3.12-alpine AS base-noncgo
 RUN addgroup -S -g 1000 varlog \
     && adduser -H -S -D -h /varlog -G varlog -u 999 -s /bin/sh varlog \
     && mkdir /varlog \
