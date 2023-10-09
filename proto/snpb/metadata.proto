@@ -39,9 +39,9 @@ message StorageNodeMetadataDescriptor {
   repeated varlogpb.StorageDescriptor storages = 3
     [(gogoproto.nullable) = false];
 
-  // LogStreams are the list of metadata for log stream replicas.
+  // LogStreamReplicas are the list of metadata for log stream replicas.
   repeated LogStreamReplicaMetadataDescriptor log_stream_replicas = 4
-    [(gogoproto.nullable) = false, (gogoproto.jsontag) = "logStreams"];
+    [(gogoproto.nullable) = false, (gogoproto.jsontag) = "logStreamReplicas"];
 
   varlogpb.StorageNodeStatus status = 5;
 

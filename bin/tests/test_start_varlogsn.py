@@ -27,8 +27,8 @@ class StartVarlogsnTestCase(unittest.TestCase):
             snm = json.load(f)
             self.assertIn("storageNodeId", snm)
             self.assertIn("address", snm)
-            self.assertIn("logStreams", snm)
-            self.assertIsInstance(snm["logStreams"], list)
+            self.assertIn("logStreamReplicas", snm)
+            self.assertIsInstance(snm["logStreamReplicas"], list)
 
 
 if __name__ == '__main__':
