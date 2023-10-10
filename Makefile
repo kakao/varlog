@@ -30,7 +30,7 @@ precommit: mod-tidy mod-vendor proto generate fmt vet lint build test test_py
 
 # build
 BIN_DIR := $(CURDIR)/bin
-VMR := $(BIN_DIR)/vmr
+VARLOGMR := $(BIN_DIR)/varlogmr
 VARLOGADM := $(BIN_DIR)/varlogadm
 VARLOGSN := $(BIN_DIR)/varlogsn
 VARLOGCTL := $(BIN_DIR)/varlogctl
@@ -38,10 +38,10 @@ VARLOGCLI := $(BIN_DIR)/varlogcli
 MRTOOL := $(BIN_DIR)/mrtool
 BENCHMARK := $(BIN_DIR)/benchmark
 
-.PHONY: build vmr varlogadm varlogsn varlogctl varlogcli mrtool benchmark
-build: vmr varlogadm varlogsn varlogctl varlogcli mrtool benchmark
-vmr:
-	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(VMR) $(CURDIR)/cmd/varlogmr
+.PHONY: build varlogmr varlogadm varlogsn varlogctl varlogcli mrtool benchmark
+build: varlogmr varlogadm varlogsn varlogctl varlogcli mrtool benchmark
+varlogmr:
+	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(VARLOGMR) $(CURDIR)/cmd/varlogmr
 varlogadm:
 	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(VARLOGADM) $(CURDIR)/cmd/varlogadm
 varlogsn:
@@ -159,7 +159,7 @@ mod-vendor-check:
 clean:
 	$(GO) clean
 	$(RM) $(GO_COVERAGE_OUTPUT) $(PYTHON_COVERAGE_OUTPUT)
-	$(RM) $(VMR) $(VARLOGADM) $(VARLOGSN) $(VARLOGCTL) $(VARLOGCLI) $(MRTOOL) $(BENCHMARK)
+	$(RM) $(VARLOGMR) $(VARLOGADM) $(VARLOGSN) $(VARLOGCTL) $(VARLOGCLI) $(MRTOOL) $(BENCHMARK)
 
 clean_mock:
 	@$(foreach path,$(shell $(GO) list ./... | grep -v vendor | sed -e s#github.com/kakao/varlog/##),$(RM) -f $(path)/*_mock.go;)

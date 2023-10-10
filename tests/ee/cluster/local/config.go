@@ -43,7 +43,7 @@ func newConfig(opts []Option) (config, error) {
 	}
 
 	cfg := config{
-		mrExecutable:              filepath.Join(binDir(), "vmr"),
+		mrExecutable:              filepath.Join(binDir(), "varlogmr"),
 		mrPortBase:                defaultMRPortBase,
 		adminExecutable:           filepath.Join(binDir(), "varlogadm"),
 		adminAddr:                 defaultAdminAddr,

@@ -27,18 +27,17 @@
 *.out
 *.app
 
+bin/varlogadm
+bin/varlogmr
+bin/mrtool
+bin/varlogsn
 bin/varlogctl
-bin/vmr
-bin/vms
-bin/vsn
+bin/varlogcli
 bin/rpc_test_server
 bin/rpcbench_client
 bin/rpcbench_server
 bin/benchmark
-bin/varlogcli
 bin/stress
-bin/varlogsn
-bin/varlogadm
 
 # Python
 *.pyc
