@@ -56,8 +56,8 @@ func (c *Cluster) Setup(_ context.Context, t *testing.T) {
 	var ctx context.Context
 	c.StartMetadataRepositoryNodes(ctx, t, 1)
 	c.StartAdminServer(ctx, t)
-	if remains := c.NumMetaRepos() - 1; remains > 0 {
-		c.StartMetadataRepositoryNodes(ctx, t, remains)
+	if desired := c.NumMetaRepos(); desired-1 > 0 {
+		c.StartMetadataRepositoryNodes(ctx, t, desired)
 	}
 	if desired := c.NumStorageNodes(); desired > 0 {
 		c.StartStorageNodes(ctx, t, desired)
