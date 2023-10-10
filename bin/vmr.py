@@ -87,7 +87,7 @@ def get_info():
 
 
 def get_replication_factor():
-    return int(os.getenv("REP_FACTOR", DEFAULT_REP_FACTOR))
+    return int(os.getenv("REPLICATION_FACTOR", DEFAULT_REP_FACTOR))
 
 
 def add_raft_peer():
@@ -176,7 +176,7 @@ def get_metadata_repository_cmd(standalone):
         f"{binpath}/vmr",
         "start",
         f"--cluster-id={cluster_id}",
-        f"--log-rep-factor={rep_factor}",
+        f"--replication-factor={rep_factor}",
         f"--raft-address={raft_url}",
         f"--bind={rpc_addr}",
         f"--raft-dir={raft_dir}",

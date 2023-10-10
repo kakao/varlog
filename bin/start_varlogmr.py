@@ -204,7 +204,7 @@ def start(
             f"--cluster-id={cluster_id}",
             f"--raft-address={raft_addr}",
             f"--bind={listen}",
-            f"--log-rep-factor={replication_factor}",
+            f"--replication-factor={replication_factor}",
             f"--raft-dir={raft_dir}",
         ]
 
