@@ -197,32 +197,48 @@ func (c *testAdmin) GetLogStream(ctx context.Context, tpid types.TopicID, lsid t
 }
 
 func (c *testAdmin) ListLogStreams(ctx context.Context, tpid types.TopicID, opts ...varlog.AdminCallOption) ([]varlogpb.LogStreamDescriptor, error) {
-	panic("not implemented")
+	_, lsds, err := c.listLogStreamsInternal(tpid)
+	if err != nil {
+		return nil, err
+	}
+	return lsds, nil
 }
 
 func (c *testAdmin) DescribeTopic(ctx context.Context, topicID types.TopicID, opts ...varlog.AdminCallOption) (*admpb.DescribeTopicResponse, error) {
-	if err := c.lock(); err != nil {
+	td, lsds, err := c.listLogStreamsInternal(topicID)
+	if err != nil {
 		return nil, err
+	}
+	return &admpb.DescribeTopicResponse{
+		Topic:      td,
+		LogStreams: lsds,
+	}, nil
+}
+
+func (c *testAdmin) listLogStreamsInternal(tpid types.TopicID) (td varlogpb.TopicDescriptor, lsds []varlogpb.LogStreamDescriptor, err error) {
+	err = c.lock()
+	if err != nil {
+		return
 	}
 	defer c.unlock()
 
-	topicDesc, ok := c.vt.topics[topicID]
-	if !ok || topicDesc.Status.Deleted() {
-		return nil, errors.New("no such topic")
+	td, ok := c.vt.topics[tpid]
+	if !ok || td.Status.Deleted() {
+		err = errors.New("no such topic")
+		return
+	}
+	td = *proto.Clone(&td).(*varlogpb.TopicDescriptor)
+
+	lsds = make([]varlogpb.LogStreamDescriptor, len(td.LogStreams))
+	for i, lsid := range td.LogStreams {
+		lsd, ok := c.vt.logStreams[lsid]
+		if !ok {
+			panic(errors.Errorf("inconsistency: no logstream %d in topic %d", lsid, tpid))
+		}
+		lsds[i] = *proto.Clone(&lsd).(*varlogpb.LogStreamDescriptor)
 	}
 
-	rsp := &admpb.DescribeTopicResponse{
-		Topic:      *proto.Clone(&topicDesc).(*varlogpb.TopicDescriptor),
-		LogStreams: make([]varlogpb.LogStreamDescriptor, len(topicDesc.LogStreams)),
-	}
-	for i, lsID := range topicDesc.LogStreams {
-		lsDesc, ok := c.vt.logStreams[lsID]
-		if !ok {
-			panic(errors.Errorf("inconsistency: no logstream %d in topic %d", lsID, topicID))
-		}
-		rsp.LogStreams[i] = *proto.Clone(&lsDesc).(*varlogpb.LogStreamDescriptor)
-	}
-	return rsp, nil
+	return td, lsds, nil
 }
 
 func (c *testAdmin) AddLogStream(_ context.Context, topicID types.TopicID, logStreamReplicas []*varlogpb.ReplicaDescriptor, opts ...varlog.AdminCallOption) (*varlogpb.LogStreamDescriptor, error) {
