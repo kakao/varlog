@@ -23,7 +23,7 @@ from varlog import procutil  # noqa
 from varlog.killer import Killer  # noqa
 from varlog.logger import get_logger  # noqa
 
-APP_NAME = "vmr"
+APP_NAME = "varlogmr"
 DEFAULT_CLUSTER_ID = 1
 DEFAULT_RPC_PORT = 9092
 DEFAULT_RAFT_PORT = 10000
@@ -199,7 +199,7 @@ def start(
         peers = fetch_peers(cluster_id, seed)
 
         cmd = [
-            f"{binpath}/vmr",
+            f"{binpath}/varlogmr",
             "start",
             f"--cluster-id={cluster_id}",
             f"--raft-address={raft_addr}",
