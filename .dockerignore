@@ -13,10 +13,3 @@ tags
 # python
 __pycache__
 *.pyc
-
-# executables
-bin/varlogctl
-bin/vmr
-bin/vms
-bin/vsn
-bin/rpc_test_server
