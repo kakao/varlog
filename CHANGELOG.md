@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.18.0](https://github.com/kakao/varlog/compare/v0.17.0...v0.18.0) (2023-10-10)
+
+
+### Features
+
+* **metarepos:** rename the executable from vmr to varlogmr ([0ef2d85](https://github.com/kakao/varlog/commit/0ef2d859da0ef64de68be546eb0b1aa5eed78f57))
+* **metarepos:** rename the executable from vmr to varlogmr ([#610](https://github.com/kakao/varlog/issues/610)) ([52de516](https://github.com/kakao/varlog/commit/52de516f7547118ce697ad7ca525c833042cabca))
+
+
+### Bug Fixes
+
+* **e2e:** run the correct number of MR nodes ([b1e8432](https://github.com/kakao/varlog/commit/b1e84321f7cdd9d00370dc007cc0c4dd08e2e9c9))
+* **e2e:** run the correct number of MR nodes ([#609](https://github.com/kakao/varlog/issues/609)) ([89a94e3](https://github.com/kakao/varlog/commit/89a94e337ea99ec99045ac84e337283102a3fc3a))
+* **metarepos:** use --replication-factor to set the replication factor ([ef29008](https://github.com/kakao/varlog/commit/ef29008921ddf5301aa6b3de0b8d525555c7498d))
+* **metarepos:** use --replication-factor to set the replication factor ([#608](https://github.com/kakao/varlog/issues/608)) ([1bdc345](https://github.com/kakao/varlog/commit/1bdc345c8ac16c690524ed555d3faa64f69133f6))
+
 ## [0.17.0](https://github.com/kakao/varlog/compare/v0.16.0...v0.17.0) (2023-10-10)
 
 
