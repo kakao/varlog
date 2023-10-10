@@ -362,7 +362,7 @@ func TestVarlogTest(t *testing.T) {
 	)
 
 	// No topic 1
-	_, err = adm.DescribeTopic(context.Background(), types.TopicID(1))
+	_, err = adm.ListLogStreams(context.Background(), types.TopicID(1))
 	require.Error(t, err)
 
 	// Add topics
@@ -375,10 +375,9 @@ func TestVarlogTest(t *testing.T) {
 		topicIDs = append(topicIDs, topicDesc.TopicID)
 		topicLogStreamsMap[topicDesc.TopicID] = topicDesc.LogStreams
 
-		rsp, err := adm.DescribeTopic(context.Background(), topicDesc.TopicID)
+		lsds, err := adm.ListLogStreams(context.Background(), topicDesc.TopicID)
 		require.NoError(t, err)
-		require.Equal(t, *topicDesc, rsp.Topic)
-		require.Empty(t, rsp.LogStreams)
+		require.Empty(t, lsds)
 	}
 
 	// Append logs, but no log stream
@@ -423,17 +422,11 @@ func TestVarlogTest(t *testing.T) {
 		}
 		require.Len(t, snIDSet, replicationFactor)
 
-		rsp, err := adm.DescribeTopic(context.Background(), tpID)
+		lsds, err := adm.ListLogStreams(context.Background(), tpID)
 		require.NoError(t, err)
-		require.Contains(t, rsp.Topic.LogStreams, lsDesc.LogStreamID)
-		require.Condition(t, func() bool {
-			for _, lsID := range rsp.Topic.LogStreams {
-				if lsID == lsDesc.LogStreamID {
-					return true
-				}
-			}
-			return false
-		})
+		require.True(t, slices.ContainsFunc(lsds, func(lsd varlogpb.LogStreamDescriptor) bool {
+			return lsd.LogStreamID == lsDesc.LogStreamID
+		}))
 
 		logStreamIDs = append(logStreamIDs, lsDesc.LogStreamID)
 		topicLogStreamsMap[tpID] = append(topicLogStreamsMap[tpID], lsDesc.LogStreamID)
