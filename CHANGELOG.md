@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.17.0](https://github.com/kakao/varlog/compare/v0.16.0...v0.17.0) (2023-10-10)
+
+
+### Features
+
+* **all:** add version to the daemons ([ab345de](https://github.com/kakao/varlog/commit/ab345de10a78c9d13b29e84ef356622aa1cf48fd))
+* **all:** add version to the daemons ([#598](https://github.com/kakao/varlog/issues/598)) ([a430609](https://github.com/kakao/varlog/commit/a430609d62919f1565cf41744c8a6f2735ebe768))
+* **varlogtest:** support ListLogStreams API ([c0c2e9d](https://github.com/kakao/varlog/commit/c0c2e9dafa8369ef24f0aa6682a7ffaa9bd0cbf3))
+* **varlogtest:** support ListLogStreams API ([#607](https://github.com/kakao/varlog/issues/607)) ([1f42351](https://github.com/kakao/varlog/commit/1f42351570060415e2f41b37150a4799ebcd5372))
+
 ## [0.16.0](https://github.com/kakao/varlog/compare/v0.15.0...v0.16.0) (2023-10-04)
 
 
