@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.1](https://github.com/kakao/varlog/compare/v0.18.0...v0.18.1) (2023-10-17)
+
+
+### Bug Fixes
+
+* **varlogsn:** fix JSON parsing of get_data_dirs in start_varlogsn ([543d551](https://github.com/kakao/varlog/commit/543d55127e8d15ab7ef667a4faa8b3cee7af2bbf))
+
 ## [0.18.0](https://github.com/kakao/varlog/compare/v0.17.0...v0.18.0) (2023-10-10)
 
 
