@@ -59,14 +59,14 @@ def fetch_storage_node_id(admin: str, advertise: str) -> Tuple[int, bool]:
 
 
 def get_data_dirs(admin: str, snid: int) -> List[str]:
-    cmd = [f"{binpath}/varlogctl", "sn", "describe", f"--admin={admin}",
+    cmd = [f"{binpath}/varlogctl", "sn", "get", f"--admin={admin}",
            f"--snid={snid}"]
     out = subprocess.check_output(cmd)
     snm = json.loads(out)
-    logstreams = snm.get("logStreams")
-    if not logstreams:
-        logstreams = []
-    return [logstream["path"] for logstream in logstreams]
+    logStreamReplicas = snm.get("logStreamReplicas")
+    if not logStreamReplicas:
+        logStreamReplicas = []
+    return [logStreamReplica["path"] for logStreamReplica in logStreamReplicas]
 
 
 def truncate(path: str) -> None:
