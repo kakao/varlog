@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package otlpmetric provides an OpenTelemetry metric Exporter that can be
-// used with PeriodicReader. It transforms metricdata into OTLP and transmits
-// the transformed data to OTLP receivers. The Exporter is configurable to use
-// different Clients, each using a distinct transport protocol to communicate
-// to an OTLP receiving endpoint.
-package otlpmetric // import "go.opentelemetry.io/otel/exporters/otlp/otlpmetric"
+package otlpmetricgrpc // import "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+
+// Version is the current release version of the OpenTelemetry OTLP over gRPC metrics exporter in use.
+func Version() string {
+	return "0.43.0"
+}
