@@ -2866,7 +2866,8 @@ func TestExecutorSyncInit(t *testing.T) {
 					LLSN: 5, GLSN: 5,
 				}, localLWM)
 
-				scanner := dst.stg.NewScanner(storage.WithLLSN(types.LLSN(1), types.LLSN(5)))
+				scanner, err := dst.stg.NewScanner(storage.WithLLSN(types.LLSN(1), types.LLSN(5)))
+				require.NoError(t, err)
 				defer func() {
 					require.NoError(t, scanner.Close())
 				}()
@@ -3004,7 +3005,8 @@ func TestExecutorSyncInit(t *testing.T) {
 				localLWM, localHWM, _ := dst.lsc.localWatermarks()
 				require.True(t, localHWM.Invalid())
 				require.True(t, localLWM.Invalid())
-				scanner := dst.stg.NewScanner(storage.WithLLSN(types.MinLLSN, types.MaxLLSN))
+				scanner, err := dst.stg.NewScanner(storage.WithLLSN(types.MinLLSN, types.MaxLLSN))
+				require.NoError(t, err)
 				defer func() {
 					require.NoError(t, scanner.Close())
 				}()

@@ -20,12 +20,17 @@ type FileNum uint64
 // String returns a string representation of the file number.
 func (fn FileNum) String() string { return fmt.Sprintf("%06d", fn) }
 
+// SafeFormat implements redact.SafeFormatter.
+func (fn FileNum) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%06d", redact.SafeUint(fn))
+}
+
 // DiskFileNum converts a FileNum to a DiskFileNum. DiskFileNum should only be
 // called if the caller can ensure that the FileNum belongs to a physical file
 // on disk. These could be manifests, log files, physical sstables on disk, the
 // options file, but not virtual sstables.
 func (fn FileNum) DiskFileNum() DiskFileNum {
-	return DiskFileNum{fn}
+	return DiskFileNum(fn)
 }
 
 // A DiskFileNum is just a FileNum belonging to a file which exists on disk.
@@ -34,15 +39,18 @@ func (fn FileNum) DiskFileNum() DiskFileNum {
 // Converting a DiskFileNum to a FileNum is always valid, whereas converting a
 // FileNum to DiskFileNum may not be valid and care should be taken to prove
 // that the FileNum actually exists on disk.
-type DiskFileNum struct {
-	fn FileNum
-}
+type DiskFileNum uint64
 
-func (dfn DiskFileNum) String() string { return dfn.fn.String() }
+func (dfn DiskFileNum) String() string { return fmt.Sprintf("%06d", dfn) }
+
+// SafeFormat implements redact.SafeFormatter.
+func (dfn DiskFileNum) SafeFormat(w redact.SafePrinter, verb rune) {
+	w.Printf("%06d", redact.SafeUint(dfn))
+}
 
 // FileNum converts a DiskFileNum to a FileNum. This conversion is always valid.
 func (dfn DiskFileNum) FileNum() FileNum {
-	return dfn.fn
+	return FileNum(dfn)
 }
 
 // FileType enumerates the types of files found in a DB.
@@ -93,9 +101,9 @@ func ParseFilename(fs vfs.FS, filename string) (fileType FileType, dfn DiskFileN
 	filename = fs.PathBase(filename)
 	switch {
 	case filename == "CURRENT":
-		return FileTypeCurrent, DiskFileNum{0}, true
+		return FileTypeCurrent, 0, true
 	case filename == "LOCK":
-		return FileTypeLock, DiskFileNum{0}, true
+		return FileTypeLock, 0, true
 	case strings.HasPrefix(filename, "MANIFEST-"):
 		dfn, ok = parseDiskFileNum(filename[len("MANIFEST-"):])
 		if !ok {
@@ -146,7 +154,7 @@ func parseDiskFileNum(s string) (dfn DiskFileNum, ok bool) {
 	if err != nil {
 		return dfn, false
 	}
-	return DiskFileNum{FileNum(u)}, true
+	return DiskFileNum(u), true
 }
 
 // A Fataler fatals a process with a message when called.

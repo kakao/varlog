@@ -15,20 +15,28 @@ import (
 // LevelMetadata contains metadata for all of the files within
 // a level of the LSM.
 type LevelMetadata struct {
-	level int
-	tree  btree
+	level     int
+	totalSize uint64
+	// NumVirtual is the number of virtual sstables in the level.
+	NumVirtual uint64
+	// VirtualSize is the size of the virtual sstables in the level.
+	VirtualSize uint64
+	tree        btree
 }
 
 // clone makes a copy of the level metadata, implicitly increasing the ref
 // count of every file contained within lm.
 func (lm *LevelMetadata) clone() LevelMetadata {
 	return LevelMetadata{
-		level: lm.level,
-		tree:  lm.tree.Clone(),
+		level:       lm.level,
+		totalSize:   lm.totalSize,
+		NumVirtual:  lm.NumVirtual,
+		VirtualSize: lm.VirtualSize,
+		tree:        lm.tree.Clone(),
 	}
 }
 
-func (lm *LevelMetadata) release() (obsolete []*FileMetadata) {
+func (lm *LevelMetadata) release() (obsolete []*FileBacking) {
 	return lm.tree.Release()
 }
 
@@ -40,6 +48,13 @@ func makeLevelMetadata(cmp Compare, level int, files []*FileMetadata) LevelMetad
 	var lm LevelMetadata
 	lm.level = level
 	lm.tree, _ = makeBTree(bcmp, files)
+	for _, f := range files {
+		lm.totalSize += f.Size
+		if f.Virtual {
+			lm.NumVirtual++
+			lm.VirtualSize += f.Size
+		}
+	}
 	return lm
 }
 
@@ -52,6 +67,27 @@ func makeBTree(cmp btreeCmp, files []*FileMetadata) (btree, LevelSlice) {
 	return t, newLevelSlice(t.Iter())
 }
 
+func (lm *LevelMetadata) insert(f *FileMetadata) error {
+	if err := lm.tree.Insert(f); err != nil {
+		return err
+	}
+	lm.totalSize += f.Size
+	if f.Virtual {
+		lm.NumVirtual++
+		lm.VirtualSize += f.Size
+	}
+	return nil
+}
+
+func (lm *LevelMetadata) remove(f *FileMetadata) bool {
+	lm.totalSize -= f.Size
+	if f.Virtual {
+		lm.NumVirtual--
+		lm.VirtualSize -= f.Size
+	}
+	return lm.tree.Delete(f)
+}
+
 // Empty indicates whether there are any files in the level.
 func (lm *LevelMetadata) Empty() bool {
 	return lm.tree.Count() == 0
@@ -60,6 +96,11 @@ func (lm *LevelMetadata) Empty() bool {
 // Len returns the number of files within the level.
 func (lm *LevelMetadata) Len() int {
 	return lm.tree.Count()
+}
+
+// Size returns the cumulative size of all the files within the level.
+func (lm *LevelMetadata) Size() uint64 {
+	return lm.totalSize
 }
 
 // Iter constructs a LevelIterator over the entire level.
@@ -276,6 +317,32 @@ func (ls *LevelSlice) SizeSum() uint64 {
 	iter := ls.Iter()
 	for f := iter.First(); f != nil; f = iter.Next() {
 		sum += f.Size
+	}
+	return sum
+}
+
+// NumVirtual returns the number of virtual sstables in the level. Its runtime is
+// linear in the length of the slice.
+func (ls *LevelSlice) NumVirtual() uint64 {
+	var n uint64
+	iter := ls.Iter()
+	for f := iter.First(); f != nil; f = iter.Next() {
+		if f.Virtual {
+			n++
+		}
+	}
+	return n
+}
+
+// VirtualSizeSum returns the sum of the sizes of the virtual sstables in the
+// level.
+func (ls *LevelSlice) VirtualSizeSum() uint64 {
+	var sum uint64
+	iter := ls.Iter()
+	for f := iter.First(); f != nil; f = iter.Next() {
+		if f.Virtual {
+			sum += f.Size
+		}
 	}
 	return sum
 }

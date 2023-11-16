@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/internal/keyspan"
 	"github.com/cockroachdb/pebble/internal/manifest"
 )
@@ -46,7 +47,7 @@ type flushableEntry struct {
 	delayedFlushForcedAt time.Time
 	// logNum corresponds to the WAL that contains the records present in the
 	// receiver.
-	logNum FileNum
+	logNum base.DiskFileNum
 	// logSize is the size in bytes of the associated WAL. Protected by DB.mu.
 	logSize uint64
 	// The current logSeqNum at the time the memtable was created. This is
@@ -117,8 +118,7 @@ type flushableList []*flushableEntry
 // ingesting sstables which are added to the flushable list.
 type ingestedFlushable struct {
 	files            []physicalMeta
-	cmp              Compare
-	split            Split
+	comparer         *Comparer
 	newIters         tableNewIters
 	newRangeKeyIters keyspan.TableNewSpanIter
 
@@ -131,8 +131,7 @@ type ingestedFlushable struct {
 
 func newIngestedFlushable(
 	files []*fileMetadata,
-	cmp Compare,
-	split Split,
+	comparer *Comparer,
 	newIters tableNewIters,
 	newRangeKeyIters keyspan.TableNewSpanIter,
 ) *ingestedFlushable {
@@ -147,12 +146,11 @@ func newIngestedFlushable(
 
 	ret := &ingestedFlushable{
 		files:            physicalFiles,
-		cmp:              cmp,
-		split:            split,
+		comparer:         comparer,
 		newIters:         newIters,
 		newRangeKeyIters: newRangeKeyIters,
 		// slice is immutable and can be set once and used many times.
-		slice:        manifest.NewLevelSliceKeySorted(cmp, files),
+		slice:        manifest.NewLevelSliceKeySorted(comparer.Compare, files),
 		hasRangeKeys: hasRangeKeys,
 	}
 
@@ -162,6 +160,7 @@ func newIngestedFlushable(
 // TODO(sumeer): ingestedFlushable iters also need to plumb context for
 // tracing.
 
+// newIter is part of the flushable interface.
 func (s *ingestedFlushable) newIter(o *IterOptions) internalIterator {
 	var opts IterOptions
 	if o != nil {
@@ -172,10 +171,12 @@ func (s *ingestedFlushable) newIter(o *IterOptions) internalIterator {
 	// aren't truly levels in the lsm. Right now, the encoding only supports
 	// L0 sublevels, and the rest of the levels in the lsm.
 	return newLevelIter(
-		opts, s.cmp, s.split, s.newIters, s.slice.Iter(), manifest.Level(0), internalIterOpts{},
+		context.Background(), opts, s.comparer, s.newIters, s.slice.Iter(), manifest.Level(0),
+		internalIterOpts{},
 	)
 }
 
+// newFlushIter is part of the flushable interface.
 func (s *ingestedFlushable) newFlushIter(o *IterOptions, bytesFlushed *uint64) internalIterator {
 	// newFlushIter is only used for writing memtables to disk as sstables.
 	// Since ingested sstables are already present on disk, they don't need to
@@ -199,41 +200,50 @@ func (s *ingestedFlushable) constructRangeDelIter(
 	return rangeDelIter, nil
 }
 
+// newRangeDelIter is part of the flushable interface.
 // TODO(bananabrick): Using a level iter instead of a keyspan level iter to
 // surface range deletes is more efficient.
+//
+// TODO(sumeer): *IterOptions are being ignored, so the index block load for
+// the point iterator in constructRangeDeIter is not tracked.
 func (s *ingestedFlushable) newRangeDelIter(_ *IterOptions) keyspan.FragmentIterator {
 	return keyspan.NewLevelIter(
-		keyspan.SpanIterOptions{}, s.cmp,
+		keyspan.SpanIterOptions{}, s.comparer.Compare,
 		s.constructRangeDelIter, s.slice.Iter(), manifest.Level(0),
 		manifest.KeyTypePoint,
 	)
 }
 
+// newRangeKeyIter is part of the flushable interface.
 func (s *ingestedFlushable) newRangeKeyIter(o *IterOptions) keyspan.FragmentIterator {
 	if !s.containsRangeKeys() {
 		return nil
 	}
 
 	return keyspan.NewLevelIter(
-		keyspan.SpanIterOptions{}, s.cmp, s.newRangeKeyIters,
+		keyspan.SpanIterOptions{}, s.comparer.Compare, s.newRangeKeyIters,
 		s.slice.Iter(), manifest.Level(0), manifest.KeyTypeRange,
 	)
 }
 
+// containsRangeKeys is part of the flushable interface.
 func (s *ingestedFlushable) containsRangeKeys() bool {
 	return s.hasRangeKeys
 }
 
+// inuseBytes is part of the flushable interface.
 func (s *ingestedFlushable) inuseBytes() uint64 {
 	// inuseBytes is only used when memtables are flushed to disk as sstables.
 	panic("pebble: not implemented")
 }
 
+// totalBytes is part of the flushable interface.
 func (s *ingestedFlushable) totalBytes() uint64 {
 	// We don't allocate additional bytes for the ingestedFlushable.
 	return 0
 }
 
+// readyForFlush is part of the flushable interface.
 func (s *ingestedFlushable) readyForFlush() bool {
 	// ingestedFlushable should always be ready to flush. However, note that
 	// memtables before the ingested sstables in the memtable queue must be

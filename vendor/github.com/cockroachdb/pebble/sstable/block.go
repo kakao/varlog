@@ -5,6 +5,7 @@
 package sstable
 
 import (
+	"context"
 	"encoding/binary"
 	"unsafe"
 
@@ -688,8 +689,11 @@ func (i *blockIter) getFirstUserKey() []byte {
 // SeekGE implements internalIterator.SeekGE, as documented in the pebble
 // package.
 func (i *blockIter) SeekGE(key []byte, flags base.SeekGEFlags) (*InternalKey, base.LazyValue) {
-	i.clearCache()
+	if invariants.Enabled && i.isDataInvalidated() {
+		panic(errors.AssertionFailedf("invalidated blockIter used"))
+	}
 
+	i.clearCache()
 	// Find the index of the smallest restart point whose key is > the key
 	// sought; index will be numRestarts if there is no such restart point.
 	i.offset = 0
@@ -818,8 +822,11 @@ func (i *blockIter) SeekPrefixGE(
 // SeekLT implements internalIterator.SeekLT, as documented in the pebble
 // package.
 func (i *blockIter) SeekLT(key []byte, flags base.SeekLTFlags) (*InternalKey, base.LazyValue) {
-	i.clearCache()
+	if invariants.Enabled && i.isDataInvalidated() {
+		panic(errors.AssertionFailedf("invalidated blockIter used"))
+	}
 
+	i.clearCache()
 	// Find the index of the smallest restart point whose key is >= the key
 	// sought; index will be numRestarts if there is no such restart point.
 	i.offset = 0
@@ -986,6 +993,10 @@ func (i *blockIter) SeekLT(key []byte, flags base.SeekLTFlags) (*InternalKey, ba
 // First implements internalIterator.First, as documented in the pebble
 // package.
 func (i *blockIter) First() (*InternalKey, base.LazyValue) {
+	if invariants.Enabled && i.isDataInvalidated() {
+		panic(errors.AssertionFailedf("invalidated blockIter used"))
+	}
+
 	i.offset = 0
 	if !i.valid() {
 		return nil, base.LazyValue{}
@@ -1015,6 +1026,10 @@ func decodeRestart(b []byte) int32 {
 
 // Last implements internalIterator.Last, as documented in the pebble package.
 func (i *blockIter) Last() (*InternalKey, base.LazyValue) {
+	if invariants.Enabled && i.isDataInvalidated() {
+		panic(errors.AssertionFailedf("invalidated blockIter used"))
+	}
+
 	// Seek forward from the last restart point.
 	i.offset = decodeRestart(i.data[i.restarts+4*(i.numRestarts-1):])
 	if !i.valid() {
@@ -1525,6 +1540,8 @@ func (i *blockIter) SetBounds(lower, upper []byte) {
 	// This should never be called as bounds are handled by sstable.Iterator.
 	panic("pebble: SetBounds unimplemented")
 }
+
+func (i *blockIter) SetContext(_ context.Context) {}
 
 func (i *blockIter) valid() bool {
 	return i.offset >= 0 && i.offset < i.restarts

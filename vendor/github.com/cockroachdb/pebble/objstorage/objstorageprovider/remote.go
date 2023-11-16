@@ -18,13 +18,18 @@ import (
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider/remoteobjcat"
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider/sharedcache"
 	"github.com/cockroachdb/pebble/objstorage/remote"
+	"github.com/cockroachdb/redact"
 )
 
 // remoteSubsystem contains the provider fields related to remote storage.
 // All fields remain unset if remote storage is not configured.
 type remoteSubsystem struct {
 	catalog *remoteobjcat.Catalog
-	cache   *sharedcache.Cache
+	// catalogSyncMutex is used to correctly serialize two sharedSync operations.
+	// It must be acquired before the provider mutex.
+	catalogSyncMutex sync.Mutex
+
+	cache *sharedcache.Cache
 
 	// shared contains the fields relevant to shared objects, i.e. objects that
 	// are created by Pebble and potentially shared between Pebble instances.
@@ -150,12 +155,12 @@ func (p *provider) SetCreatorID(creatorID objstorage.CreatorID) error {
 	return nil
 }
 
-// IsForeign is part of the objstorage.Provider interface.
-func (p *provider) IsForeign(meta objstorage.ObjectMetadata) bool {
+// IsSharedForeign is part of the objstorage.Provider interface.
+func (p *provider) IsSharedForeign(meta objstorage.ObjectMetadata) bool {
 	if !p.remote.shared.initialized.Load() {
 		return false
 	}
-	return meta.IsRemote() && (meta.Remote.CustomObjectName != "" || meta.Remote.CreatorID != p.remote.shared.creatorID)
+	return meta.IsShared() && (meta.Remote.CreatorID != p.remote.shared.creatorID)
 }
 
 func (p *provider) remoteCheckInitialized() error {
@@ -176,6 +181,12 @@ func (p *provider) sharedCheckInitialized() error {
 }
 
 func (p *provider) sharedSync() error {
+	// Serialize parallel sync operations. Note that ApplyBatch is already
+	// serialized internally, but we want to make sure they get called with
+	// batches in the right order.
+	p.remote.catalogSyncMutex.Lock()
+	defer p.remote.catalogSyncMutex.Unlock()
+
 	batch := func() remoteobjcat.Batch {
 		p.mu.Lock()
 		defer p.mu.Unlock()
@@ -188,9 +199,9 @@ func (p *provider) sharedSync() error {
 		return nil
 	}
 
-	err := p.remote.catalog.ApplyBatch(batch)
-	if err != nil {
-		// We have to put back the batch (for the next Sync).
+	if err := p.remote.catalog.ApplyBatch(batch); err != nil {
+		// Put back the batch (for the next Sync), appending any operations that
+		// happened in the meantime.
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		batch.Append(p.mu.remote.catalogBatch)
@@ -223,7 +234,7 @@ func (p *provider) sharedCreateRef(meta objstorage.ObjectMetadata) error {
 		err = writer.Close()
 	}
 	if err != nil {
-		return errors.Wrapf(err, "creating marker object %q", refName)
+		return errors.Wrapf(err, "creating marker object %q", errors.Safe(refName))
 	}
 	return nil
 }
@@ -255,7 +266,7 @@ func (p *provider) sharedCreate(
 	objName := remoteObjectName(meta)
 	writer, err := storage.CreateObject(objName)
 	if err != nil {
-		return nil, objstorage.ObjectMetadata{}, errors.Wrapf(err, "creating object %q", objName)
+		return nil, objstorage.ObjectMetadata{}, errors.Wrapf(err, "creating object %q", errors.Safe(objName))
 	}
 	return &sharedWritable{
 		p:             p,
@@ -280,19 +291,19 @@ func (p *provider) remoteOpenForReading(
 		if _, err := meta.Remote.Storage.Size(refName); err != nil {
 			if meta.Remote.Storage.IsNotExistError(err) {
 				if opts.MustExist {
-					p.st.Logger.Fatalf("marker object %q does not exist", refName)
+					p.st.Logger.Fatalf("marker object %q does not exist", errors.Safe(refName))
 					// TODO(radu): maybe list references for the object.
 				}
-				return nil, errors.Errorf("marker object %q does not exist", refName)
+				return nil, errors.Errorf("marker object %q does not exist", errors.Safe(refName))
 			}
-			return nil, errors.Wrapf(err, "checking marker object %q", refName)
+			return nil, errors.Wrapf(err, "checking marker object %q", errors.Safe(refName))
 		}
 	}
 	objName := remoteObjectName(meta)
 	reader, size, err := meta.Remote.Storage.ReadObject(ctx, objName)
 	if err != nil {
 		if opts.MustExist && meta.Remote.Storage.IsNotExistError(err) {
-			p.st.Logger.Fatalf("object %q does not exist", objName)
+			p.st.Logger.Fatalf("object %q does not exist", redact.SafeString(objName))
 			// TODO(radu): maybe list references for the object.
 		}
 		return nil, err

@@ -11,7 +11,8 @@ automatically formats error details and strips them of PII.
 
 See also [the design RFC](https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20190318_error_handling.md).
 
-[![Build Status](https://travis-ci.org/cockroachdb/errors.svg?branch=master)](https://travis-ci.org/cockroachdb/errors)
+![Build Status](https://github.com/cockroachdb/errors/actions/workflows/ci.yaml/badge.svg?branch=master)
+[![Go Reference](https://pkg.go.dev/badge/github.com/cockroachdb/errors.svg)](https://pkg.go.dev/github.com/cockroachdb/errors)
 
 Table of contents:
 
@@ -208,12 +209,12 @@ return errors.Wrap(foo(), "foo")
   - how to access the detail: `Error()`, regular Go formatting, Sentry Report.
 
 - `WithDetail(error, string) error`, `WithDetailf(error, string, ...interface{}) error`, user-facing detail with contextual information.
-  - **when to use: need to embark a message string to output when the error is presented to a human.**
+  - **when to use: need to embark a message string to output when the error is presented to a developer.**
   - what it does: captures detail strings.
   - how to access the detail: `errors.GetAllDetails()`, `errors.FlattenDetails()` (all details are preserved), format with `%+v`. Not included in Sentry reports.
 
 - `WithHint(error, string) error`, `WithHintf(error, string, ...interface{}) error`: user-facing detail with suggestion for action to take.
-  - **when to use: need to embark a message string to output when the error is presented to a human.**
+  - **when to use: need to embark a message string to output when the error is presented to an end user.**
   - what it does: captures hint strings.
   - how to access the detail: `errors.GetAllHints()`, `errors.FlattenHints()` (hints are de-duplicated), format with `%+v`. Not included in Sentry reports.
 
@@ -422,10 +423,10 @@ func myLeafDecoder(_ string, details []string, _ proto.Message) error {
 
 (For an example, see the `withTelemetry` type in [`telemetry/with_telemetry.go`](telemetry/with_telemetry.go).)
 
-**The only case where you need a custom encoder is when your error
+__The only case where you need a custom encoder is when your error
 type contains some fields that are not reflected in the error message
 (so you can't extract them back from there), and are not PII-free and
-thus cannot be reported as "safe details".**
+thus cannot be reported as "safe details".__
 
 To take inspiration from examples, see the following types in the
 library that need a custom encoder:
@@ -535,8 +536,12 @@ Example use:
 | `WrapWithDepthf`                   | `WithMessagef` + `WithStackDepth`                                                 |
 | `AssertionFailedWithDepthf`        | `NewWithDepthf` + `WithAssertionFailure`                                          |
 | `NewAssertionErrorWithWrappedErrf` | `HandledWithMessagef` (barrier) + `WrapWithDepthf` +  `WithAssertionFailure`      |
-
+| `Join`                             | `JoinWithDepth` (see below)                                                       |
+| `JoinWithDepth`                    | multi-cause wrapper + `WithStackDepth`                                            |
 ## API (not constructing error objects)
+
+The following is a summary of the non-constructor API functions, grouped by category.
+Detailed documentation can be found at: https://pkg.go.dev/github.com/cockroachdb/errors
 
 ```go
 // Access causes.
@@ -569,10 +574,16 @@ func RegisterLeafDecoder(typeName TypeKey, decoder LeafDecoder)
 func RegisterLeafEncoder(typeName TypeKey, encoder LeafEncoder)
 func RegisterWrapperDecoder(typeName TypeKey, decoder WrapperDecoder)
 func RegisterWrapperEncoder(typeName TypeKey, encoder WrapperEncoder)
+func RegisterWrapperEncoderWithMessageOverride (typeName TypeKey, encoder WrapperEncoderWithMessageOverride)
+func RegisterMultiCauseEncoder(theType TypeKey, encoder MultiCauseEncoder)
+func RegisterMultiCauseDecoder(theType TypeKey, decoder MultiCauseDecoder)
 type LeafEncoder = func(ctx context.Context, err error) (msg string, safeDetails []string, payload proto.Message)
 type LeafDecoder = func(ctx context.Context, msg string, safeDetails []string, payload proto.Message) error
 type WrapperEncoder = func(ctx context.Context, err error) (msgPrefix string, safeDetails []string, payload proto.Message)
+type WrapperEncoderWithMessageOverride = func(ctx context.Context, err error) (msgPrefix string, safeDetails []string, payload proto.Message, overrideError bool)
 type WrapperDecoder = func(ctx context.Context, cause error, msgPrefix string, safeDetails []string, payload proto.Message) error
+type MultiCauseEncoder = func(ctx context.Context, err error) (msg string, safeDetails []string, payload proto.Message)
+type MultiCauseDecoder = func(ctx context.Context, causes []error, msgPrefix string, safeDetails []string, payload proto.Message) error
 
 // Registering package renames for custom error types.
 func RegisterTypeMigration(previousPkgPath, previousTypeName string, newType error)

@@ -21,6 +21,10 @@ func (l *logAdaptor) Infof(format string, args ...interface{}) {
 	l.logger.Infof(format, args...)
 }
 
+func (l *logAdaptor) Errorf(format string, args ...interface{}) {
+	l.logger.Errorf(format, args...)
+}
+
 func (l *logAdaptor) Fatalf(format string, args ...interface{}) {
 	l.logger.Fatalf(format, args...)
 }
