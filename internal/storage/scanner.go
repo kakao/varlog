@@ -59,8 +59,10 @@ func (s *Scanner) Next() bool {
 	return s.it.Next()
 }
 
-func (s *Scanner) Close() error {
-	err := s.it.Close()
+func (s *Scanner) Close() (err error) {
+	if s.it != nil {
+		err = s.it.Close()
+	}
 	s.release()
 	return err
 }

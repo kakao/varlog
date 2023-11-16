@@ -187,7 +187,9 @@ type Iterator struct {
 	comparer  base.Comparer
 	iter      internalIterator
 	pointIter internalIterator
+	// Either readState or version is set, but not both.
 	readState *readState
+	version   *version
 	// rangeKey holds iteration state specific to iteration over range keys.
 	// The range key field may be nil if the Iterator has never been configured
 	// to iterate over range keys. Its non-nilness cannot be used to determine
@@ -300,6 +302,8 @@ type Iterator struct {
 	// Used for an optimization in external iterators to reduce the number of
 	// merging levels.
 	forwardOnly bool
+	// batchOnlyIter is set to true for Batch.NewBatchOnlyIter.
+	batchOnlyIter bool
 	// closePointIterOnce is set to true if this point iter can only be Close()d
 	// once, _and_ closing i.iter and then i.pointIter would close i.pointIter
 	// twice. This is necessary to track if the point iter is an internal iterator
@@ -548,6 +552,21 @@ func (i *Iterator) findNextEntry(limit []byte) {
 			return
 		}
 
+		// If the user has configured a SkipPoint function, invoke it to see
+		// whether we should skip over the current user key.
+		if i.opts.SkipPoint != nil && key.Kind() != InternalKeyKindRangeKeySet && i.opts.SkipPoint(i.iterKey.UserKey) {
+			// NB: We could call nextUserKey, but in some cases the SkipPoint
+			// predicate function might be cheaper than nextUserKey's key copy
+			// and key comparison. This should be the case for MVCC suffix
+			// comparisons, for example. In the future, we could expand the
+			// SkipPoint interface to give the implementor more control over
+			// whether we skip over just the internal key, the user key, or even
+			// the key prefix.
+			i.stats.ForwardStepCount[InternalIterCall]++
+			i.iterKey, i.iterValue = i.iter.Next()
+			continue
+		}
+
 		switch key.Kind() {
 		case InternalKeyKindRangeKeySet:
 			// Save the current key.
@@ -617,6 +636,13 @@ func (i *Iterator) findNextEntry(limit []byte) {
 }
 
 func (i *Iterator) nextPointCurrentUserKey() bool {
+	// If the user has configured a SkipPoint function and the current user key
+	// would be skipped by it, there's no need to step forward looking for a
+	// point key. If we were to find one, it should be skipped anyways.
+	if i.opts.SkipPoint != nil && i.opts.SkipPoint(i.key) {
+		return false
+	}
+
 	i.pos = iterPosCurForward
 
 	i.iterKey, i.iterValue = i.iter.Next()
@@ -778,39 +804,41 @@ func (i *Iterator) maybeSampleRead() {
 func (i *Iterator) sampleRead() {
 	var topFile *manifest.FileMetadata
 	topLevel, numOverlappingLevels := numLevels, 0
-	if mi, ok := i.iter.(*mergingIter); ok {
-		if len(mi.levels) > 1 {
-			mi.ForEachLevelIter(func(li *levelIter) bool {
-				l := manifest.LevelToInt(li.level)
-				if f := li.iterFile; f != nil {
-					var containsKey bool
-					if i.pos == iterPosNext || i.pos == iterPosCurForward ||
-						i.pos == iterPosCurForwardPaused {
-						containsKey = i.cmp(f.SmallestPointKey.UserKey, i.key) <= 0
-					} else if i.pos == iterPosPrev || i.pos == iterPosCurReverse ||
-						i.pos == iterPosCurReversePaused {
-						containsKey = i.cmp(f.LargestPointKey.UserKey, i.key) >= 0
-					}
-					// Do nothing if the current key is not contained in f's
-					// bounds. We could seek the LevelIterator at this level
-					// to find the right file, but the performance impacts of
-					// doing that are significant enough to negate the benefits
-					// of read sampling in the first place. See the discussion
-					// at:
-					// https://github.com/cockroachdb/pebble/pull/1041#issuecomment-763226492
-					if containsKey {
-						numOverlappingLevels++
-						if numOverlappingLevels >= 2 {
-							// Terminate the loop early if at least 2 overlapping levels are found.
-							return true
-						}
-						topLevel = l
-						topFile = f
-					}
+	mi := i.merging
+	if mi == nil {
+		return
+	}
+	if len(mi.levels) > 1 {
+		mi.ForEachLevelIter(func(li *levelIter) bool {
+			l := manifest.LevelToInt(li.level)
+			if f := li.iterFile; f != nil {
+				var containsKey bool
+				if i.pos == iterPosNext || i.pos == iterPosCurForward ||
+					i.pos == iterPosCurForwardPaused {
+					containsKey = i.cmp(f.SmallestPointKey.UserKey, i.key) <= 0
+				} else if i.pos == iterPosPrev || i.pos == iterPosCurReverse ||
+					i.pos == iterPosCurReversePaused {
+					containsKey = i.cmp(f.LargestPointKey.UserKey, i.key) >= 0
 				}
-				return false
-			})
-		}
+				// Do nothing if the current key is not contained in f's
+				// bounds. We could seek the LevelIterator at this level
+				// to find the right file, but the performance impacts of
+				// doing that are significant enough to negate the benefits
+				// of read sampling in the first place. See the discussion
+				// at:
+				// https://github.com/cockroachdb/pebble/pull/1041#issuecomment-763226492
+				if containsKey {
+					numOverlappingLevels++
+					if numOverlappingLevels >= 2 {
+						// Terminate the loop early if at least 2 overlapping levels are found.
+						return true
+					}
+					topLevel = l
+					topFile = f
+				}
+			}
+			return false
+		})
 	}
 	if topFile == nil || topLevel >= numLevels {
 		return
@@ -907,6 +935,26 @@ func (i *Iterator) findPrevEntry(limit []byte) {
 			}
 		}
 
+		// If the user has configured a SkipPoint function, invoke it to see
+		// whether we should skip over the current user key.
+		if i.opts.SkipPoint != nil && key.Kind() != InternalKeyKindRangeKeySet && i.opts.SkipPoint(key.UserKey) {
+			// NB: We could call prevUserKey, but in some cases the SkipPoint
+			// predicate function might be cheaper than prevUserKey's key copy
+			// and key comparison. This should be the case for MVCC suffix
+			// comparisons, for example. In the future, we could expand the
+			// SkipPoint interface to give the implementor more control over
+			// whether we skip over just the internal key, the user key, or even
+			// the key prefix.
+			i.stats.ReverseStepCount[InternalIterCall]++
+			i.iterKey, i.iterValue = i.iter.Prev()
+			if limit != nil && i.iterKey != nil && i.cmp(limit, i.iterKey.UserKey) > 0 && !i.rangeKeyWithinLimit(limit) {
+				i.iterValidityState = IterAtLimit
+				i.pos = iterPosCurReversePaused
+				return
+			}
+			continue
+		}
+
 		switch key.Kind() {
 		case InternalKeyKindRangeKeySet:
 			// Range key start boundary markers are interleaved with the maximum
@@ -944,12 +992,12 @@ func (i *Iterator) findPrevEntry(limit []byte) {
 			// Compare with the limit. We could optimize by only checking when
 			// we step to the previous user key, but detecting that requires a
 			// comparison too. Note that this position may already passed a
-			// number of versions of this user key, but they are all deleted,
-			// so the fact that a subsequent Prev*() call will not see them is
+			// number of versions of this user key, but they are all deleted, so
+			// the fact that a subsequent Prev*() call will not see them is
 			// harmless. Also note that this is the only place in the loop,
-			// other than the firstLoopIter case above, where we could step
-			// to a different user key and start processing it for returning
-			// to the caller.
+			// other than the firstLoopIter and SkipPoint cases above, where we
+			// could step to a different user key and start processing it for
+			// returning to the caller.
 			if limit != nil && i.iterKey != nil && i.cmp(limit, i.iterKey.UserKey) > 0 && !i.rangeKeyWithinLimit(limit) {
 				i.iterValidityState = IterAtLimit
 				i.pos = iterPosCurReversePaused
@@ -1760,7 +1808,8 @@ func (i *Iterator) internalNextPrefix(currKeyPrefixLen int) {
 	i.iterKey, i.iterValue = i.iter.NextPrefix(i.prefixOrFullSeekKey)
 	if invariants.Enabled && i.iterKey != nil {
 		if iterKeyPrefixLen := i.split(i.iterKey.UserKey); i.cmp(i.iterKey.UserKey[:iterKeyPrefixLen], i.prefixOrFullSeekKey) < 0 {
-			panic("pebble: iter.NextPrefix did not advance beyond the current prefix")
+			panic(errors.AssertionFailedf("pebble: iter.NextPrefix did not advance beyond the current prefix: now at %q; expected to be geq %q",
+				i.iterKey, i.prefixOrFullSeekKey))
 		}
 	}
 }
@@ -2129,6 +2178,9 @@ func (i *Iterator) Value() []byte {
 
 // ValueAndErr returns the value, and any error encountered in extracting the value.
 // REQUIRES: i.Error()==nil and HasPointAndRange() returns true for hasPoint.
+//
+// The caller should not modify the contents of the returned slice, and its
+// contents may change on the next call to Next.
 func (i *Iterator) ValueAndErr() ([]byte, error) {
 	val, callerOwned, err := i.value.Value(i.lazyValueBuf)
 	if err != nil {
@@ -2159,7 +2211,13 @@ func (i *Iterator) RangeKeys() []RangeKeyData {
 // Valid returns true if the iterator is positioned at a valid key/value pair
 // and false otherwise.
 func (i *Iterator) Valid() bool {
-	return i.iterValidityState == IterValid && !i.requiresReposition
+	valid := i.iterValidityState == IterValid && !i.requiresReposition
+	if invariants.Enabled {
+		if err := i.Error(); valid && err != nil {
+			panic(errors.WithSecondaryError(errors.AssertionFailedf("pebble: iterator is valid with non-nil Error"), err))
+		}
+	}
+	return valid
 }
 
 // Error returns any accumulated error.
@@ -2222,6 +2280,10 @@ func (i *Iterator) Close() error {
 
 		i.readState.unref()
 		i.readState = nil
+	}
+
+	if i.version != nil {
+		i.version.Unref()
 	}
 
 	for _, readers := range i.externalReaders {
@@ -2330,6 +2392,22 @@ func (i *Iterator) SetBounds(lower, upper []byte) {
 	i.invalidate()
 }
 
+// SetContext replaces the context provided at iterator creation, or the last
+// one provided by SetContext. Even though iterators are expected to be
+// short-lived, there are some cases where either (a) iterators are used far
+// from the code that created them, (b) iterators are reused (while being
+// short-lived) for processing different requests. For such scenarios, we
+// allow the caller to replace the context.
+func (i *Iterator) SetContext(ctx context.Context) {
+	i.ctx = ctx
+	i.iter.SetContext(ctx)
+	// If the iterator has an open point iterator that's not currently being
+	// used, propagate the new context to it.
+	if i.pointIter != nil && !i.opts.pointKeys() {
+		i.pointIter.SetContext(i.ctx)
+	}
+}
+
 // Initialization and changing of the bounds must call processBounds.
 // processBounds saves the bounds and computes derived state from those
 // bounds.
@@ -2416,7 +2494,8 @@ func (i *Iterator) SetOptions(o *IterOptions) {
 	// If either options specify block property filters for an iterator stack,
 	// reconstruct it.
 	if i.pointIter != nil && (closeBoth || len(o.PointKeyFilters) > 0 || len(i.opts.PointKeyFilters) > 0 ||
-		o.RangeKeyMasking.Filter != nil || i.opts.RangeKeyMasking.Filter != nil) {
+		o.RangeKeyMasking.Filter != nil || i.opts.RangeKeyMasking.Filter != nil || o.SkipPoint != nil ||
+		i.opts.SkipPoint != nil) {
 		i.err = firstError(i.err, i.pointIter.Close())
 		i.pointIter = nil
 	}
@@ -2653,13 +2732,26 @@ func (i *Iterator) CloneWithContext(ctx context.Context, opts CloneOptions) (*It
 	if opts.IterOptions == nil {
 		opts.IterOptions = &i.opts
 	}
-
+	if i.batchOnlyIter {
+		return nil, errors.Errorf("cannot Clone a batch-only Iterator")
+	}
 	readState := i.readState
-	if readState == nil {
+	vers := i.version
+	if readState == nil && vers == nil {
 		return nil, errors.Errorf("cannot Clone a closed Iterator")
 	}
 	// i is already holding a ref, so there is no race with unref here.
-	readState.ref()
+	//
+	// TODO(bilal): If the underlying iterator was created on a snapshot, we could
+	// grab a reference to the current readState instead of reffing the original
+	// readState. This allows us to release references to some zombie sstables
+	// and memtables.
+	if readState != nil {
+		readState.ref()
+	}
+	if vers != nil {
+		vers.Ref()
+	}
 	// Bundle various structures under a single umbrella in order to allocate
 	// them together.
 	buf := iterAllocPool.Get().(*iterAlloc)
@@ -2671,6 +2763,7 @@ func (i *Iterator) CloneWithContext(ctx context.Context, opts CloneOptions) (*It
 		merge:               i.merge,
 		comparer:            i.comparer,
 		readState:           readState,
+		version:             vers,
 		keyBuf:              buf.keyBuf,
 		prefixOrFullSeekKey: buf.prefixOrFullSeekKey,
 		boundsBuf:           buf.boundsBuf,

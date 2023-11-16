@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"runtime/debug"
 	"runtime/pprof"
 	"sync"
@@ -22,7 +21,6 @@ import (
 	"github.com/cockroachdb/pebble/internal/keyspan"
 	"github.com/cockroachdb/pebble/internal/manifest"
 	"github.com/cockroachdb/pebble/internal/private"
-	"github.com/cockroachdb/pebble/internal/rangekey"
 	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider/objiotracing"
 	"github.com/cockroachdb/pebble/sstable"
@@ -65,11 +63,12 @@ type tableCacheOpts struct {
 	// track of leaked iterators on a per-db level.
 	iterCount *atomic.Int32
 
-	loggerAndTracer LoggerAndTracer
-	cacheID         uint64
-	objProvider     objstorage.Provider
-	opts            sstable.ReaderOptions
-	filterMetrics   *sstable.FilterMetricsTracker
+	loggerAndTracer   LoggerAndTracer
+	cacheID           uint64
+	objProvider       objstorage.Provider
+	opts              sstable.ReaderOptions
+	filterMetrics     *sstable.FilterMetricsTracker
+	sstStatsCollector *sstable.CategoryStatsCollector
 }
 
 // tableCacheContainer contains the table cache and
@@ -85,7 +84,12 @@ type tableCacheContainer struct {
 // newTableCacheContainer will panic if the underlying cache in the table cache
 // doesn't match Options.Cache.
 func newTableCacheContainer(
-	tc *TableCache, cacheID uint64, objProvider objstorage.Provider, opts *Options, size int,
+	tc *TableCache,
+	cacheID uint64,
+	objProvider objstorage.Provider,
+	opts *Options,
+	size int,
+	sstStatsCollector *sstable.CategoryStatsCollector,
 ) *tableCacheContainer {
 	// We will release a ref to table cache acquired here when tableCacheContainer.close is called.
 	if tc != nil {
@@ -107,6 +111,7 @@ func newTableCacheContainer(
 	t.dbOpts.opts = opts.MakeReaderOptions()
 	t.dbOpts.filterMetrics = &sstable.FilterMetricsTracker{}
 	t.dbOpts.iterCount = new(atomic.Int32)
+	t.dbOpts.sstStatsCollector = sstStatsCollector
 	return t
 }
 
@@ -194,6 +199,30 @@ func (c *tableCacheContainer) estimateSize(
 		return 0, err
 	}
 	return size, nil
+}
+
+func createCommonReader(v *tableCacheValue, file *fileMetadata) sstable.CommonReader {
+	// TODO(bananabrick): We suffer an allocation if file is a virtual sstable.
+	var cr sstable.CommonReader = v.reader
+	if file.Virtual {
+		virtualReader := sstable.MakeVirtualReader(
+			v.reader, file.VirtualMeta(),
+		)
+		cr = &virtualReader
+	}
+	return cr
+}
+
+func (c *tableCacheContainer) withCommonReader(
+	meta *fileMetadata, fn func(sstable.CommonReader) error,
+) error {
+	s := c.tableCache.getShard(meta.FileBacking.DiskFileNum)
+	v := s.findNode(meta, &c.dbOpts)
+	defer s.unrefValue(v)
+	if v.err != nil {
+		return v.err
+	}
+	return fn(createCommonReader(v, meta))
 }
 
 func (c *tableCacheContainer) withReader(meta physicalMeta, fn func(*sstable.Reader) error) error {
@@ -434,24 +463,8 @@ func (c *tableCacheShard) newIters(
 		return nil, nil, err
 	}
 
-	type iterCreator interface {
-		NewRawRangeDelIter() (keyspan.FragmentIterator, error)
-		NewIterWithBlockPropertyFiltersAndContextEtc(ctx context.Context, lower, upper []byte, filterer *sstable.BlockPropertiesFilterer, hideObsoletePoints, useFilterBlock bool, stats *base.InternalIteratorStats, rp sstable.ReaderProvider) (sstable.Iterator, error)
-		NewCompactionIter(
-			bytesIterated *uint64,
-			rp sstable.ReaderProvider,
-			bufferPool *sstable.BufferPool,
-		) (sstable.Iterator, error)
-	}
-
-	// TODO(bananabrick): We suffer an allocation if file is a virtual sstable.
-	var ic iterCreator = v.reader
-	if file.Virtual {
-		virtualReader := sstable.MakeVirtualReader(
-			v.reader, file.VirtualMeta(),
-		)
-		ic = &virtualReader
-	}
+	// Note: This suffers an allocation for virtual sstables.
+	cr := createCommonReader(v, file)
 
 	provider := dbOpts.objProvider
 	// Check if this file is a foreign file.
@@ -462,29 +475,7 @@ func (c *tableCacheShard) newIters(
 
 	// NB: range-del iterator does not maintain a reference to the table, nor
 	// does it need to read from it after creation.
-	var rangeDelIter keyspan.FragmentIterator
-	if provider.IsForeign(objMeta) {
-		if opts == nil {
-			panic("unexpected nil opts when reading foreign file")
-		}
-		if !file.Virtual {
-			// Foreign sstables must be virtual by definition.
-			panic(fmt.Sprintf("sstable is foreign but not virtual: %s", file.FileNum))
-		}
-		switch manifest.LevelToInt(opts.level) {
-		case 5:
-			rangeDelIter, err = ic.NewRawRangeDelIter()
-		case 6:
-		// Let rangeDelIter remain nil. We don't need to return rangedels from
-		// this file as they will not apply to any other files. For the purpose
-		// of collapsing rangedels within this file, we create another rangeDelIter
-		// below for use with the interleaving iter.
-		default:
-			panic(fmt.Sprintf("unexpected level for foreign sstable: %d", manifest.LevelToInt(opts.level)))
-		}
-	} else {
-		rangeDelIter, err = ic.NewRawRangeDelIter()
-	}
+	rangeDelIter, err := cr.NewRawRangeDelIter()
 	if err != nil {
 		c.unrefValue(v)
 		return nil, nil, err
@@ -521,12 +512,24 @@ func (c *tableCacheShard) newIters(
 		rp = &tableCacheShardReaderProvider{c: c, file: file, dbOpts: dbOpts}
 	}
 
+	if provider.IsSharedForeign(objMeta) {
+		if tableFormat < sstable.TableFormatPebblev4 {
+			return nil, nil, errors.New("pebble: shared foreign sstable has a lower table format than expected")
+		}
+		hideObsoletePoints = true
+	}
+	var categoryAndQoS sstable.CategoryAndQoS
+	if opts != nil {
+		categoryAndQoS = opts.CategoryAndQoS
+	}
 	if internalOpts.bytesIterated != nil {
-		iter, err = ic.NewCompactionIter(internalOpts.bytesIterated, rp, internalOpts.bufferPool)
+		iter, err = cr.NewCompactionIter(
+			internalOpts.bytesIterated, categoryAndQoS, dbOpts.sstStatsCollector, rp,
+			internalOpts.bufferPool)
 	} else {
-		iter, err = ic.NewIterWithBlockPropertyFiltersAndContextEtc(
+		iter, err = cr.NewIterWithBlockPropertyFiltersAndContextEtc(
 			ctx, opts.GetLowerBound(), opts.GetUpperBound(), filterer, hideObsoletePoints, useFilter,
-			internalOpts.stats, rp)
+			internalOpts.stats, categoryAndQoS, dbOpts.sstStatsCollector, rp)
 	}
 	if err != nil {
 		if rangeDelIter != nil {
@@ -538,35 +541,6 @@ func (c *tableCacheShard) newIters(
 	// NB: v.closeHook takes responsibility for calling unrefValue(v) here. Take
 	// care to avoid introducing an allocation here by adding a closure.
 	iter.SetCloseHook(v.closeHook)
-	if provider.IsForeign(objMeta) {
-		// NB: IsForeign() guarantees IsShared, so opts must not be nil as we've
-		// already panicked on the nil case above.
-		pointKeySeqNum := base.SeqNumForLevel(manifest.LevelToInt(opts.level))
-		pcIter := pointCollapsingIterator{
-			comparer:          dbOpts.opts.Comparer,
-			merge:             dbOpts.opts.Merge,
-			seqNum:            math.MaxUint64,
-			elideRangeDeletes: true,
-			fixedSeqNum:       pointKeySeqNum,
-		}
-		// Open a second rangedel iter. This is solely for the interleaving iter to
-		// be able to efficiently delete covered range deletes. We don't need to fix
-		// the sequence number in this iter, as these range deletes will not be
-		// exposed to anything other than the interleaving iter and
-		// pointCollapsingIter.
-		rangeDelIter, err := v.reader.NewRawRangeDelIter()
-		if err != nil {
-			c.unrefValue(v)
-			return nil, nil, err
-		}
-		if rangeDelIter == nil {
-			rangeDelIter = emptyKeyspanIter
-		}
-		pcIter.iter.Init(dbOpts.opts.Comparer, iter, rangeDelIter, nil /* mask */, opts.LowerBound, opts.UpperBound)
-		pcSSTIter := pcSSTIterPool.Get().(*pointCollapsingSSTIterator)
-		*pcSSTIter = pointCollapsingSSTIterator{pointCollapsingIterator: pcIter, childIter: iter}
-		iter = pcSSTIter
-	}
 
 	c.iterCount.Add(1)
 	dbOpts.iterCount.Add(1)
@@ -634,29 +608,6 @@ func (c *tableCacheShard) newRangeKeyIter(
 		// NewRawRangeKeyIter can return nil even if there's no error. However,
 		// the keyspan.LevelIter expects a non-nil iterator if err is nil.
 		return emptyKeyspanIter, nil
-	}
-
-	objMeta, err := dbOpts.objProvider.Lookup(fileTypeTable, file.FileBacking.DiskFileNum)
-	if err != nil {
-		return nil, err
-	}
-	if dbOpts.objProvider.IsForeign(objMeta) {
-		if opts.Level == 0 {
-			panic("unexpected zero level when reading foreign file")
-		}
-		transform := &rangekey.ForeignSSTTransformer{
-			Comparer: dbOpts.opts.Comparer,
-			Level:    manifest.LevelToInt(opts.Level),
-		}
-		if iter == nil {
-			iter = emptyKeyspanIter
-		}
-		transformIter := &keyspan.TransformerIter{
-			FragmentIterator: iter,
-			Transformer:      transform,
-			Compare:          dbOpts.opts.Comparer.Compare,
-		}
-		return transformIter, nil
 	}
 
 	return iter, nil
@@ -784,7 +735,27 @@ func (c *tableCacheShard) unrefValue(v *tableCacheValue) {
 // findNode returns the node for the table with the given file number, creating
 // that node if it didn't already exist. The caller is responsible for
 // decrementing the returned node's refCount.
-func (c *tableCacheShard) findNode(meta *fileMetadata, dbOpts *tableCacheOpts) *tableCacheValue {
+func (c *tableCacheShard) findNode(
+	meta *fileMetadata, dbOpts *tableCacheOpts,
+) (v *tableCacheValue) {
+	// Loading a file before its global sequence number is known (eg,
+	// during ingest before entering the commit pipeline) can pollute
+	// the cache with incorrect state. In invariant builds, verify
+	// that the global sequence number of the returned reader matches.
+	if invariants.Enabled {
+		defer func() {
+			if v.reader != nil && meta.LargestSeqNum == meta.SmallestSeqNum &&
+				v.reader.Properties.GlobalSeqNum != meta.SmallestSeqNum {
+				panic(errors.AssertionFailedf("file %s loaded from table cache with the wrong global sequence number %d",
+					meta, v.reader.Properties.GlobalSeqNum))
+			}
+		}()
+	}
+	if refs := meta.Refs(); refs <= 0 {
+		panic(errors.AssertionFailedf("attempting to load file %s with refs=%d from table cache",
+			meta, refs))
+	}
+
 	// Fast-path for a hit in the cache.
 	c.mu.RLock()
 	key := tableCacheKey{dbOpts.cacheID, meta.FileBacking.DiskFileNum}
@@ -792,7 +763,7 @@ func (c *tableCacheShard) findNode(meta *fileMetadata, dbOpts *tableCacheOpts) *
 		// Fast-path hit.
 		//
 		// The caller is responsible for decrementing the refCount.
-		v := n.value
+		v = n.value
 		v.refCount.Add(1)
 		c.mu.RUnlock()
 		n.referenced.Store(true)
@@ -819,7 +790,7 @@ func (c *tableCacheShard) findNode(meta *fileMetadata, dbOpts *tableCacheOpts) *
 		// Slow-path hit of a hot or cold node.
 		//
 		// The caller is responsible for decrementing the refCount.
-		v := n.value
+		v = n.value
 		v.refCount.Add(1)
 		n.referenced.Store(true)
 		c.hits.Add(1)
@@ -843,7 +814,7 @@ func (c *tableCacheShard) findNode(meta *fileMetadata, dbOpts *tableCacheOpts) *
 
 	c.misses.Add(1)
 
-	v := &tableCacheValue{
+	v = &tableCacheValue{
 		loaded: make(chan struct{}),
 	}
 	v.refCount.Store(2)
@@ -1118,10 +1089,8 @@ func (v *tableCacheValue) load(loadInfo loadInfo, c *tableCacheShard, dbOpts *ta
 		v.err = errors.Wrapf(
 			err, "pebble: backing file %s error", errors.Safe(loadInfo.backingFileNum.FileNum()))
 	}
-	if v.err == nil {
-		if loadInfo.smallestSeqNum == loadInfo.largestSeqNum {
-			v.reader.Properties.GlobalSeqNum = loadInfo.largestSeqNum
-		}
+	if v.err == nil && loadInfo.smallestSeqNum == loadInfo.largestSeqNum {
+		v.reader.Properties.GlobalSeqNum = loadInfo.largestSeqNum
 	}
 	if v.err != nil {
 		c.mu.Lock()

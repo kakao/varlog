@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/pebble/internal/arenaskl"
 	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/internal/keyspan"
+	"github.com/cockroachdb/pebble/internal/manual"
 	"github.com/cockroachdb/pebble/internal/rangedel"
 	"github.com/cockroachdb/pebble/internal/rangekey"
 )
@@ -84,7 +85,16 @@ type memTable struct {
 	rangeKeys  keySpanCache
 	// The current logSeqNum at the time the memtable was created. This is
 	// guaranteed to be less than or equal to any seqnum stored in the memtable.
-	logSeqNum uint64
+	logSeqNum                    uint64
+	releaseAccountingReservation func()
+}
+
+func (m *memTable) free() {
+	if m != nil {
+		m.releaseAccountingReservation()
+		manual.Free(m.arenaBuf)
+		m.arenaBuf = nil
+	}
 }
 
 // memTableOptions holds configuration used when creating a memTable. All of
@@ -92,9 +102,10 @@ type memTable struct {
 // which is used by tests.
 type memTableOptions struct {
 	*Options
-	arenaBuf  []byte
-	size      int
-	logSeqNum uint64
+	arenaBuf                     []byte
+	size                         int
+	logSeqNum                    uint64
+	releaseAccountingReservation func()
 }
 
 func checkMemTable(obj interface{}) {
@@ -109,16 +120,22 @@ func checkMemTable(obj interface{}) {
 // Options.MemTableSize is used instead.
 func newMemTable(opts memTableOptions) *memTable {
 	opts.Options = opts.Options.EnsureDefaults()
-	if opts.size == 0 {
-		opts.size = opts.MemTableSize
-	}
+	m := new(memTable)
+	m.init(opts)
+	return m
+}
 
-	m := &memTable{
-		cmp:       opts.Comparer.Compare,
-		formatKey: opts.Comparer.FormatKey,
-		equal:     opts.Comparer.Equal,
-		arenaBuf:  opts.arenaBuf,
-		logSeqNum: opts.logSeqNum,
+func (m *memTable) init(opts memTableOptions) {
+	if opts.size == 0 {
+		opts.size = int(opts.MemTableSize)
+	}
+	*m = memTable{
+		cmp:                          opts.Comparer.Compare,
+		formatKey:                    opts.Comparer.FormatKey,
+		equal:                        opts.Comparer.Equal,
+		arenaBuf:                     opts.arenaBuf,
+		logSeqNum:                    opts.logSeqNum,
+		releaseAccountingReservation: opts.releaseAccountingReservation,
 	}
 	m.writerRefs.Store(1)
 	m.tombstones = keySpanCache{
@@ -143,7 +160,6 @@ func newMemTable(opts memTableOptions) *memTable {
 	m.rangeDelSkl.Reset(arena, m.cmp)
 	m.rangeKeySkl.Reset(arena, m.cmp)
 	m.reserved = arena.Size()
-	return m
 }
 
 func (m *memTable) writerRef() {
@@ -153,7 +169,8 @@ func (m *memTable) writerRef() {
 	}
 }
 
-func (m *memTable) writerUnref() bool {
+// writerUnref drops a ref on the memtable. Returns true if this was the last ref.
+func (m *memTable) writerUnref() (wasLastRef bool) {
 	switch v := m.writerRefs.Add(-1); {
 	case v < 0:
 		panic(fmt.Sprintf("pebble: inconsistent reference count: %d", v))
@@ -164,6 +181,7 @@ func (m *memTable) writerUnref() bool {
 	}
 }
 
+// readyForFlush is part of the flushable interface.
 func (m *memTable) readyForFlush() bool {
 	return m.writerRefs.Load() == 0
 }
@@ -232,17 +250,19 @@ func (m *memTable) apply(batch *Batch, seqNum uint64) error {
 	return nil
 }
 
-// newIter returns an iterator that is unpositioned (Iterator.Valid() will
-// return false). The iterator can be positioned via a call to SeekGE,
-// SeekLT, First or Last.
+// newIter is part of the flushable interface. It returns an iterator that is
+// unpositioned (Iterator.Valid() will return false). The iterator can be
+// positioned via a call to SeekGE, SeekLT, First or Last.
 func (m *memTable) newIter(o *IterOptions) internalIterator {
 	return m.skl.NewIter(o.GetLowerBound(), o.GetUpperBound())
 }
 
+// newFlushIter is part of the flushable interface.
 func (m *memTable) newFlushIter(o *IterOptions, bytesFlushed *uint64) internalIterator {
 	return m.skl.NewFlushIter(bytesFlushed)
 }
 
+// newRangeDelIter is part of the flushable interface.
 func (m *memTable) newRangeDelIter(*IterOptions) keyspan.FragmentIterator {
 	tombstones := m.tombstones.get()
 	if tombstones == nil {
@@ -251,6 +271,7 @@ func (m *memTable) newRangeDelIter(*IterOptions) keyspan.FragmentIterator {
 	return keyspan.NewIter(m.cmp, tombstones)
 }
 
+// newRangeKeyIter is part of the flushable interface.
 func (m *memTable) newRangeKeyIter(*IterOptions) keyspan.FragmentIterator {
 	rangeKeys := m.rangeKeys.get()
 	if rangeKeys == nil {
@@ -259,6 +280,7 @@ func (m *memTable) newRangeKeyIter(*IterOptions) keyspan.FragmentIterator {
 	return keyspan.NewIter(m.cmp, rangeKeys)
 }
 
+// containsRangeKeys is part of the flushable interface.
 func (m *memTable) containsRangeKeys() bool {
 	return m.rangeKeys.count.Load() > 0
 }
@@ -274,10 +296,12 @@ func (m *memTable) availBytes() uint32 {
 	return a.Capacity() - m.reserved
 }
 
+// inuseBytes is part of the flushable interface.
 func (m *memTable) inuseBytes() uint64 {
 	return uint64(m.skl.Size() - memTableEmptySize)
 }
 
+// totalBytes is part of the flushable interface.
 func (m *memTable) totalBytes() uint64 {
 	return uint64(m.skl.Arena().Capacity())
 }

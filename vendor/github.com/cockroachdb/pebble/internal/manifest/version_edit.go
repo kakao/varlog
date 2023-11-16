@@ -7,10 +7,11 @@ package manifest
 import (
 	"bufio"
 	"bytes"
+	stdcmp "cmp"
 	"encoding/binary"
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/errors"
@@ -94,7 +95,7 @@ type VersionEdit struct {
 	// mutations that have not been flushed to an sstable.
 	//
 	// This is an optional field, and 0 represents it is not set.
-	MinUnflushedLogNum base.FileNum
+	MinUnflushedLogNum base.DiskFileNum
 
 	// ObsoletePrevLogNum is a historic artifact from LevelDB that is not used by
 	// Pebble, RocksDB, or even LevelDB. Its use in LevelDB was deprecated in
@@ -104,7 +105,7 @@ type VersionEdit struct {
 
 	// The next file number. A single counter is used to assign file numbers
 	// for the WAL, MANIFEST, sstable, and OPTIONS files.
-	NextFileNum base.FileNum
+	NextFileNum uint64
 
 	// LastSeqNum is an upper bound on the sequence numbers that have been
 	// assigned in flushed WALs. Unflushed WALs (that will be replayed during
@@ -175,14 +176,14 @@ func (v *VersionEdit) Decode(r io.Reader) error {
 			v.ComparerName = string(s)
 
 		case tagLogNumber:
-			n, err := d.readFileNum()
+			n, err := d.readUvarint()
 			if err != nil {
 				return err
 			}
-			v.MinUnflushedLogNum = n
+			v.MinUnflushedLogNum = base.DiskFileNum(n)
 
 		case tagNextFileNumber:
-			n, err := d.readFileNum()
+			n, err := d.readUvarint()
 			if err != nil {
 				return err
 			}
@@ -471,11 +472,11 @@ func (v *VersionEdit) string(verbose bool, fmtKey base.FormatKey) string {
 	for df := range v.DeletedFiles {
 		entries = append(entries, df)
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].Level != entries[j].Level {
-			return entries[i].Level < entries[j].Level
+	slices.SortFunc(entries, func(a, b DeletedFileEntry) int {
+		if v := stdcmp.Compare(a.Level, b.Level); v != 0 {
+			return v
 		}
-		return entries[i].FileNum < entries[j].FileNum
+		return stdcmp.Compare(a.FileNum, b.FileNum)
 	})
 	for _, df := range entries {
 		fmt.Fprintf(&buf, "  deleted:       L%d %s\n", df.Level, df.FileNum)
@@ -783,6 +784,12 @@ func (b *BulkVersionEdit) Accumulate(ve *VersionEdit) error {
 		b.AddedFileBacking = make(map[base.DiskFileNum]*FileBacking)
 	}
 	for _, fb := range ve.CreatedBackingTables {
+		if _, ok := b.AddedFileBacking[fb.DiskFileNum]; ok {
+			// There is already a FileBacking associated with fb.DiskFileNum.
+			// This should never happen. There must always be only one FileBacking
+			// associated with a backing sstable.
+			panic(fmt.Sprintf("pebble: duplicate file backing %s", fb.DiskFileNum.String()))
+		}
 		b.AddedFileBacking[fb.DiskFileNum] = fb
 	}
 
@@ -846,6 +853,8 @@ func AccumulateIncompleteAndApplySingleVE(
 	flushSplitBytes int64,
 	readCompactionRate int64,
 	backingStateMap map[base.DiskFileNum]*FileBacking,
+	addBackingFunc func(*FileBacking),
+	removeBackingFunc func(base.DiskFileNum),
 ) (_ *Version, zombies map[base.DiskFileNum]uint64, _ error) {
 	if len(ve.RemovedBackingTables) != 0 {
 		panic("pebble: invalid incomplete version edit")
@@ -864,7 +873,7 @@ func AccumulateIncompleteAndApplySingleVE(
 	}
 
 	for _, s := range b.AddedFileBacking {
-		backingStateMap[s.DiskFileNum] = s
+		addBackingFunc(s)
 	}
 
 	for fileNum := range zombies {
@@ -875,10 +884,9 @@ func AccumulateIncompleteAndApplySingleVE(
 			ve.RemovedBackingTables = append(
 				ve.RemovedBackingTables, fileNum,
 			)
-			delete(backingStateMap, fileNum)
+			removeBackingFunc(fileNum)
 		}
 	}
-
 	return v, zombies, nil
 }
 
@@ -967,7 +975,7 @@ func (b *BulkVersionEdit) Apply(
 		// level.
 
 		for _, f := range deletedFilesMap {
-			if obsolete := v.Levels[level].tree.Delete(f); obsolete {
+			if obsolete := v.Levels[level].remove(f); obsolete {
 				// Deleting a file from the B-Tree may decrement its
 				// reference count. However, because we cloned the
 				// previous level's B-Tree, this should never result in a
@@ -976,7 +984,7 @@ func (b *BulkVersionEdit) Apply(
 				return nil, err
 			}
 			if f.HasRangeKeys {
-				if obsolete := v.RangeKeyLevels[level].tree.Delete(f); obsolete {
+				if obsolete := v.RangeKeyLevels[level].remove(f); obsolete {
 					// Deleting a file from the B-Tree may decrement its
 					// reference count. However, because we cloned the
 					// previous level's B-Tree, this should never result in a
@@ -1011,8 +1019,8 @@ func (b *BulkVersionEdit) Apply(
 		// Sort addedFiles by file number. This isn't necessary, but tests which
 		// replay invalid manifests check the error output, and the error output
 		// depends on the order in which files are added to the btree.
-		sort.Slice(addedFiles, func(i, j int) bool {
-			return addedFiles[i].FileNum < addedFiles[j].FileNum
+		slices.SortFunc(addedFiles, func(a, b *FileMetadata) int {
+			return stdcmp.Compare(a.FileNum, b.FileNum)
 		})
 
 		var sm, la *FileMetadata
@@ -1029,7 +1037,7 @@ func (b *BulkVersionEdit) Apply(
 			f.AllowedSeeks.Store(allowedSeeks)
 			f.InitAllowedSeeks = allowedSeeks
 
-			err := lm.tree.Insert(f)
+			err := lm.insert(f)
 			// We're adding this file to the new version, so increment the
 			// latest refs count.
 			f.LatestRef()
@@ -1037,7 +1045,7 @@ func (b *BulkVersionEdit) Apply(
 				return nil, errors.Wrap(err, "pebble")
 			}
 			if f.HasRangeKeys {
-				err = lmRange.tree.Insert(f)
+				err = lmRange.insert(f)
 				if err != nil {
 					return nil, errors.Wrap(err, "pebble")
 				}

@@ -161,7 +161,10 @@ func (lse *Executor) scanWithGLSN(ctx context.Context, begin, end types.GLSN, sr
 		}
 
 		lastGLSN := types.InvalidGLSN
-		scanner := lse.stg.NewScanner(storage.WithGLSN(scanBegin, scanEnd))
+		scanner, err := lse.stg.NewScanner(storage.WithGLSN(scanBegin, scanEnd))
+		if err != nil {
+			return err
+		}
 		for scanner.Valid() {
 			le, err := scanner.Value()
 			if err != nil {
@@ -211,7 +214,10 @@ func (lse *Executor) scanWithLLSN(ctx context.Context, begin, end types.LLSN, sr
 		}
 
 		lastLLSN := types.InvalidLLSN
-		scanner := lse.stg.NewScanner(storage.WithLLSN(scanBegin, scanEnd))
+		scanner, err := lse.stg.NewScanner(storage.WithLLSN(scanBegin, scanEnd))
+		if err != nil {
+			return err
+		}
 		for scanner.Valid() {
 			le, err := scanner.Value()
 			if err != nil {

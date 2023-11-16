@@ -217,7 +217,8 @@ func createExternalPointIter(ctx context.Context, it *Iterator) (internalIterato
 			pointIter, err = r.NewIterWithBlockPropertyFiltersAndContextEtc(
 				ctx, it.opts.LowerBound, it.opts.UpperBound, nil, /* BlockPropertiesFilterer */
 				false /* hideObsoletePoints */, false, /* useFilterBlock */
-				&it.stats.InternalStats, sstable.TrivialReaderProvider{Reader: r})
+				&it.stats.InternalStats, it.opts.CategoryAndQoS, nil,
+				sstable.TrivialReaderProvider{Reader: r})
 			if err != nil {
 				return nil, err
 			}
@@ -319,8 +320,12 @@ func finishInitializingExternal(ctx context.Context, it *Iterator) {
 			}
 		}
 		if it.rangeKey != nil {
-			it.rangeKey.iiter.Init(&it.comparer, it.iter, it.rangeKey.rangeKeyIter, &it.rangeKeyMasking,
-				it.opts.LowerBound, it.opts.UpperBound)
+			it.rangeKey.iiter.Init(&it.comparer, it.iter, it.rangeKey.rangeKeyIter,
+				keyspan.InterleavingIterOpts{
+					Mask:       &it.rangeKeyMasking,
+					LowerBound: it.opts.LowerBound,
+					UpperBound: it.opts.UpperBound,
+				})
 			it.iter = &it.rangeKey.iiter
 		}
 	}
@@ -540,6 +545,8 @@ func (s *simpleLevelIter) SetBounds(lower, upper []byte) {
 	}
 	s.resetFilteredIters()
 }
+
+func (s *simpleLevelIter) SetContext(_ context.Context) {}
 
 func (s *simpleLevelIter) String() string {
 	if s.currentIdx < 0 || s.currentIdx >= len(s.filtered) {

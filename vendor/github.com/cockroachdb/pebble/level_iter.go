@@ -37,8 +37,7 @@ type tableNewIters func(
 // for the rangedel iterator returned by tableNewIters.
 func tableNewRangeDelIter(ctx context.Context, newIters tableNewIters) keyspan.TableNewSpanIter {
 	return func(file *manifest.FileMetadata, iterOptions keyspan.SpanIterOptions) (keyspan.FragmentIterator, error) {
-		iter, rangeDelIter, err := newIters(
-			ctx, file, &IterOptions{RangeKeyFilters: iterOptions.RangeKeyFilters, level: iterOptions.Level}, internalIterOpts{})
+		iter, rangeDelIter, err := newIters(ctx, file, nil, internalIterOpts{})
 		if iter != nil {
 			_ = iter.Close()
 		}
@@ -83,10 +82,11 @@ type levelIter struct {
 	// short-lived (since they pin sstables), (b) plumbing a context into every
 	// method is very painful, (c) they do not (yet) respect context
 	// cancellation and are only used for tracing.
-	ctx    context.Context
-	logger Logger
-	cmp    Compare
-	split  Split
+	ctx      context.Context
+	logger   Logger
+	comparer *Comparer
+	cmp      Compare
+	split    Split
 	// The lower/upper bounds for iteration as specified at creation or the most
 	// recent call to SetBounds.
 	lower []byte
@@ -241,25 +241,23 @@ var _ base.InternalIterator = (*levelIter)(nil)
 // newLevelIter returns a levelIter. It is permissible to pass a nil split
 // parameter if the caller is never going to call SeekPrefixGE.
 func newLevelIter(
+	ctx context.Context,
 	opts IterOptions,
-	cmp Compare,
-	split Split,
+	comparer *Comparer,
 	newIters tableNewIters,
 	files manifest.LevelIterator,
 	level manifest.Level,
 	internalOpts internalIterOpts,
 ) *levelIter {
 	l := &levelIter{}
-	l.init(context.Background(), opts, cmp, split, newIters, files, level,
-		internalOpts)
+	l.init(ctx, opts, comparer, newIters, files, level, internalOpts)
 	return l
 }
 
 func (l *levelIter) init(
 	ctx context.Context,
 	opts IterOptions,
-	cmp Compare,
-	split Split,
+	comparer *Comparer,
 	newIters tableNewIters,
 	files manifest.LevelIterator,
 	level manifest.Level,
@@ -277,10 +275,12 @@ func (l *levelIter) init(
 		l.tableOpts.PointKeyFilters = l.filtersBuf[:0:1]
 	}
 	l.tableOpts.UseL6Filters = opts.UseL6Filters
+	l.tableOpts.CategoryAndQoS = opts.CategoryAndQoS
 	l.tableOpts.level = l.level
 	l.tableOpts.snapshotForHideObsoletePoints = opts.snapshotForHideObsoletePoints
-	l.cmp = cmp
-	l.split = split
+	l.comparer = comparer
+	l.cmp = comparer.Compare
+	l.split = comparer.Split
 	l.iterFile = nil
 	l.newIters = newIters
 	l.files = files
@@ -798,7 +798,7 @@ func (l *levelIter) SeekPrefixGE(
 		}
 		return l.verify(l.largestBoundary, base.LazyValue{})
 	}
-	// It is possible that we are here because bloom filter matching failed.  In
+	// It is possible that we are here because bloom filter matching failed. In
 	// that case it is likely that all keys matching the prefix are wholly
 	// within the current file and cannot be in the subsequent file. In that
 	// case we don't want to go to the next file, since loading and seeking in
@@ -806,7 +806,16 @@ func (l *levelIter) SeekPrefixGE(
 	// next file will defeat the optimization for the next SeekPrefixGE that is
 	// called with flags.TrySeekUsingNext(), since for sparse key spaces it is
 	// likely that the next key will also be contained in the current file.
-	if n := l.split(l.iterFile.LargestPointKey.UserKey); l.cmp(prefix, l.iterFile.LargestPointKey.UserKey[:n]) < 0 {
+	var n int
+	if l.split != nil {
+		// If the split function is specified, calculate the prefix length accordingly.
+		n = l.split(l.iterFile.LargestPointKey.UserKey)
+	} else {
+		// If the split function is not specified, the entire key is used as the
+		// prefix. This case can occur when getIter uses SeekPrefixGE.
+		n = len(l.iterFile.LargestPointKey.UserKey)
+	}
+	if l.cmp(prefix, l.iterFile.LargestPointKey.UserKey[:n]) < 0 {
 		return nil, base.LazyValue{}
 	}
 	return l.verify(l.skipEmptyFileForward())
@@ -1222,6 +1231,15 @@ func (l *levelIter) SetBounds(lower, upper []byte) {
 	}
 
 	l.iter.SetBounds(l.tableOpts.LowerBound, l.tableOpts.UpperBound)
+}
+
+func (l *levelIter) SetContext(ctx context.Context) {
+	l.ctx = ctx
+	if l.iter != nil {
+		// TODO(sumeer): this is losing the ctx = objiotracing.WithLevel(ctx,
+		// manifest.LevelToInt(opts.level)) that happens in table_cache.go.
+		l.iter.SetContext(ctx)
+	}
 }
 
 func (l *levelIter) String() string {

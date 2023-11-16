@@ -10,8 +10,10 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/base"
+	"github.com/cockroachdb/pebble/objstorage/objstorageprovider/sharedcache"
 	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/redact"
 )
 
 // Readable is the handle for an object that is open for reading.
@@ -166,6 +168,11 @@ func (c CreatorID) IsSet() bool { return c != 0 }
 
 func (c CreatorID) String() string { return fmt.Sprintf("%d", c) }
 
+// SafeFormat implements redact.SafeFormatter.
+func (c CreatorID) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%d", redact.SafeUint(c))
+}
+
 // SharedCleanupMethod indicates the method for cleaning up unused shared objects.
 type SharedCleanupMethod uint8
 
@@ -268,10 +275,8 @@ type Provider interface {
 	// Cannot be called if shared storage is not configured for the provider.
 	SetCreatorID(creatorID CreatorID) error
 
-	// IsForeign returns whether this object is owned by a different node. Return
-	// value undefined if creator ID is not set yet, or if this object does not
-	// exist in this provider.
-	IsForeign(meta ObjectMetadata) bool
+	// IsSharedForeign returns whether this object is owned by a different node.
+	IsSharedForeign(meta ObjectMetadata) bool
 
 	// RemoteObjectBacking encodes the remote object metadata for the given object.
 	RemoteObjectBacking(meta *ObjectMetadata) (RemoteObjectBackingHandle, error)
@@ -289,6 +294,10 @@ type Provider interface {
 	// IsNotExistError indicates whether the error is known to report that a file or
 	// directory does not exist.
 	IsNotExistError(err error) bool
+
+	// Metrics returns metrics about objstorage. Currently, it only returns metrics
+	// about the shared cache.
+	Metrics() sharedcache.Metrics
 }
 
 // RemoteObjectBacking encodes the metadata necessary to incorporate a shared

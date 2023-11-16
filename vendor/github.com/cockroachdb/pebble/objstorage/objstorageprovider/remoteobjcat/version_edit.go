@@ -11,15 +11,16 @@ import (
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/base"
+	"github.com/cockroachdb/pebble/internal/invariants"
 	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/objstorage/remote"
 )
 
-// versionEdit is a modification to the remote object state which can be encoded
+// VersionEdit is a modification to the remote object state which can be encoded
 // into a record.
 //
 // TODO(radu): consider adding creation and deletion time for debugging purposes.
-type versionEdit struct {
+type VersionEdit struct {
 	NewObjects     []RemoteObjectMetadata
 	DeletedObjects []base.DiskFileNum
 	CreatorID      objstorage.CreatorID
@@ -69,7 +70,7 @@ func fileTypeToObjType(fileType base.FileType) (uint64, error) {
 }
 
 // Encode encodes an edit to the specified writer.
-func (v *versionEdit) Encode(w io.Writer) error {
+func (v *VersionEdit) Encode(w io.Writer) error {
 	buf := make([]byte, 0, binary.MaxVarintLen64*(len(v.NewObjects)*10+len(v.DeletedObjects)*2+2))
 	for _, meta := range v.NewObjects {
 		objType, err := fileTypeToObjType(meta.FileType)
@@ -107,7 +108,7 @@ func (v *versionEdit) Encode(w io.Writer) error {
 }
 
 // Decode decodes an edit from the specified reader.
-func (v *versionEdit) Decode(r io.Reader) error {
+func (v *VersionEdit) Decode(r io.Reader) error {
 	br, ok := r.(io.ByteReader)
 	if !ok {
 		br = bufio.NewReader(r)
@@ -225,3 +226,29 @@ func decodeString(br io.ByteReader) (string, error) {
 }
 
 var errCorruptCatalog = base.CorruptionErrorf("pebble: corrupt remote object catalog")
+
+// Apply the version edit to a creator ID and a map of objects.
+func (v *VersionEdit) Apply(
+	creatorID *objstorage.CreatorID, objects map[base.DiskFileNum]RemoteObjectMetadata,
+) error {
+	if v.CreatorID.IsSet() {
+		*creatorID = v.CreatorID
+	}
+	for _, meta := range v.NewObjects {
+		if invariants.Enabled {
+			if _, exists := objects[meta.FileNum]; exists {
+				return errors.AssertionFailedf("version edit adds existing object %s", meta.FileNum)
+			}
+		}
+		objects[meta.FileNum] = meta
+	}
+	for _, fileNum := range v.DeletedObjects {
+		if invariants.Enabled {
+			if _, exists := objects[fileNum]; !exists {
+				return errors.AssertionFailedf("version edit deletes non-existent object %s", fileNum)
+			}
+		}
+		delete(objects, fileNum)
+	}
+	return nil
+}

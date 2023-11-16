@@ -5,6 +5,8 @@
 package pebble
 
 import (
+	"context"
+
 	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/internal/invariants"
 	"github.com/cockroachdb/pebble/internal/keyspan"
@@ -35,53 +37,84 @@ func (i *Iterator) constructRangeKeyIter() {
 		}
 	}
 
-	// Next are the flushables: memtables and large batches.
-	for j := len(i.readState.memtables) - 1; j >= 0; j-- {
-		mem := i.readState.memtables[j]
-		// We only need to read from memtables which contain sequence numbers older
-		// than seqNum.
-		if logSeqNum := mem.logSeqNum; logSeqNum >= i.seqNum {
-			continue
+	if !i.batchOnlyIter {
+		// Next are the flushables: memtables and large batches.
+		if i.readState != nil {
+			for j := len(i.readState.memtables) - 1; j >= 0; j-- {
+				mem := i.readState.memtables[j]
+				// We only need to read from memtables which contain sequence numbers older
+				// than seqNum.
+				if logSeqNum := mem.logSeqNum; logSeqNum >= i.seqNum {
+					continue
+				}
+				if rki := mem.newRangeKeyIter(&i.opts); rki != nil {
+					i.rangeKey.iterConfig.AddLevel(rki)
+				}
+			}
 		}
-		if rki := mem.newRangeKeyIter(&i.opts); rki != nil {
-			i.rangeKey.iterConfig.AddLevel(rki)
-		}
-	}
 
-	current := i.readState.current
-	// Next are the file levels: L0 sub-levels followed by lower levels.
-	//
-	// Add file-specific iterators for L0 files containing range keys. This is less
-	// efficient than using levelIters for sublevels of L0 files containing
-	// range keys, but range keys are expected to be sparse anyway, reducing the
-	// cost benefit of maintaining a separate L0Sublevels instance for range key
-	// files and then using it here.
-	//
-	// NB: We iterate L0's files in reverse order. They're sorted by
-	// LargestSeqNum ascending, and we need to add them to the merging iterator
-	// in LargestSeqNum descending to preserve the merging iterator's invariants
-	// around Key Trailer order.
-	iter := current.RangeKeyLevels[0].Iter()
-	for f := iter.Last(); f != nil; f = iter.Prev() {
-		spanIter, err := i.newIterRangeKey(f, i.opts.SpanIterOptions(manifest.Level(0)))
-		if err != nil {
-			i.rangeKey.iterConfig.AddLevel(&errorKeyspanIter{err: err})
-			continue
+		current := i.version
+		if current == nil {
+			current = i.readState.current
 		}
-		i.rangeKey.iterConfig.AddLevel(spanIter)
-	}
+		// Next are the file levels: L0 sub-levels followed by lower levels.
 
-	// Add level iterators for the non-empty non-L0 levels.
-	for level := 1; level < len(current.RangeKeyLevels); level++ {
-		if current.RangeKeyLevels[level].Empty() {
-			continue
+		// Add file-specific iterators for L0 files containing range keys. We
+		// maintain a separate manifest.LevelMetadata for each level containing only
+		// files that contain range keys, however we don't compute a separate
+		// L0Sublevels data structure too.
+		//
+		// We first use L0's LevelMetadata to peek and see whether L0 contains any
+		// range keys at all. If it does, we create a range key level iterator per
+		// level that contains range keys using the information from L0Sublevels.
+		// Some sublevels may not contain any range keys, and we need to iterate
+		// through the fileMetadata to determine that. Since L0's file count should
+		// not significantly exceed ~1000 files (see L0CompactionFileThreshold),
+		// this should be okay.
+		if !current.RangeKeyLevels[0].Empty() {
+			// L0 contains at least 1 file containing range keys.
+			// Add level iterators for the L0 sublevels, iterating from newest to
+			// oldest.
+			for j := len(current.L0SublevelFiles) - 1; j >= 0; j-- {
+				iter := current.L0SublevelFiles[j].Iter()
+				if !containsAnyRangeKeys(iter) {
+					continue
+				}
+
+				li := i.rangeKey.iterConfig.NewLevelIter()
+				li.Init(
+					i.opts.SpanIterOptions(),
+					i.cmp,
+					i.newIterRangeKey,
+					iter.Filter(manifest.KeyTypeRange),
+					manifest.L0Sublevel(j),
+					manifest.KeyTypeRange,
+				)
+				i.rangeKey.iterConfig.AddLevel(li)
+			}
 		}
-		li := i.rangeKey.iterConfig.NewLevelIter()
-		spanIterOpts := i.opts.SpanIterOptions(manifest.Level(level))
-		li.Init(spanIterOpts, i.cmp, i.newIterRangeKey, current.RangeKeyLevels[level].Iter(),
-			manifest.Level(level), manifest.KeyTypeRange)
-		i.rangeKey.iterConfig.AddLevel(li)
+
+		// Add level iterators for the non-empty non-L0 levels.
+		for level := 1; level < len(current.RangeKeyLevels); level++ {
+			if current.RangeKeyLevels[level].Empty() {
+				continue
+			}
+			li := i.rangeKey.iterConfig.NewLevelIter()
+			spanIterOpts := i.opts.SpanIterOptions()
+			li.Init(spanIterOpts, i.cmp, i.newIterRangeKey, current.RangeKeyLevels[level].Iter(),
+				manifest.Level(level), manifest.KeyTypeRange)
+			i.rangeKey.iterConfig.AddLevel(li)
+		}
 	}
+}
+
+func containsAnyRangeKeys(iter manifest.LevelIterator) bool {
+	for f := iter.First(); f != nil; f = iter.Next() {
+		if f.HasRangeKeys {
+			return true
+		}
+	}
+	return false
 }
 
 // Range key masking
@@ -365,24 +398,24 @@ func (m *rangeKeyMasking) Intersects(prop []byte) (bool, error) {
 // KeyIsWithinLowerBound implements the limitedBlockPropertyFilter interface
 // defined in the sstable package. It's used to restrict the masking block
 // property filter to only applying within the bounds of the active range key.
-func (m *rangeKeyMasking) KeyIsWithinLowerBound(ik *InternalKey) bool {
+func (m *rangeKeyMasking) KeyIsWithinLowerBound(key []byte) bool {
 	// Invariant: m.maskSpan != nil
 	//
-	// The provided `ik` is an inclusive lower bound of the block we're
+	// The provided `key` is an inclusive lower bound of the block we're
 	// considering skipping.
-	return m.cmp(m.maskSpan.Start, ik.UserKey) <= 0
+	return m.cmp(m.maskSpan.Start, key) <= 0
 }
 
 // KeyIsWithinUpperBound implements the limitedBlockPropertyFilter interface
 // defined in the sstable package. It's used to restrict the masking block
 // property filter to only applying within the bounds of the active range key.
-func (m *rangeKeyMasking) KeyIsWithinUpperBound(ik *InternalKey) bool {
+func (m *rangeKeyMasking) KeyIsWithinUpperBound(key []byte) bool {
 	// Invariant: m.maskSpan != nil
 	//
-	// The provided `ik` is an *inclusive* upper bound of the block we're
+	// The provided `key` is an *inclusive* upper bound of the block we're
 	// considering skipping, so the range key's end must be strictly greater
 	// than the block bound for the block to be within bounds.
-	return m.cmp(m.maskSpan.End, ik.UserKey) > 0
+	return m.cmp(m.maskSpan.End, key) > 0
 }
 
 // lazyCombinedIter implements the internalIterator interface, wrapping a
@@ -511,7 +544,11 @@ func (i *lazyCombinedIter) initCombinedIteration(
 	// Initialize the Iterator's interleaving iterator.
 	i.parent.rangeKey.iiter.Init(
 		&i.parent.comparer, i.parent.pointIter, i.parent.rangeKey.rangeKeyIter,
-		&i.parent.rangeKeyMasking, i.parent.opts.LowerBound, i.parent.opts.UpperBound)
+		keyspan.InterleavingIterOpts{
+			Mask:       &i.parent.rangeKeyMasking,
+			LowerBound: i.parent.opts.LowerBound,
+			UpperBound: i.parent.opts.UpperBound,
+		})
 
 	// Set the parent's primary iterator to point to the combined, interleaving
 	// iterator that's now initialized with our current state.
@@ -656,6 +693,14 @@ func (i *lazyCombinedIter) SetBounds(lower, upper []byte) {
 		return
 	}
 	i.pointIter.SetBounds(lower, upper)
+}
+
+func (i *lazyCombinedIter) SetContext(ctx context.Context) {
+	if i.combinedIterState.initialized {
+		i.parent.rangeKey.iiter.SetContext(ctx)
+		return
+	}
+	i.pointIter.SetContext(ctx)
 }
 
 func (i *lazyCombinedIter) String() string {

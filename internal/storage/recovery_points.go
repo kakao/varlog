@@ -35,7 +35,10 @@ func (s *Storage) ReadRecoveryPoints() (rp RecoveryPoints, err error) {
 	if err != nil {
 		return
 	}
-	rp.CommittedLogEntry.First, rp.CommittedLogEntry.Last = s.readLogEntryBoundaries()
+	rp.CommittedLogEntry.First, rp.CommittedLogEntry.Last, err = s.readLogEntryBoundaries()
+	if err != nil {
+		return
+	}
 
 	uncommittedBegin := types.MinLLSN
 	if cc := rp.LastCommitContext; cc != nil {
@@ -62,31 +65,39 @@ func (s *Storage) readLastCommitContext() (*CommitContext, error) {
 	return &cc, nil
 }
 
-func (s *Storage) readLogEntryBoundaries() (first, last *varlogpb.LogSequenceNumber) {
-	dit := s.dataDB.NewIter(&pebble.IterOptions{
+func (s *Storage) readLogEntryBoundaries() (first, last *varlogpb.LogSequenceNumber, err error) {
+	dit, err := s.dataDB.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{dataKeyPrefix},
 		UpperBound: []byte{dataKeySentinelPrefix},
 	})
-	cit := s.commitDB.NewIter(&pebble.IterOptions{
+	if err != nil {
+		return
+	}
+	defer func() {
+		_ = dit.Close()
+	}()
+	cit, err := s.commitDB.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitKeyPrefix},
 		UpperBound: []byte{commitKeySentinelPrefix},
 	})
+	if err != nil {
+		return
+	}
 	defer func() {
-		_ = dit.Close()
 		_ = cit.Close()
 	}()
 
 	first = s.getFirstLogSequenceNumber(cit, dit)
 	if first == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	last = s.getLastLogSequenceNumber(cit, dit, first)
 	if last == nil {
 		s.logger.Warn("the last must exist but could not be found.", zap.Stringer("first", first))
-		return nil, nil
+		return nil, nil, nil
 	}
-	return first, last
+	return first, last, nil
 }
 
 func (s *Storage) getFirstLogSequenceNumber(cit, dit *pebble.Iterator) *varlogpb.LogSequenceNumber {
@@ -173,10 +184,13 @@ func (s *Storage) getLastLogSequenceNumber(cit, dit *pebble.Iterator, first *var
 func (s *Storage) readUncommittedLogEntryBoundaries(uncommittedBegin types.LLSN) (begin, end types.LLSN, err error) {
 	dk := make([]byte, dataKeyLength)
 	dk = encodeDataKeyInternal(uncommittedBegin, dk)
-	it := s.dataDB.NewIter(&pebble.IterOptions{
+	it, err := s.dataDB.NewIter(&pebble.IterOptions{
 		LowerBound: dk,
 		UpperBound: []byte{dataKeySentinelPrefix},
 	})
+	if err != nil {
+		return types.InvalidLLSN, types.InvalidLLSN, err
+	}
 	defer func() {
 		_ = it.Close()
 	}()

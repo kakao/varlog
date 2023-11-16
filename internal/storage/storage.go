@@ -107,7 +107,7 @@ func (s *Storage) newDB(path string, cfg *dbConfig) (*pebble.DB, error) {
 		L0StopWritesThreshold:       cfg.l0StopWritesThreshold,
 		LBaseMaxBytes:               cfg.lbaseMaxBytes,
 		MaxOpenFiles:                cfg.maxOpenFiles,
-		MemTableSize:                cfg.memTableSize,
+		MemTableSize:                uint64(cfg.memTableSize),
 		MemTableStopWritesThreshold: cfg.memTableStopWritesThreshold,
 		MaxConcurrentCompactions:    func() int { return cfg.maxConcurrentCompaction },
 		Levels:                      make([]pebble.LevelOptions, 7),
@@ -181,22 +181,26 @@ func (s *Storage) NewAppendBatch() *AppendBatch {
 }
 
 // NewScanner creates a scanner for the given key range.
-func (s *Storage) NewScanner(opts ...ScanOption) *Scanner {
-	scanner := newScanner()
+func (s *Storage) NewScanner(opts ...ScanOption) (scanner *Scanner, err error) {
+	scanner = newScanner()
 	scanner.scanConfig = newScanConfig(opts)
 	scanner.stg = s
 	itOpt := &pebble.IterOptions{}
 	if scanner.withGLSN {
 		itOpt.LowerBound = encodeCommitKeyInternal(scanner.begin.GLSN, scanner.cks.lower)
 		itOpt.UpperBound = encodeCommitKeyInternal(scanner.end.GLSN, scanner.cks.upper)
-		scanner.it = s.commitDB.NewIter(itOpt)
+		scanner.it, err = s.commitDB.NewIter(itOpt)
 	} else {
 		itOpt.LowerBound = encodeDataKeyInternal(scanner.begin.LLSN, scanner.dks.lower)
 		itOpt.UpperBound = encodeDataKeyInternal(scanner.end.LLSN, scanner.dks.upper)
-		scanner.it = s.dataDB.NewIter(itOpt)
+		scanner.it, err = s.dataDB.NewIter(itOpt)
+	}
+	if err != nil {
+		_ = scanner.Close()
+		return nil, err
 	}
 	_ = scanner.it.First()
-	return scanner
+	return scanner, nil
 }
 
 // Read reads the log entry at the glsn.
@@ -209,7 +213,10 @@ func (s *Storage) Read(opts ...ReadOption) (le varlogpb.LogEntry, err error) {
 }
 
 func (s *Storage) readGLSN(glsn types.GLSN) (le varlogpb.LogEntry, err error) {
-	scanner := s.NewScanner(WithGLSN(glsn, glsn+1))
+	scanner, err := s.NewScanner(WithGLSN(glsn, glsn+1))
+	if err != nil {
+		return
+	}
 	defer func() {
 		_ = scanner.Close()
 	}()
@@ -220,10 +227,13 @@ func (s *Storage) readGLSN(glsn types.GLSN) (le varlogpb.LogEntry, err error) {
 }
 
 func (s *Storage) readLLSN(llsn types.LLSN) (le varlogpb.LogEntry, err error) {
-	it := s.commitDB.NewIter(&pebble.IterOptions{
+	it, err := s.commitDB.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitKeyPrefix},
 		UpperBound: []byte{commitKeySentinelPrefix},
 	})
+	if err != nil {
+		return
+	}
 	defer func() {
 		_ = it.Close()
 	}()
@@ -307,10 +317,13 @@ func (s *Storage) findLTE(glsn types.GLSN) (lem varlogpb.LogEntryMeta, err error
 		upper = []byte{commitKeySentinelPrefix}
 	}
 
-	it := s.commitDB.NewIter(&pebble.IterOptions{
+	it, err := s.commitDB.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitKeyPrefix},
 		UpperBound: upper,
 	})
+	if err != nil {
+		return
+	}
 	defer func() {
 		_ = it.Close()
 	}()
