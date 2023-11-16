@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"net"
 	"net/http"
 	"sort"
@@ -13,7 +14,6 @@ import (
 	"strings"
 
 	_ "github.com/lib/pq"
-	"golang.org/x/exp/slog"
 
 	"github.com/kakao/varlog/internal/benchmark/model/macro/metric"
 	"github.com/kakao/varlog/internal/benchmark/model/macro/result"

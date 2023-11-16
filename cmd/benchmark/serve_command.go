@@ -1,13 +1,13 @@
 package main
 
 import (
+	"log/slog"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 
 	"github.com/urfave/cli/v2"
-	"golang.org/x/exp/slog"
 
 	"github.com/kakao/varlog/internal/benchmark/server"
 )

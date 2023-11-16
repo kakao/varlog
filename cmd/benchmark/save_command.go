@@ -7,11 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"time"
 
 	"github.com/urfave/cli/v2"
-	"golang.org/x/exp/slog"
 
 	"github.com/kakao/varlog/internal/benchmark"
 	"github.com/kakao/varlog/internal/benchmark/database"
