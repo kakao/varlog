@@ -28,7 +28,6 @@ import (
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/util/testutil/ports"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/proto/admpb"
@@ -1464,7 +1463,6 @@ func WithTestCluster(t *testing.T, opts []Option, f func(env *VarlogCluster)) fu
 
 		defer func() {
 			env.Close(t)
-			testutil.GC()
 		}()
 
 		f(env)

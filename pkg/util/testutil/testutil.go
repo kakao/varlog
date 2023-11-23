@@ -1,7 +1,6 @@
 package testutil
 
 import (
-	"fmt"
 	"reflect"
 	"runtime"
 	"strings"
@@ -91,20 +90,6 @@ func CompareWaitErrorN(factor int64, cmp func() (bool, error)) error {
 	}
 
 	return CompareWaitError(cmp, vtesting.TimeoutUnitTimesFactor(factor))
-}
-
-func GC() {
-	var ms runtime.MemStats
-	var gc runtime.MemStats
-
-	runtime.ReadMemStats(&ms)
-	runtime.GC()
-	runtime.ReadMemStats(&gc)
-
-	fmt.Printf("\nGC Stat:: %f -> %f mb, Sys: %f mb\n",
-		float32(ms.Alloc)/float32(1024*1024),
-		float32(gc.Alloc)/float32(1024*1024),
-		float32(gc.Sys)/float32(1024*1024))
 }
 
 func GetFunctionName(i interface{}) string {

@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/x/mlsa"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -37,7 +36,6 @@ func TestClientNoLogStream(t *testing.T) {
 
 	defer func() {
 		clus.Close(t)
-		testutil.GC()
 	}()
 
 	topicID := clus.TopicIDs()[0]
@@ -59,7 +57,6 @@ func TestClientAppendToSubscribeTo(t *testing.T) {
 
 	defer func() {
 		clus.Close(t)
-		testutil.GC()
 	}()
 
 	topicID := clus.TopicIDs()[0]
@@ -125,7 +122,6 @@ func TestClientAppendTo(t *testing.T) {
 
 	defer func() {
 		clus.Close(t)
-		testutil.GC()
 	}()
 
 	// FIXME: remove this ugly code
@@ -158,7 +154,6 @@ func TestClientAppend(t *testing.T) {
 
 	defer func() {
 		clus.Close(t)
-		testutil.GC()
 	}()
 
 	topicID := clus.TopicIDs()[0]
@@ -226,7 +221,6 @@ func TestClientAppendCancel(t *testing.T) {
 
 	defer func() {
 		clus.Close(t)
-		testutil.GC()
 	}()
 
 	topicID := clus.TopicIDs()[0]
@@ -279,7 +273,6 @@ func TestClientSubscribe(t *testing.T) {
 
 	defer func() {
 		clus.Close(t)
-		testutil.GC()
 	}()
 
 	newMsg := func(glsn types.GLSN) string {
@@ -344,7 +337,6 @@ func TestClientTrim(t *testing.T) {
 
 	defer func() {
 		clus.Close(t)
-		testutil.GC()
 	}()
 
 	topicID := clus.TopicIDs()[0]
@@ -673,7 +665,6 @@ func TestClientAppendWithAllowedLogStream(t *testing.T) {
 
 	defer func() {
 		clus.Close(t)
-		testutil.GC()
 	}()
 
 	topicID := clus.TopicIDs()[0]

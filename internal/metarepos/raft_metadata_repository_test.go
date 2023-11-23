@@ -235,7 +235,6 @@ func (clus *metadataRepoCluster) Close() error {
 	}
 	err = multierr.Append(err, os.RemoveAll(vtesting.TestRaftDir()))
 	err = multierr.Append(err, clus.portLease.Release())
-	testutil.GC()
 	return err
 }
 
