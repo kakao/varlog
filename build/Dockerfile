@@ -102,3 +102,21 @@ COPY --from=builder-cgo /varlog/bin/start_varlogsn.py /varlog/bin/start_varlogsn
 COPY --from=builder-cgo /varlog/bin/varlogsn /varlog/bin/varlogsn
 COPY --from=builder-cgo /varlog/bin/varlogctl /varlog/bin/varlogctl
 COPY --from=builder-cgo /varlog/pylib /varlog/pylib
+
+FROM base-cgo AS all-in-one
+LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
+EXPOSE ${VARLOGMR_RPC_PORT}
+EXPOSE ${VARLOGMR_RAFT_PORT}
+EXPOSE ${VARLOGADM_RPC_PORT}
+EXPOSE ${VARLOGSN_RPC_PORT}
+USER varlog
+WORKDIR /varlog
+COPY --from=tools /bin/grpc_health_probe /varlog/tools/grpc_health_probe
+COPY --from=builder-noncgo /varlog/bin/start_varlogmr.py /varlog/bin/start_varlogmr.py
+COPY --from=builder-noncgo /varlog/bin/varlogmr /varlog/bin/varlogmr
+COPY --from=builder-noncgo /varlog/bin/mrtool /varlog/bin/mrtool
+COPY --from=builder-noncgo /varlog/bin/varlogadm /varlog/bin/varlogadm
+COPY --from=builder-cgo /varlog/bin/start_varlogsn.py /varlog/bin/start_varlogsn.py
+COPY --from=builder-cgo /varlog/bin/varlogsn /varlog/bin/varlogsn
+COPY --from=builder-cgo /varlog/bin/varlogctl /varlog/bin/varlogctl
+COPY --from=builder-cgo /varlog/pylib /varlog/pylib
