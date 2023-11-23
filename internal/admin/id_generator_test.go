@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	"github.com/kakao/varlog/internal/admin/mrmanager"
 	"github.com/kakao/varlog/pkg/types"

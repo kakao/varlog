@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	"github.com/kakao/varlog/internal/admin/mrmanager"
 	"github.com/kakao/varlog/internal/storagenode"
