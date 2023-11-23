@@ -395,7 +395,6 @@ func TestStorageUpdateLS(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
-			testutil.GC()
 		})
 
 		rep := 2
@@ -574,7 +573,6 @@ func TestStorageSealLS(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
-			testutil.GC()
 		})
 
 		rep := 2
@@ -746,7 +744,6 @@ func TestStorageUnsealLS(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
-			testutil.GC()
 		})
 
 		rep := 2
@@ -936,7 +933,6 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
-			testutil.GC()
 		})
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
@@ -956,7 +952,6 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
-			testutil.GC()
 		})
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
@@ -1049,7 +1044,6 @@ func TestStorageCopyOnWrite(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
-			testutil.GC()
 		})
 
 		rep := 2
@@ -1156,7 +1150,6 @@ func TestStorageMetadataCache(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
-			testutil.GC()
 		})
 
 		m := ms.GetMetadata()
@@ -1175,7 +1168,6 @@ func TestStorageMetadataCache(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
-			testutil.GC()
 		})
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
@@ -1246,7 +1238,6 @@ func TestStorageMetadataCache(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
-			testutil.GC()
 		})
 
 		<-ch
@@ -1299,7 +1290,6 @@ func TestStorageStateMachineMerge(t *testing.T) {
 			ms.Run()
 			Reset(func() {
 				ms.Close()
-				testutil.GC()
 			})
 
 			snID += types.StorageNodeID(1)
@@ -1387,7 +1377,6 @@ func TestStorageSnapshot(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
-			testutil.GC()
 		})
 
 		snID := types.StorageNodeID(time.Now().UnixNano())
@@ -1472,7 +1461,6 @@ func TestStorageApplySnapshot(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
-			testutil.GC()
 		})
 
 		appliedIndex := uint64(0)
@@ -1550,7 +1538,6 @@ func TestStorageSnapshotRace(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
-			testutil.GC()
 		})
 
 		n := 10000
@@ -1782,7 +1769,6 @@ func TestStorageRecoverStateMachine(t *testing.T) {
 		ms.Run()
 		Reset(func() {
 			ms.Close()
-			testutil.GC()
 		})
 
 		Convey("When recover state machine ", func(ctx C) {
