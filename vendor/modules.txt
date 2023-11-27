@@ -268,7 +268,7 @@ github.com/rogpeppe/go-internal/fmtsort
 # github.com/russross/blackfriday/v2 v2.1.0
 ## explicit
 github.com/russross/blackfriday/v2
-# github.com/shirou/gopsutil/v3 v3.23.8
+# github.com/shirou/gopsutil/v3 v3.23.10
 ## explicit; go 1.15
 github.com/shirou/gopsutil/v3/common
 github.com/shirou/gopsutil/v3/cpu
@@ -348,8 +348,8 @@ go.etcd.io/etcd/raft/tracker
 go.etcd.io/etcd/version
 go.etcd.io/etcd/wal
 go.etcd.io/etcd/wal/walpb
-# go.opentelemetry.io/contrib/instrumentation/host v0.45.0
-## explicit; go 1.19
+# go.opentelemetry.io/contrib/instrumentation/host v0.46.1
+## explicit; go 1.20
 go.opentelemetry.io/contrib/instrumentation/host
 # go.opentelemetry.io/contrib/instrumentation/runtime v0.46.1
 ## explicit; go 1.20
