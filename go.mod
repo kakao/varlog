@@ -19,7 +19,7 @@ require (
 	github.com/urfave/cli/v2 v2.25.7
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20230414071934-94593e63d45c
 	go.opentelemetry.io/contrib/instrumentation/host v0.45.0
-	go.opentelemetry.io/contrib/instrumentation/runtime v0.45.0
+	go.opentelemetry.io/contrib/instrumentation/runtime v0.46.1
 	go.opentelemetry.io/otel v1.21.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v0.43.0
 	go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v0.44.0
