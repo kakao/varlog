@@ -991,7 +991,12 @@ func (mr *RaftMetadataRepository) applyUnseal(r *mrpb.Unseal, nodeIndex, request
 		return err
 	}
 
-	mr.reportCollector.Unseal(r.LogStreamID, mr.GetLastCommitVersion())
+	ver := mr.GetLastCommitVersion()
+	if ver > 0 {
+		// Let logStream know cur version.
+		ver = ver - 1
+	}
+	mr.reportCollector.Unseal(r.LogStreamID, ver)
 
 	return nil
 }

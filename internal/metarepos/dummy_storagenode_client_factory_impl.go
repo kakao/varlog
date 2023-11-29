@@ -100,6 +100,7 @@ type DummyStorageNodeClient struct {
 
 	logStreamIDs          []types.LogStreamID
 	knownVersion          []types.Version
+	knownHWM              []types.GLSN
 	uncommittedLLSNOffset []types.LLSN
 	uncommittedLLSNLength []uint64
 
@@ -169,6 +170,7 @@ func (fac *DummyStorageNodeClientFactory) getStorageNodeClient(_ context.Context
 	}
 
 	knownVersion := make([]types.Version, fac.nrLogStreams)
+	knownHWM := make([]types.GLSN, fac.nrLogStreams)
 
 	uncommittedLLSNOffset := make([]types.LLSN, fac.nrLogStreams)
 	for i := 0; i < fac.nrLogStreams; i++ {
@@ -182,6 +184,7 @@ func (fac *DummyStorageNodeClientFactory) getStorageNodeClient(_ context.Context
 		storageNodeID:         snID,
 		logStreamIDs:          lsIDs,
 		knownVersion:          knownVersion,
+		knownHWM:              knownHWM,
 		uncommittedLLSNOffset: uncommittedLLSNOffset,
 		uncommittedLLSNLength: uncommittedLLSNLength,
 		status:                status,
@@ -280,6 +283,7 @@ func (r *DummyStorageNodeClient) GetReport() (*snpb.GetReportResponse, error) {
 		u := snpb.LogStreamUncommitReport{
 			LogStreamID:           lsID,
 			Version:               r.knownVersion[i],
+			HighWatermark:         r.knownHWM[i],
 			UncommittedLLSNOffset: r.uncommittedLLSNOffset[i],
 			UncommittedLLSNLength: r.uncommittedLLSNLength[i],
 		}
@@ -321,6 +325,7 @@ func (r *DummyStorageNodeClient) Commit(cr snpb.CommitRequest) error {
 	}
 
 	r.knownVersion[idx] = cr.CommitResult.Version
+	r.knownHWM[idx] = cr.CommitResult.HighWatermark
 
 	r.uncommittedLLSNOffset[idx] += types.LLSN(cr.CommitResult.CommittedGLSNLength)
 	r.uncommittedLLSNLength[idx] -= cr.CommitResult.CommittedGLSNLength
@@ -408,6 +413,7 @@ func (r *DummyStorageNodeClient) makeInvalid(idx int) {
 	defer r.mu.Unlock()
 
 	r.knownVersion[idx] = 0
+	r.knownHWM[idx] = 0
 	r.uncommittedLLSNOffset[idx] = 0
 }
 
@@ -442,6 +448,7 @@ func (fac *DummyStorageNodeClientFactory) recoverRPC(snID types.StorageNodeID) {
 		storageNodeID:         old.storageNodeID,
 		logStreamIDs:          old.logStreamIDs,
 		knownVersion:          old.knownVersion,
+		knownHWM:              old.knownHWM,
 		uncommittedLLSNOffset: old.uncommittedLLSNOffset,
 		uncommittedLLSNLength: old.uncommittedLLSNLength,
 		status:                DummyStorageNodeClientStatusRunning,
