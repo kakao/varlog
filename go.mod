@@ -16,7 +16,7 @@ require (
 	github.com/smartystreets/goconvey v1.8.1
 	github.com/soheilhy/cmux v0.1.5
 	github.com/stretchr/testify v1.8.4
-	github.com/urfave/cli/v2 v2.25.7
+	github.com/urfave/cli/v2 v2.26.0
 	go.etcd.io/etcd v0.5.0-alpha.5.0.20230414071934-94593e63d45c
 	go.opentelemetry.io/contrib/instrumentation/host v0.46.1
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.46.1
