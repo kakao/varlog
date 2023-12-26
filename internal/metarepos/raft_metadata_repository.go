@@ -993,7 +993,10 @@ func (mr *RaftMetadataRepository) applyUnseal(r *mrpb.Unseal, nodeIndex, request
 
 	ver := mr.GetLastCommitVersion()
 	if ver > 0 {
-		// Let logStream know cur version.
+		// Let logstream know the last commit version.
+		// This tricks the committer into thinking that the last version
+		// that storagenode knows is last commit version - 1.
+		// So, committer delivers last commit result to storagenode.
 		ver = ver - 1
 	}
 	mr.reportCollector.Unseal(r.LogStreamID, ver)
