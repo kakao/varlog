@@ -2973,6 +2973,98 @@ func TestMRTopicCatchup(t *testing.T) {
 	})
 }
 
+func TestMRCatchupUnsealedLogstream(t *testing.T) {
+	Convey("Given MR cluster", t, func(ctx C) {
+		nrRep := 1
+		nrTopic := 1
+		nrSN := 2
+		clus := newMetadataRepoCluster(1, nrRep, false)
+		Reset(func() {
+			clus.closeNoErrors(t)
+		})
+
+		So(clus.Start(), ShouldBeNil)
+		So(testutil.CompareWaitN(10, func() bool {
+			return clus.healthCheckAll()
+		}), ShouldBeTrue)
+
+		mr := clus.nodes[0]
+
+		// register SN & LS
+		err := clus.initDummyStorageNode(nrSN, nrTopic)
+		So(err, ShouldBeNil)
+
+		err = mr.RegisterTopic(context.TODO(), types.TopicID(1))
+		So(err, ShouldBeNil)
+
+		So(testutil.CompareWaitN(50, func() bool {
+			return len(clus.getSNIDs()) == nrSN
+		}), ShouldBeTrue)
+
+		Convey("After all ls belonging to the cluster are sealed, when a specific ls is unsealed", func(ctx C) {
+			// append to LS[0]
+			snIDs := clus.getSNIDs()
+			snCli := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snIDs[0])
+			snCli.increaseUncommitted(0)
+
+			So(testutil.CompareWaitN(50, func() bool {
+				return snCli.numUncommitted(0) == 0
+			}), ShouldBeTrue)
+
+			// seal LS[0]
+			_, err = mr.Seal(context.TODO(), types.LogStreamID(snIDs[0]))
+			So(err, ShouldBeNil)
+
+			So(testutil.CompareWaitN(10, func() bool {
+				meta, err := mr.GetMetadata(context.TODO())
+				if err != nil {
+					return false
+				}
+
+				ls := meta.GetLogStream(types.LogStreamID(snIDs[0]))
+				return ls.Status == varlogpb.LogStreamStatusSealed
+			}), ShouldBeTrue)
+
+			// append to LS[1]
+			snCli = clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snIDs[1])
+			snCli.increaseUncommitted(0)
+
+			So(testutil.CompareWaitN(50, func() bool {
+				return snCli.numUncommitted(0) == 0
+			}), ShouldBeTrue)
+
+			// seal LS[1]
+			_, err = mr.Seal(context.TODO(), types.LogStreamID(snIDs[1]))
+			So(err, ShouldBeNil)
+
+			So(testutil.CompareWaitN(10, func() bool {
+				meta, err := mr.GetMetadata(context.TODO())
+				if err != nil {
+					return false
+				}
+
+				ls := meta.GetLogStream(types.LogStreamID(snIDs[1]))
+				return ls.Status == varlogpb.LogStreamStatusSealed
+			}), ShouldBeTrue)
+
+			// unseal LS[0]
+			err = mr.Unseal(context.TODO(), types.LogStreamID(snIDs[0]))
+			So(err, ShouldBeNil)
+
+			Convey("Then the ls should appenable", func(ctx C) {
+				// append to LS[0]
+				snCli = clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snIDs[0])
+				snCli.increaseUncommitted(0)
+
+				So(testutil.CompareWaitN(50, func() bool {
+					return snCli.numUncommitted(0) == 0
+				}), ShouldBeTrue)
+			})
+		})
+
+	})
+}
+
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m,
 		goleak.IgnoreTopFunction(
