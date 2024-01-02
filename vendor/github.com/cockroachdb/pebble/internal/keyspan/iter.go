@@ -51,8 +51,6 @@ type FragmentIterator interface {
 	Prev() *Span
 
 	// Error returns any accumulated error.
-	//
-	// TODO(jackson): Lift errors into return values on the positioning methods.
 	Error() error
 
 	// Close closes the iterator and returns any accumulated error. Exhausting
@@ -64,7 +62,7 @@ type FragmentIterator interface {
 
 // TableNewSpanIter creates a new iterator for range key spans for the given
 // file.
-type TableNewSpanIter func(file *manifest.FileMetadata, iterOptions SpanIterOptions) (FragmentIterator, error)
+type TableNewSpanIter func(file *manifest.FileMetadata, iterOptions *SpanIterOptions) (FragmentIterator, error)
 
 // SpanIterOptions is a subset of IterOptions that are necessary to instantiate
 // per-sstable span iterators.

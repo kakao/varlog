@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,19 +17,15 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/arenaskl"
 	"github.com/cockroachdb/pebble/internal/base"
-	"github.com/cockroachdb/pebble/internal/invalidating"
 	"github.com/cockroachdb/pebble/internal/invariants"
 	"github.com/cockroachdb/pebble/internal/keyspan"
 	"github.com/cockroachdb/pebble/internal/manifest"
 	"github.com/cockroachdb/pebble/internal/manual"
 	"github.com/cockroachdb/pebble/objstorage"
-	"github.com/cockroachdb/pebble/objstorage/remote"
-	"github.com/cockroachdb/pebble/rangekey"
 	"github.com/cockroachdb/pebble/record"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/pebble/vfs/atomicfs"
-	"github.com/cockroachdb/tokenbucket"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -75,11 +70,7 @@ type Reader interface {
 	// NewIter returns an iterator that is unpositioned (Iterator.Valid() will
 	// return false). The iterator can be positioned via a call to SeekGE,
 	// SeekLT, First or Last.
-	NewIter(o *IterOptions) (*Iterator, error)
-
-	// NewIterWithContext is like NewIter, and additionally accepts a context
-	// for tracing.
-	NewIterWithContext(ctx context.Context, o *IterOptions) (*Iterator, error)
+	NewIter(o *IterOptions) *Iterator
 
 	// Close closes the Reader. It may or may not close any underlying io.Reader
 	// or io.Writer, depending on how the DB was created.
@@ -104,22 +95,6 @@ type Writer interface {
 	//
 	// It is safe to modify the contents of the arguments after Delete returns.
 	Delete(key []byte, o *WriteOptions) error
-
-	// DeleteSized behaves identically to Delete, but takes an additional
-	// argument indicating the size of the value being deleted. DeleteSized
-	// should be preferred when the caller has the expectation that there exists
-	// a single internal KV pair for the key (eg, the key has not been
-	// overwritten recently), and the caller knows the size of its value.
-	//
-	// DeleteSized will record the value size within the tombstone and use it to
-	// inform compaction-picking heuristics which strive to reduce space
-	// amplification in the LSM. This "calling your shot" mechanic allows the
-	// storage engine to more accurately estimate and reduce space
-	// amplification.
-	//
-	// It is safe to modify the contents of the arguments after DeleteSized
-	// returns.
-	DeleteSized(key []byte, valueSize uint32, _ *WriteOptions) error
 
 	// SingleDelete is similar to Delete in that it deletes the value for the given key. Like Delete,
 	// it is a blind operation that will succeed even if the given key does not exist.
@@ -257,22 +232,25 @@ func (d defaultCPUWorkGranter) CPUWorkDone(_ CPUWorkHandle) {}
 //		Comparer: myComparer,
 //	})
 type DB struct {
-	// The count and size of referenced memtables. This includes memtables
-	// present in DB.mu.mem.queue, as well as memtables that have been flushed
-	// but are still referenced by an inuse readState, as well as up to one
-	// memTable waiting to be reused and stored in d.memTableRecycle.
-	memTableCount    atomic.Int64
-	memTableReserved atomic.Int64 // number of bytes reserved in the cache for memtables
-	// memTableRecycle holds a pointer to an obsolete memtable. The next
-	// memtable allocation will reuse this memtable if it has not already been
-	// recycled.
-	memTableRecycle atomic.Pointer[memTable]
+	// WARNING: The following struct `atomic` contains fields which are accessed
+	// atomically.
+	//
+	// Go allocations are guaranteed to be 64-bit aligned which we take advantage
+	// of by placing the 64-bit fields which we access atomically at the beginning
+	// of the DB struct. For more information, see https://golang.org/pkg/sync/atomic/#pkg-note-BUG.
+	atomic struct {
+		// The count and size of referenced memtables. This includes memtables
+		// present in DB.mu.mem.queue, as well as memtables that have been flushed
+		// but are still referenced by an inuse readState.
+		memTableCount    int64
+		memTableReserved int64 // number of bytes reserved in the cache for memtables
 
-	// The size of the current log file (i.e. db.mu.log.queue[len(queue)-1].
-	logSize atomic.Uint64
+		// The size of the current log file (i.e. db.mu.log.queue[len(queue)-1].
+		logSize uint64
 
-	// The number of bytes available on disk.
-	diskAvailBytes atomic.Uint64
+		// The number of bytes available on disk.
+		diskAvailBytes uint64
+	}
 
 	cacheID        uint64
 	dirname        string
@@ -285,14 +263,14 @@ type DB struct {
 	abbreviatedKey AbbreviatedKey
 	// The threshold for determining when a batch is "large" and will skip being
 	// inserted into a memtable.
-	largeBatchThreshold uint64
+	largeBatchThreshold int
 	// The current OPTIONS file number.
-	optionsFileNum base.DiskFileNum
+	optionsFileNum FileNum
 	// The on-disk size of the current OPTIONS file.
 	optionsFileSize uint64
 
 	// objProvider is used to access and manage SSTs.
-	objProvider objstorage.Provider
+	objProvider *objstorage.Provider
 
 	fileLock *Lock
 	dataDir  vfs.File
@@ -319,7 +297,14 @@ type DB struct {
 	closed   *atomic.Value
 	closedCh chan struct{}
 
-	cleanupManager *cleanupManager
+	deletionPacer pacer
+
+	// Async deletion jobs spawned by cleaners increment this WaitGroup, and
+	// call Done when completed. Once `d.mu.cleaning` is false, the db.Close()
+	// goroutine needs to call Wait on this WaitGroup to ensure all cleaning
+	// and deleting goroutines have finished running. As deletion goroutines
+	// could grab db.mu, it must *not* be held while deleters.Wait() is called.
+	deleters sync.WaitGroup
 
 	// During an iterator close, we may asynchronously schedule read compactions.
 	// We want to wait for those goroutines to finish, before closing the DB.
@@ -397,6 +382,9 @@ type DB struct {
 		}
 
 		mem struct {
+			// Condition variable used to serialize memtable switching. See
+			// DB.makeRoomForWrite().
+			cond sync.Cond
 			// The current mutable memTable.
 			mutable *memTable
 			// Queue of flushables (the mutable memtable is at end). Elements are
@@ -409,7 +397,7 @@ type DB struct {
 			// is allocated up to Options.MemTableSize. This reduces the memory
 			// footprint of memtables when lots of DB instances are used concurrently
 			// in test environments.
-			nextSize uint64
+			nextSize int
 		}
 
 		compact struct {
@@ -428,10 +416,6 @@ type DB struct {
 			// is at the start of the list. New entries are added to the end.
 			manual []*manualCompaction
 			// inProgress is the set of in-progress flushes and compactions.
-			// It's used in the calculation of some metrics and to initialize L0
-			// sublevels' state. Some of the compactions contained within this
-			// map may have already committed an edit to the version but are
-			// lingering performing cleanup, like deleting obsolete files.
 			inProgress map[*compaction]struct{}
 
 			// rescheduleReadCompaction indicates to an iterator that a read compaction
@@ -442,9 +426,6 @@ type DB struct {
 			// compactions which we might have to perform.
 			readCompactions readCompactionQueue
 
-			// The cumulative duration of all completed compactions since Open.
-			// Does not include flushes.
-			duration time.Duration
 			// Flush throughput metric.
 			flushWriteThroughput ThroughputMetric
 			// The idle start time for the flush "loop", i.e., when the flushing
@@ -452,10 +433,20 @@ type DB struct {
 			noOngoingFlushStartTime time.Time
 		}
 
-		// Non-zero when file cleaning is disabled. The disabled count acts as a
-		// reference count to prohibit file cleaning. See
-		// DB.{disable,Enable}FileDeletions().
-		disableFileDeletions int
+		cleaner struct {
+			// Condition variable used to signal the completion of a file cleaning
+			// operation or an increment to the value of disabled. File cleaning operations are
+			// serialized, and a caller trying to do a file cleaning operation may wait
+			// until the ongoing one is complete.
+			cond sync.Cond
+			// True when a file cleaning operation is in progress. False does not necessarily
+			// mean all cleaning jobs have completed; see the comment on d.deleters.
+			cleaning bool
+			// Non-zero when file cleaning is disabled. The disabled count acts as a
+			// reference count to prohibit file cleaning. See
+			// DB.{disable,Enable}FileDeletions().
+			disabled int
+		}
 
 		snapshots struct {
 			// The list of active snapshots.
@@ -490,8 +481,7 @@ type DB struct {
 			// job to validate one or more sstables.
 			cond sync.Cond
 			// pending is a slice of metadata for sstables waiting to be
-			// validated. Only physical sstables should be added to the pending
-			// queue.
+			// validated.
 			pending []newFileEntry
 			// validating is set to true when validation is running.
 			validating bool
@@ -500,9 +490,6 @@ type DB struct {
 
 	// Normally equal to time.Now() but may be overridden in tests.
 	timeNow func() time.Time
-	// the time at database Open; may be used to compute metrics like effective
-	// compaction concurrency
-	openedAt time.Time
 }
 
 var _ Reader = (*DB)(nil)
@@ -510,7 +497,11 @@ var _ Writer = (*DB)(nil)
 
 // TestOnlyWaitForCleaning MUST only be used in tests.
 func (d *DB) TestOnlyWaitForCleaning() {
-	d.cleanupManager.Wait()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for d.mu.cleaner.cleaning {
+		d.mu.cleaner.cond.Wait()
+	}
 }
 
 // Get gets the value for the given key. It returns ErrNotFound if the DB does
@@ -552,7 +543,7 @@ func (d *DB) getInternal(key []byte, b *Batch, s *Snapshot) ([]byte, io.Closer, 
 	if s != nil {
 		seqNum = s.seqNum
 	} else {
-		seqNum = d.mu.versions.visibleSeqNum.Load()
+		seqNum = atomic.LoadUint64(&d.mu.versions.atomic.visibleSeqNum)
 	}
 
 	buf := getIterAllocPool.Get().(*getIterAlloc)
@@ -560,7 +551,8 @@ func (d *DB) getInternal(key []byte, b *Batch, s *Snapshot) ([]byte, io.Closer, 
 	get := &buf.get
 	*get = getIter{
 		logger:   d.opts.Logger,
-		comparer: d.opts.Comparer,
+		cmp:      d.cmp,
+		equal:    d.equal,
 		newIters: d.newIters,
 		snapshot: seqNum,
 		key:      key,
@@ -625,30 +617,6 @@ func (d *DB) Set(key, value []byte, opts *WriteOptions) error {
 func (d *DB) Delete(key []byte, opts *WriteOptions) error {
 	b := newBatch(d)
 	_ = b.Delete(key, opts)
-	if err := d.Apply(b, opts); err != nil {
-		return err
-	}
-	// Only release the batch on success.
-	b.release()
-	return nil
-}
-
-// DeleteSized behaves identically to Delete, but takes an additional
-// argument indicating the size of the value being deleted. DeleteSized
-// should be preferred when the caller has the expectation that there exists
-// a single internal KV pair for the key (eg, the key has not been
-// overwritten recently), and the caller knows the size of its value.
-//
-// DeleteSized will record the value size within the tombstone and use it to
-// inform compaction-picking heuristics which strive to reduce space
-// amplification in the LSM. This "calling your shot" mechanic allows the
-// storage engine to more accurately estimate and reduce space amplification.
-//
-// It is safe to modify the contents of the arguments after DeleteSized
-// returns.
-func (d *DB) DeleteSized(key []byte, valueSize uint32, opts *WriteOptions) error {
-	b := newBatch(d)
-	_ = b.DeleteSized(key, valueSize, opts)
 	if err := d.Apply(b, opts); err != nil {
 		return err
 	}
@@ -808,10 +776,7 @@ func (d *DB) applyInternal(batch *Batch, opts *WriteOptions, noSyncWait bool) er
 	if err := d.closed.Load(); err != nil {
 		panic(err)
 	}
-	if batch.committing {
-		panic("pebble: batch already committing")
-	}
-	if batch.applied.Load() {
+	if atomic.LoadUint32(&batch.applied) != 0 {
 		panic("pebble: batch already applied")
 	}
 	if d.opts.ReadOnly {
@@ -826,27 +791,24 @@ func (d *DB) applyInternal(batch *Batch, opts *WriteOptions, noSyncWait bool) er
 		return errors.New("pebble: WAL disabled")
 	}
 
-	if batch.minimumFormatMajorVersion != FormatMostCompatible {
-		if fmv := d.FormatMajorVersion(); fmv < batch.minimumFormatMajorVersion {
-			panic(fmt.Sprintf(
-				"pebble: batch requires at least format major version %d (current: %d)",
-				batch.minimumFormatMajorVersion, fmv,
-			))
-		}
-	}
-
 	if batch.countRangeKeys > 0 {
 		if d.split == nil {
 			return errNoSplit
 		}
+		if d.FormatMajorVersion() < FormatRangeKeys {
+			panic(fmt.Sprintf(
+				"pebble: range keys require at least format major version %d (current: %d)",
+				FormatRangeKeys, d.FormatMajorVersion(),
+			))
+		}
+
 		// TODO(jackson): Assert that all range key operands are suffixless.
 	}
-	batch.committing = true
 
 	if batch.db == nil {
 		batch.refreshMemTableSize()
 	}
-	if batch.memTableSize >= d.largeBatchThreshold {
+	if int(batch.memTableSize) >= d.largeBatchThreshold {
 		batch.flushable = newFlushableBatch(batch, d.opts.Comparer)
 	}
 	if err := d.commit.Commit(batch, sync, noSyncWait); err != nil {
@@ -920,7 +882,7 @@ func (d *DB) commitWrite(b *Batch, syncWG *sync.WaitGroup, syncErr *error) (*mem
 		b.flushable.setSeqNum(b.SeqNum())
 		if !d.opts.DisableWAL {
 			var err error
-			size, err = d.mu.log.SyncRecord(repr, syncWG, syncErr)
+			size, b.commitStats.WALQueueWaitDuration, err = d.mu.log.SyncRecord(repr, syncWG, syncErr)
 			if err != nil {
 				panic(err)
 			}
@@ -958,13 +920,13 @@ func (d *DB) commitWrite(b *Batch, syncWG *sync.WaitGroup, syncErr *error) (*mem
 	}
 
 	if b.flushable == nil {
-		size, err = d.mu.log.SyncRecord(repr, syncWG, syncErr)
+		size, b.commitStats.WALQueueWaitDuration, err = d.mu.log.SyncRecord(repr, syncWG, syncErr)
 		if err != nil {
 			panic(err)
 		}
 	}
 
-	d.logSize.Store(uint64(size))
+	atomic.StoreUint64(&d.atomic.logSize, uint64(size))
 	return mem, err
 }
 
@@ -985,46 +947,12 @@ var iterAllocPool = sync.Pool{
 	},
 }
 
-// snapshotIterOpts denotes snapshot-related iterator options when calling
-// newIter. These are the possible cases for a snapshotIterOpts:
-//   - No snapshot: All fields are zero values.
-//   - Classic snapshot: Only `seqNum` is set. The latest readState will be used
-//     and the specified seqNum will be used as the snapshot seqNum.
-//   - EventuallyFileOnlySnapshot (EFOS) behaving as a classic snapshot. Only
-//     the `seqNum` is set. The latest readState will be used
-//     and the specified seqNum will be used as the snapshot seqNum.
-//   - EFOS in file-only state: Only `seqNum` and `vers` are set. All the
-//     relevant SSTs are referenced by the *version.
-type snapshotIterOpts struct {
-	seqNum uint64
-	vers   *version
-}
-
-type batchIterOpts struct {
-	batchOnly bool
-}
-type newIterOpts struct {
-	snapshot snapshotIterOpts
-	batch    batchIterOpts
-}
-
 // newIter constructs a new iterator, merging in batch iterators as an extra
 // level.
-func (d *DB) newIter(
-	ctx context.Context, batch *Batch, internalOpts newIterOpts, o *IterOptions,
-) *Iterator {
-	if internalOpts.batch.batchOnly {
-		if batch == nil {
-			panic("batchOnly is true, but batch is nil")
-		}
-		if internalOpts.snapshot.vers != nil {
-			panic("batchOnly is true, but snapshotIterOpts is initialized")
-		}
-	}
+func (d *DB) newIter(ctx context.Context, batch *Batch, s *Snapshot, o *IterOptions) *Iterator {
 	if err := d.closed.Load(); err != nil {
 		panic(err)
 	}
-	seqNum := internalOpts.snapshot.seqNum
 	if o.rangeKeys() {
 		if d.FormatMajorVersion() < FormatRangeKeys {
 			panic(fmt.Sprintf(
@@ -1036,35 +964,25 @@ func (d *DB) newIter(
 	if o != nil && o.RangeKeyMasking.Suffix != nil && o.KeyTypes != IterKeyTypePointsAndRanges {
 		panic("pebble: range key masking requires IterKeyTypePointsAndRanges")
 	}
-	if (batch != nil || seqNum != 0) && (o != nil && o.OnlyReadGuaranteedDurable) {
+	if (batch != nil || s != nil) && (o != nil && o.OnlyReadGuaranteedDurable) {
 		// We could add support for OnlyReadGuaranteedDurable on snapshots if
 		// there was a need: this would require checking that the sequence number
 		// of the snapshot has been flushed, by comparing with
 		// DB.mem.queue[0].logSeqNum.
 		panic("OnlyReadGuaranteedDurable is not supported for batches or snapshots")
 	}
-	var readState *readState
-	var newIters tableNewIters
-	var newIterRangeKey keyspan.TableNewSpanIter
-	if !internalOpts.batch.batchOnly {
-		// Grab and reference the current readState. This prevents the underlying
-		// files in the associated version from being deleted if there is a current
-		// compaction. The readState is unref'd by Iterator.Close().
-		if internalOpts.snapshot.vers == nil {
-			// NB: loadReadState() calls readState.ref().
-			readState = d.loadReadState()
-		} else {
-			// vers != nil
-			internalOpts.snapshot.vers.Ref()
-		}
+	// Grab and reference the current readState. This prevents the underlying
+	// files in the associated version from being deleted if there is a current
+	// compaction. The readState is unref'd by Iterator.Close().
+	readState := d.loadReadState()
 
-		// Determine the seqnum to read at after grabbing the read state (current and
-		// memtables) above.
-		if seqNum == 0 {
-			seqNum = d.mu.versions.visibleSeqNum.Load()
-		}
-		newIters = d.newIters
-		newIterRangeKey = d.tableNewRangeKeyIter
+	// Determine the seqnum to read at after grabbing the read state (current and
+	// memtables) above.
+	var seqNum uint64
+	if s != nil {
+		seqNum = s.seqNum
+	} else {
+		seqNum = atomic.LoadUint64(&d.mu.versions.atomic.visibleSeqNum)
 	}
 
 	// Bundle various structures under a single umbrella in order to allocate
@@ -1077,15 +995,13 @@ func (d *DB) newIter(
 		merge:               d.merge,
 		comparer:            *d.opts.Comparer,
 		readState:           readState,
-		version:             internalOpts.snapshot.vers,
 		keyBuf:              buf.keyBuf,
 		prefixOrFullSeekKey: buf.prefixOrFullSeekKey,
 		boundsBuf:           buf.boundsBuf,
 		batch:               batch,
-		newIters:            newIters,
-		newIterRangeKey:     newIterRangeKey,
+		newIters:            d.newIters,
+		newIterRangeKey:     d.tableNewRangeKeyIter,
 		seqNum:              seqNum,
-		batchOnlyIter:       internalOpts.batch.batchOnly,
 	}
 	if o != nil {
 		dbi.opts = *o
@@ -1108,10 +1024,7 @@ func (d *DB) newIter(
 func finishInitializingIter(ctx context.Context, buf *iterAlloc) *Iterator {
 	// Short-hand.
 	dbi := &buf.dbi
-	var memtables flushableList
-	if dbi.readState != nil {
-		memtables = dbi.readState.memtables
-	}
+	memtables := dbi.readState.memtables
 	if dbi.opts.OnlyReadGuaranteedDurable {
 		memtables = nil
 	} else {
@@ -1173,7 +1086,6 @@ func finishInitializingIter(ctx context.Context, buf *iterAlloc) *Iterator {
 				},
 			}
 			dbi.iter = &dbi.lazyCombinedIter
-			dbi.iter = invalidating.MaybeWrapIfInvariants(dbi.iter)
 		} else {
 			dbi.lazyCombinedIter.combinedIterState = combinedIterState{
 				initialized: true,
@@ -1194,11 +1106,7 @@ func finishInitializingIter(ctx context.Context, buf *iterAlloc) *Iterator {
 			// dbi already had an initialized range key iterator, in case the point
 			// iterator changed or the range key masking suffix changed.
 			dbi.rangeKey.iiter.Init(&dbi.comparer, dbi.iter, dbi.rangeKey.rangeKeyIter,
-				keyspan.InterleavingIterOpts{
-					Mask:       &dbi.rangeKeyMasking,
-					LowerBound: dbi.opts.LowerBound,
-					UpperBound: dbi.opts.UpperBound,
-				})
+				&dbi.rangeKeyMasking, dbi.opts.LowerBound, dbi.opts.UpperBound)
 			dbi.iter = &dbi.rangeKey.iiter
 		}
 	} else {
@@ -1220,96 +1128,59 @@ func finishInitializingIter(ctx context.Context, buf *iterAlloc) *Iterator {
 // method, while the range deletion deleting that key must be exposed using
 // visitRangeDel. Keys that would be masked by range key masking (if an
 // appropriate prefix were set) should be exposed, alongside the range key
-// that would have masked it. This method also collapses all point keys into
-// one InternalKey; so only one internal key at most per user key is returned
-// to visitPointKey.
-//
-// If visitSharedFile is not nil, ScanInternal iterates in skip-shared iteration
-// mode. In this iteration mode, sstables in levels L5 and L6 are skipped, and
-// their metadatas truncated to [lower, upper) and passed into visitSharedFile.
-// ErrInvalidSkipSharedIteration is returned if visitSharedFile is not nil and an
-// sstable in L5 or L6 is found that is not in shared storage according to
-// provider.IsShared, or an sstable in those levels contains a newer key than the
-// snapshot sequence number (only applicable for snapshot.ScanInternal). Examples
-// of when this could happen could be if Pebble started writing sstables before a
-// creator ID was set (as creator IDs are necessary to enable shared storage)
-// resulting in some lower level SSTs being on non-shared storage. Skip-shared
-// iteration is invalid in those cases.
+// that would have masked it.
 func (d *DB) ScanInternal(
-	ctx context.Context,
-	categoryAndQoS sstable.CategoryAndQoS,
 	lower, upper []byte,
-	visitPointKey func(key *InternalKey, value LazyValue, iterInfo IteratorLevel) error,
+	visitPointKey func(key *InternalKey, value LazyValue) error,
 	visitRangeDel func(start, end []byte, seqNum uint64) error,
-	visitRangeKey func(start, end []byte, keys []rangekey.Key) error,
-	visitSharedFile func(sst *SharedSSTMeta) error,
+	visitRangeKey func(start, end []byte, keys []keyspan.Key) error,
 ) error {
-	scanInternalOpts := &scanInternalOptions{
-		CategoryAndQoS:   categoryAndQoS,
-		visitPointKey:    visitPointKey,
-		visitRangeDel:    visitRangeDel,
-		visitRangeKey:    visitRangeKey,
-		visitSharedFile:  visitSharedFile,
-		skipSharedLevels: visitSharedFile != nil,
-		IterOptions: IterOptions{
-			KeyTypes:   IterKeyTypePointsAndRanges,
-			LowerBound: lower,
-			UpperBound: upper,
-		},
-	}
-	iter := d.newInternalIter(ctx, snapshotIterOpts{} /* snapshot */, scanInternalOpts)
+	iter := d.newInternalIter(nil /* snapshot */, &IterOptions{
+		KeyTypes:   IterKeyTypePointsAndRanges,
+		LowerBound: lower,
+		UpperBound: upper,
+	})
 	defer iter.close()
-	return scanInternalImpl(ctx, lower, upper, iter, scanInternalOpts)
+	return scanInternalImpl(lower, iter, visitPointKey, visitRangeDel, visitRangeKey)
 }
 
-// newInternalIter constructs and returns a new scanInternalIterator on this db.
-// If o.skipSharedLevels is true, levels below sharedLevelsStart are *not* added
-// to the internal iterator.
+// NewInternalIter constructs and returns a new scanInternalIterator on this db.
 //
 // TODO(bilal): This method has a lot of similarities with db.newIter as well as
 // finishInitializingIter. Both pairs of methods should be refactored to reduce
 // this duplication.
-func (d *DB) newInternalIter(
-	ctx context.Context, sOpts snapshotIterOpts, o *scanInternalOptions,
-) *scanInternalIterator {
+func (d *DB) newInternalIter(s *Snapshot, o *IterOptions) *scanInternalIterator {
 	if err := d.closed.Load(); err != nil {
 		panic(err)
 	}
 	// Grab and reference the current readState. This prevents the underlying
 	// files in the associated version from being deleted if there is a current
 	// compaction. The readState is unref'd by Iterator.Close().
-	var readState *readState
-	if sOpts.vers == nil {
-		readState = d.loadReadState()
-	}
-	if sOpts.vers != nil {
-		sOpts.vers.Ref()
-	}
+	readState := d.loadReadState()
 
 	// Determine the seqnum to read at after grabbing the read state (current and
 	// memtables) above.
-	seqNum := sOpts.seqNum
-	if seqNum == 0 {
-		seqNum = d.mu.versions.visibleSeqNum.Load()
+	var seqNum uint64
+	if s == nil {
+		seqNum = atomic.LoadUint64(&d.mu.versions.atomic.visibleSeqNum)
+	} else {
+		seqNum = s.seqNum
 	}
 
 	// Bundle various structures under a single umbrella in order to allocate
 	// them together.
 	buf := iterAllocPool.Get().(*iterAlloc)
 	dbi := &scanInternalIterator{
-		ctx:             ctx,
-		db:              d,
 		comparer:        d.opts.Comparer,
-		merge:           d.opts.Merger.Merge,
 		readState:       readState,
-		version:         sOpts.vers,
 		alloc:           buf,
 		newIters:        d.newIters,
 		newIterRangeKey: d.tableNewRangeKeyIter,
 		seqNum:          seqNum,
-		mergingIter:     &buf.merging,
 	}
-	dbi.opts = *o
+	if o != nil {
+		dbi.opts = *o
+	}
 	dbi.opts.logger = d.opts.Logger
 	if d.opts.private.disableLazyCombinedIteration {
 		dbi.opts.disableLazyCombinedIteration = true
@@ -1319,10 +1190,7 @@ func (d *DB) newInternalIter(
 
 func finishInitializingInternalIter(buf *iterAlloc, i *scanInternalIterator) *scanInternalIterator {
 	// Short-hand.
-	var memtables flushableList
-	if i.readState != nil {
-		memtables = i.readState.memtables
-	}
+	memtables := i.readState.memtables
 	// We only need to read from memtables which contain sequence numbers older
 	// than seqNum. Trim off newer memtables.
 	for j := len(memtables) - 1; j >= 0; j-- {
@@ -1333,22 +1201,23 @@ func finishInitializingInternalIter(buf *iterAlloc, i *scanInternalIterator) *sc
 	}
 	i.initializeBoundBufs(i.opts.LowerBound, i.opts.UpperBound)
 
-	i.constructPointIter(i.opts.CategoryAndQoS, memtables, buf)
+	i.constructPointIter(memtables, buf)
 
 	// For internal iterators, we skip the lazy combined iteration optimization
 	// entirely, and create the range key iterator stack directly.
-	i.rangeKey = iterRangeKeyStateAllocPool.Get().(*iteratorRangeKeyState)
-	i.rangeKey.init(i.comparer.Compare, i.comparer.Split, &i.opts.IterOptions)
-	i.constructRangeKeyIter()
+	if i.rangeKey == nil {
+		i.rangeKey = iterRangeKeyStateAllocPool.Get().(*iteratorRangeKeyState)
+		i.rangeKey.init(i.comparer.Compare, i.comparer.Split, &i.opts)
+		i.constructRangeKeyIter()
+	} else {
+		i.rangeKey.iterConfig.SetBounds(i.opts.LowerBound, i.opts.UpperBound)
+	}
 
 	// Wrap the point iterator (currently i.iter) with an interleaving
 	// iterator that interleaves range keys pulled from
 	// i.rangeKey.rangeKeyIter.
 	i.rangeKey.iiter.Init(i.comparer, i.iter, i.rangeKey.rangeKeyIter,
-		keyspan.InterleavingIterOpts{
-			LowerBound: i.opts.LowerBound,
-			UpperBound: i.opts.UpperBound,
-		})
+		nil /* mask */, i.opts.LowerBound, i.opts.UpperBound)
 	i.iter = &i.rangeKey.iiter
 
 	return i
@@ -1378,24 +1247,17 @@ func (i *Iterator) constructPointIter(
 	if i.batch != nil {
 		numMergingLevels++
 	}
+	numMergingLevels += len(memtables)
 
-	var current *version
-	if !i.batchOnlyIter {
-		numMergingLevels += len(memtables)
-
-		current = i.version
-		if current == nil {
-			current = i.readState.current
+	current := i.readState.current
+	numMergingLevels += len(current.L0SublevelFiles)
+	numLevelIters += len(current.L0SublevelFiles)
+	for level := 1; level < len(current.Levels); level++ {
+		if current.Levels[level].Empty() {
+			continue
 		}
-		numMergingLevels += len(current.L0SublevelFiles)
-		numLevelIters += len(current.L0SublevelFiles)
-		for level := 1; level < len(current.Levels); level++ {
-			if current.Levels[level].Empty() {
-				continue
-			}
-			numMergingLevels++
-			numLevelIters++
-		}
+		numMergingLevels++
+		numLevelIters++
 	}
 
 	if numMergingLevels > cap(mlevels) {
@@ -1433,49 +1295,46 @@ func (i *Iterator) constructPointIter(
 		}
 	}
 
-	if !i.batchOnlyIter {
-		// Next are the memtables.
-		for j := len(memtables) - 1; j >= 0; j-- {
-			mem := memtables[j]
-			mlevels = append(mlevels, mergingIterLevel{
-				iter:         mem.newIter(&i.opts),
-				rangeDelIter: mem.newRangeDelIter(&i.opts),
-			})
+	// Next are the memtables.
+	for j := len(memtables) - 1; j >= 0; j-- {
+		mem := memtables[j]
+		mlevels = append(mlevels, mergingIterLevel{
+			iter:         mem.newIter(&i.opts),
+			rangeDelIter: mem.newRangeDelIter(&i.opts),
+		})
+	}
+
+	// Next are the file levels: L0 sub-levels followed by lower levels.
+	mlevelsIndex := len(mlevels)
+	levelsIndex := len(levels)
+	mlevels = mlevels[:numMergingLevels]
+	levels = levels[:numLevelIters]
+	addLevelIterForFiles := func(files manifest.LevelIterator, level manifest.Level) {
+		li := &levels[levelsIndex]
+
+		li.init(
+			ctx, i.opts, i.comparer.Compare, i.comparer.Split, i.newIters, files, level, internalOpts)
+		li.initRangeDel(&mlevels[mlevelsIndex].rangeDelIter)
+		li.initBoundaryContext(&mlevels[mlevelsIndex].levelIterBoundaryContext)
+		li.initCombinedIterState(&i.lazyCombinedIter.combinedIterState)
+		mlevels[mlevelsIndex].iter = li
+
+		levelsIndex++
+		mlevelsIndex++
+	}
+
+	// Add level iterators for the L0 sublevels, iterating from newest to
+	// oldest.
+	for i := len(current.L0SublevelFiles) - 1; i >= 0; i-- {
+		addLevelIterForFiles(current.L0SublevelFiles[i].Iter(), manifest.L0Sublevel(i))
+	}
+
+	// Add level iterators for the non-empty non-L0 levels.
+	for level := 1; level < len(current.Levels); level++ {
+		if current.Levels[level].Empty() {
+			continue
 		}
-
-		// Next are the file levels: L0 sub-levels followed by lower levels.
-		mlevelsIndex := len(mlevels)
-		levelsIndex := len(levels)
-		mlevels = mlevels[:numMergingLevels]
-		levels = levels[:numLevelIters]
-		i.opts.snapshotForHideObsoletePoints = buf.dbi.seqNum
-		addLevelIterForFiles := func(files manifest.LevelIterator, level manifest.Level) {
-			li := &levels[levelsIndex]
-
-			li.init(ctx, i.opts, &i.comparer, i.newIters, files, level, internalOpts)
-			li.initRangeDel(&mlevels[mlevelsIndex].rangeDelIter)
-			li.initBoundaryContext(&mlevels[mlevelsIndex].levelIterBoundaryContext)
-			li.initCombinedIterState(&i.lazyCombinedIter.combinedIterState)
-			mlevels[mlevelsIndex].levelIter = li
-			mlevels[mlevelsIndex].iter = invalidating.MaybeWrapIfInvariants(li)
-
-			levelsIndex++
-			mlevelsIndex++
-		}
-
-		// Add level iterators for the L0 sublevels, iterating from newest to
-		// oldest.
-		for i := len(current.L0SublevelFiles) - 1; i >= 0; i-- {
-			addLevelIterForFiles(current.L0SublevelFiles[i].Iter(), manifest.L0Sublevel(i))
-		}
-
-		// Add level iterators for the non-empty non-L0 levels.
-		for level := 1; level < len(current.Levels); level++ {
-			if current.Levels[level].Empty() {
-				continue
-			}
-			addLevelIterForFiles(current.Levels[level].Iter(), manifest.Level(level))
-		}
+		addLevelIterForFiles(current.Levels[level].Iter(), manifest.Level(level))
 	}
 	buf.merging.init(&i.opts, &i.stats.InternalStats, i.comparer.Compare, i.comparer.Split, mlevels...)
 	if len(mlevels) <= cap(buf.levelsPositioned) {
@@ -1484,7 +1343,7 @@ func (i *Iterator) constructPointIter(
 	buf.merging.snapshot = i.seqNum
 	buf.merging.batchSnapshot = i.batchSeqNum
 	buf.merging.combinedIterState = &i.lazyCombinedIter.combinedIterState
-	i.pointIter = invalidating.MaybeWrapIfInvariants(&buf.merging)
+	i.pointIter = &buf.merging
 	i.merging = &buf.merging
 }
 
@@ -1492,12 +1351,6 @@ func (i *Iterator) constructPointIter(
 // return an error. If the batch is committed it will be applied to the DB.
 func (d *DB) NewBatch() *Batch {
 	return newBatch(d)
-}
-
-// NewBatchWithSize is mostly identical to NewBatch, but it will allocate the
-// the specified memory space for the internal slice in advance.
-func (d *DB) NewBatchWithSize(size int) *Batch {
-	return newBatchWithSize(d, size)
 }
 
 // NewIndexedBatch returns a new empty read-write batch. Any reads on the batch
@@ -1509,12 +1362,6 @@ func (d *DB) NewIndexedBatch() *Batch {
 	return newIndexedBatch(d, d.opts.Comparer)
 }
 
-// NewIndexedBatchWithSize is mostly identical to NewIndexedBatch, but it will
-// allocate the the specified memory space for the internal slice in advance.
-func (d *DB) NewIndexedBatchWithSize(size int) *Batch {
-	return newIndexedBatchWithSize(d, d.opts.Comparer, size)
-}
-
 // NewIter returns an iterator that is unpositioned (Iterator.Valid() will
 // return false). The iterator can be positioned via a call to SeekGE, SeekLT,
 // First or Last. The iterator provides a point-in-time view of the current DB
@@ -1523,14 +1370,14 @@ func (d *DB) NewIndexedBatchWithSize(size int) *Batch {
 // to maintain a long-lived point-in-time view of the DB state can lead to an
 // apparent memory and disk usage leak. Use snapshots (see NewSnapshot) for
 // point-in-time snapshots which avoids these problems.
-func (d *DB) NewIter(o *IterOptions) (*Iterator, error) {
+func (d *DB) NewIter(o *IterOptions) *Iterator {
 	return d.NewIterWithContext(context.Background(), o)
 }
 
 // NewIterWithContext is like NewIter, and additionally accepts a context for
 // tracing.
-func (d *DB) NewIterWithContext(ctx context.Context, o *IterOptions) (*Iterator, error) {
-	return d.newIter(ctx, nil /* batch */, newIterOpts{}, o), nil
+func (d *DB) NewIterWithContext(ctx context.Context, o *IterOptions) *Iterator {
+	return d.newIter(ctx, nil /* batch */, nil /* snapshot */, o)
 }
 
 // NewSnapshot returns a point-in-time view of the current DB state. Iterators
@@ -1549,34 +1396,11 @@ func (d *DB) NewSnapshot() *Snapshot {
 	d.mu.Lock()
 	s := &Snapshot{
 		db:     d,
-		seqNum: d.mu.versions.visibleSeqNum.Load(),
+		seqNum: atomic.LoadUint64(&d.mu.versions.atomic.visibleSeqNum),
 	}
 	d.mu.snapshots.pushBack(s)
 	d.mu.Unlock()
 	return s
-}
-
-// NewEventuallyFileOnlySnapshot returns a point-in-time view of the current DB
-// state, similar to NewSnapshot, but with consistency constrained to the
-// provided set of key ranges. See the comment at EventuallyFileOnlySnapshot for
-// its semantics.
-func (d *DB) NewEventuallyFileOnlySnapshot(keyRanges []KeyRange) *EventuallyFileOnlySnapshot {
-	if err := d.closed.Load(); err != nil {
-		panic(err)
-	}
-
-	internalKeyRanges := make([]internalKeyRange, len(keyRanges))
-	for i := range keyRanges {
-		if i > 0 && d.cmp(keyRanges[i-1].End, keyRanges[i].Start) > 0 {
-			panic("pebble: key ranges for eventually-file-only-snapshot not in order")
-		}
-		internalKeyRanges[i] = internalKeyRange{
-			smallest: base.MakeInternalKey(keyRanges[i].Start, InternalKeySeqNumMax, InternalKeyKindMax),
-			largest:  base.MakeExclusiveSentinelKey(InternalKeyKindRangeDelete, keyRanges[i].End),
-		}
-	}
-
-	return d.makeEventuallyFileOnlySnapshot(keyRanges, internalKeyRanges)
 }
 
 // Close closes the DB.
@@ -1670,25 +1494,24 @@ func (d *DB) Close() error {
 		// replay.
 		mem.readerUnrefLocked(false)
 	}
-	// If there's an unused, recycled memtable, we need to release its memory.
-	if obsoleteMemTable := d.memTableRecycle.Swap(nil); obsoleteMemTable != nil {
-		d.freeMemTable(obsoleteMemTable)
-	}
-	if reserved := d.memTableReserved.Load(); reserved != 0 {
+	if reserved := atomic.LoadInt64(&d.atomic.memTableReserved); reserved != 0 {
 		err = firstError(err, errors.Errorf("leaked memtable reservation: %d", errors.Safe(reserved)))
 	}
 
-	// Since we called d.readState.val.unrefLocked() above, we are expected to
-	// manually schedule deletion of obsolete files.
-	if len(d.mu.versions.obsoleteTables) > 0 {
-		d.deleteObsoleteFiles(d.mu.nextJobID)
+	// No more cleaning can start. Wait for any async cleaning to complete.
+	for d.mu.cleaner.cleaning {
+		d.mu.cleaner.cond.Wait()
 	}
-
+	// There may still be obsolete tables if an existing async cleaning job
+	// prevented a new cleaning job when a readState was unrefed. If needed,
+	// synchronously delete obsolete files.
+	if len(d.mu.versions.obsoleteTables) > 0 {
+		d.deleteObsoleteFiles(d.mu.nextJobID, true /* waitForOngoing */)
+	}
+	// Wait for all the deletion goroutines spawned by cleaning jobs to finish.
 	d.mu.Unlock()
+	d.deleters.Wait()
 	d.compactionSchedulers.Wait()
-
-	// Wait for all cleaning jobs to finish.
-	d.cleanupManager.Close()
 
 	// Sanity check metrics.
 	if invariants.Enabled {
@@ -1749,10 +1572,6 @@ func (d *DB) Compact(start, end []byte, parallelize bool) error {
 		}
 	}
 
-	keyRanges := make([]internalKeyRange, len(meta))
-	for i := range meta {
-		keyRanges[i] = internalKeyRange{smallest: m.Smallest, largest: m.Largest}
-	}
 	// Determine if any memtable overlaps with the compaction range. We wait for
 	// any such overlap to flush (initiating a flush if necessary).
 	mem, err := func() (*flushableEntry, error) {
@@ -1762,7 +1581,7 @@ func (d *DB) Compact(start, end []byte, parallelize bool) error {
 		// overlaps.
 		for i := len(d.mu.mem.queue) - 1; i >= 0; i-- {
 			mem := d.mu.mem.queue[i]
-			if ingestMemtableOverlaps(d.cmp, mem, keyRanges) {
+			if ingestMemtableOverlaps(d.cmp, mem, meta) {
 				var err error
 				if mem.flushable == d.mu.mem.mutable {
 					// We have to hold both commitPipeline.mu and DB.mu when calling
@@ -1795,15 +1614,9 @@ func (d *DB) Compact(start, end []byte, parallelize bool) error {
 	}
 
 	for level := 0; level < maxLevelWithFiles; {
-		for {
-			if err := d.manualCompact(
-				iStart.UserKey, iEnd.UserKey, level, parallelize); err != nil {
-				if errors.Is(err, ErrCancelledCompaction) {
-					continue
-				}
-				return err
-			}
-			break
+		if err := d.manualCompact(
+			iStart.UserKey, iEnd.UserKey, level, parallelize); err != nil {
+			return err
 		}
 		level++
 		if level == numLevels-1 {
@@ -1878,30 +1691,6 @@ func (d *DB) splitManualCompaction(
 	return splitCompactions
 }
 
-// DownloadSpan is a key range passed to the Download method.
-type DownloadSpan struct {
-	StartKey []byte
-	// EndKey is exclusive.
-	EndKey []byte
-}
-
-// Download ensures that the LSM does not use any external sstables for the
-// given key ranges. It does so by performing appropriate compactions so that
-// all external data becomes available locally.
-//
-// Note that calling this method does not imply that all other compactions stop;
-// it simply informs Pebble of a list of spans for which external data should be
-// downloaded with high priority.
-//
-// The method returns once no external sstasbles overlap the given spans, the
-// context is canceled, or an error is hit.
-//
-// TODO(radu): consider passing a priority/impact knob to express how important
-// the download is (versus live traffic performance, LSM health).
-func (d *DB) Download(ctx context.Context, spans []DownloadSpan) error {
-	return errors.Errorf("not implemented")
-}
-
 // Flush the memtable to stable storage.
 func (d *DB) Flush() error {
 	flushDone, err := d.AsyncFlush()
@@ -1945,16 +1734,9 @@ func (d *DB) Metrics() *Metrics {
 	vers := d.mu.versions.currentVersion()
 	*metrics = d.mu.versions.metrics
 	metrics.Compact.EstimatedDebt = d.mu.versions.picker.estimatedCompactionDebt(0)
-	metrics.Compact.InProgressBytes = d.mu.versions.atomicInProgressBytes.Load()
+	metrics.Compact.InProgressBytes = atomic.LoadInt64(&d.mu.versions.atomic.atomicInProgressBytes)
 	metrics.Compact.NumInProgress = int64(d.mu.compact.compactingCount)
 	metrics.Compact.MarkedFiles = vers.Stats.MarkedForCompaction
-	metrics.Compact.Duration = d.mu.compact.duration
-	for c := range d.mu.compact.inProgress {
-		if c.kind != compactionKindFlush {
-			metrics.Compact.Duration += d.timeNow().Sub(c.beganAt)
-		}
-	}
-
 	for _, m := range d.mu.mem.queue {
 		metrics.MemTable.Size += m.totalBytes()
 	}
@@ -1965,11 +1747,11 @@ func (d *DB) Metrics() *Metrics {
 	metrics.Snapshots.PinnedKeys = d.mu.snapshots.cumulativePinnedCount
 	metrics.Snapshots.PinnedSize = d.mu.snapshots.cumulativePinnedSize
 	metrics.MemTable.Count = int64(len(d.mu.mem.queue))
-	metrics.MemTable.ZombieCount = d.memTableCount.Load() - metrics.MemTable.Count
-	metrics.MemTable.ZombieSize = uint64(d.memTableReserved.Load()) - metrics.MemTable.Size
+	metrics.MemTable.ZombieCount = atomic.LoadInt64(&d.atomic.memTableCount) - metrics.MemTable.Count
+	metrics.MemTable.ZombieSize = uint64(atomic.LoadInt64(&d.atomic.memTableReserved)) - metrics.MemTable.Size
 	metrics.WAL.ObsoleteFiles = int64(recycledLogsCount)
 	metrics.WAL.ObsoletePhysicalSize = recycledLogSize
-	metrics.WAL.Size = d.logSize.Load()
+	metrics.WAL.Size = atomic.LoadUint64(&d.atomic.logSize)
 	// The current WAL size (d.atomic.logSize) is the current logical size,
 	// which may be less than the WAL's physical size if it was recycled.
 	// The file sizes in d.mu.log.queue are updated to the physical size
@@ -2006,22 +1788,11 @@ func (d *DB) Metrics() *Metrics {
 
 	d.mu.versions.logLock()
 	metrics.private.manifestFileSize = uint64(d.mu.versions.manifest.Size())
-	metrics.Table.BackingTableCount = uint64(len(d.mu.versions.backingState.fileBackingMap))
-	metrics.Table.BackingTableSize = d.mu.versions.backingState.fileBackingSize
-	if invariants.Enabled {
-		var totalSize uint64
-		for _, backing := range d.mu.versions.backingState.fileBackingMap {
-			totalSize += backing.Size
-		}
-		if totalSize != metrics.Table.BackingTableSize {
-			panic("pebble: invalid backing table size accounting")
-		}
-	}
 	d.mu.versions.logUnlock()
 
 	metrics.LogWriter.FsyncLatency = d.mu.log.metrics.fsyncLatency
 	if err := metrics.LogWriter.Merge(&d.mu.log.metrics.LogWriterMetrics); err != nil {
-		d.opts.Logger.Errorf("metrics error: %s", err)
+		d.opts.Logger.Infof("metrics error: %s", err)
 	}
 	metrics.Flush.WriteThroughput = d.mu.compact.flushWriteThroughput
 	if d.mu.compact.flushing {
@@ -2036,12 +1807,6 @@ func (d *DB) Metrics() *Metrics {
 	metrics.BlockCache = d.opts.Cache.Metrics()
 	metrics.TableCache, metrics.Filter = d.tableCache.metrics()
 	metrics.TableIters = int64(d.tableCache.iterCount())
-	metrics.CategoryStats = d.tableCache.dbOpts.sstStatsCollector.GetStats()
-
-	metrics.SecondaryCacheMetrics = d.objProvider.Metrics()
-
-	metrics.Uptime = d.timeNow().Sub(d.openedAt)
-
 	return metrics
 }
 
@@ -2049,12 +1814,6 @@ func (d *DB) Metrics() *Metrics {
 type sstablesOptions struct {
 	// set to true will return the sstable properties in TableInfo
 	withProperties bool
-
-	// if set, return sstables that overlap the key range (end-exclusive)
-	start []byte
-	end   []byte
-
-	withApproximateSpanBytes bool
 }
 
 // SSTablesOption set optional parameter used by `DB.SSTables`.
@@ -2070,65 +1829,11 @@ func WithProperties() SSTablesOption {
 	}
 }
 
-// WithKeyRangeFilter ensures returned sstables overlap start and end (end-exclusive)
-// if start and end are both nil these properties have no effect.
-func WithKeyRangeFilter(start, end []byte) SSTablesOption {
-	return func(opt *sstablesOptions) {
-		opt.end = end
-		opt.start = start
-	}
-}
-
-// WithApproximateSpanBytes enables capturing the approximate number of bytes that
-// overlap the provided key span for each sstable.
-// NOTE: this option can only be used with WithKeyRangeFilter and WithProperties
-// provided.
-func WithApproximateSpanBytes() SSTablesOption {
-	return func(opt *sstablesOptions) {
-		opt.withApproximateSpanBytes = true
-	}
-}
-
-// BackingType denotes the type of storage backing a given sstable.
-type BackingType int
-
-const (
-	// BackingTypeLocal denotes an sstable stored on local disk according to the
-	// objprovider. This file is completely owned by us.
-	BackingTypeLocal BackingType = iota
-	// BackingTypeShared denotes an sstable stored on shared storage, created
-	// by this Pebble instance and possibly shared by other Pebble instances.
-	// These types of files have lifecycle managed by Pebble.
-	BackingTypeShared
-	// BackingTypeSharedForeign denotes an sstable stored on shared storage,
-	// created by a Pebble instance other than this one. These types of files have
-	// lifecycle managed by Pebble.
-	BackingTypeSharedForeign
-	// BackingTypeExternal denotes an sstable stored on external storage,
-	// not owned by any Pebble instance and with no refcounting/cleanup methods
-	// or lifecycle management. An example of an external file is a file restored
-	// from a backup.
-	BackingTypeExternal
-)
-
-// SSTableInfo export manifest.TableInfo with sstable.Properties alongside
-// other file backing info.
+// SSTableInfo export manifest.TableInfo with sstable.Properties
 type SSTableInfo struct {
 	manifest.TableInfo
-	// Virtual indicates whether the sstable is virtual.
-	Virtual bool
-	// BackingSSTNum is the file number associated with backing sstable which
-	// backs the sstable associated with this SSTableInfo. If Virtual is false,
-	// then BackingSSTNum == FileNum.
-	BackingSSTNum base.FileNum
-	// BackingType is the type of storage backing this sstable.
-	BackingType BackingType
-	// Locator is the remote.Locator backing this sstable, if the backing type is
-	// not BackingTypeLocal.
-	Locator remote.Locator
 
-	// Properties is the sstable properties of this table. If Virtual is true,
-	// then the Properties are associated with the backing sst.
+	// Properties is the sstable properties of this table.
 	Properties *sstable.Properties
 }
 
@@ -2140,13 +1845,6 @@ func (d *DB) SSTables(opts ...SSTablesOption) ([][]SSTableInfo, error) {
 	opt := &sstablesOptions{}
 	for _, fn := range opts {
 		fn(opt)
-	}
-
-	if opt.withApproximateSpanBytes && !opt.withProperties {
-		return nil, errors.Errorf("Cannot use WithApproximateSpanBytes without WithProperties option.")
-	}
-	if opt.withApproximateSpanBytes && (opt.start == nil || opt.end == nil) {
-		return nil, errors.Errorf("Cannot use WithApproximateSpanBytes without WithKeyRangeFilter option.")
 	}
 
 	// Grab and reference the current readState.
@@ -2169,67 +1867,19 @@ func (d *DB) SSTables(opts ...SSTablesOption) ([][]SSTableInfo, error) {
 		iter := srcLevels[i].Iter()
 		j := 0
 		for m := iter.First(); m != nil; m = iter.Next() {
-			if opt.start != nil && opt.end != nil && !m.Overlaps(d.opts.Comparer.Compare, opt.start, opt.end, true /* exclusive end */) {
-				continue
-			}
 			destTables[j] = SSTableInfo{TableInfo: m.TableInfo()}
 			if opt.withProperties {
-				p, err := d.tableCache.getTableProperties(
-					m,
-				)
+				p, err := d.tableCache.getTableProperties(m)
 				if err != nil {
 					return nil, err
 				}
 				destTables[j].Properties = p
-			}
-			destTables[j].Virtual = m.Virtual
-			destTables[j].BackingSSTNum = m.FileBacking.DiskFileNum.FileNum()
-			objMeta, err := d.objProvider.Lookup(fileTypeTable, m.FileBacking.DiskFileNum)
-			if err != nil {
-				return nil, err
-			}
-			if objMeta.IsRemote() {
-				if objMeta.IsShared() {
-					if d.objProvider.IsSharedForeign(objMeta) {
-						destTables[j].BackingType = BackingTypeSharedForeign
-					} else {
-						destTables[j].BackingType = BackingTypeShared
-					}
-				} else {
-					destTables[j].BackingType = BackingTypeExternal
-				}
-				destTables[j].Locator = objMeta.Remote.Locator
-			} else {
-				destTables[j].BackingType = BackingTypeLocal
-			}
-
-			if opt.withApproximateSpanBytes {
-				var spanBytes uint64
-				if m.ContainedWithinSpan(d.opts.Comparer.Compare, opt.start, opt.end) {
-					spanBytes = m.Size
-				} else {
-					size, err := d.tableCache.estimateSize(m, opt.start, opt.end)
-					if err != nil {
-						return nil, err
-					}
-					spanBytes = size
-				}
-				propertiesCopy := *destTables[j].Properties
-
-				// Deep copy user properties so approximate span bytes can be added.
-				propertiesCopy.UserProperties = make(map[string]string, len(destTables[j].Properties.UserProperties)+1)
-				for k, v := range destTables[j].Properties.UserProperties {
-					propertiesCopy.UserProperties[k] = v
-				}
-				propertiesCopy.UserProperties["approximate-span-bytes"] = strconv.FormatUint(spanBytes, 10)
-				destTables[j].Properties = &propertiesCopy
 			}
 			j++
 		}
 		destLevels[i] = destTables[:j]
 		destTables = destTables[j:]
 	}
-
 	return destLevels, nil
 }
 
@@ -2242,25 +1892,14 @@ func (d *DB) SSTables(opts ...SSTablesOption) ([][]SSTableInfo, error) {
 //     overlap due to abbreviated index keys, the full data block size is included in
 //     the estimation. Note that unlike fully contained sstables, none of the
 //     meta-block space is counted for partially overlapped files.
-//   - For virtual sstables, we use the overlap between start, end and the virtual
-//     sstable bounds to determine disk usage.
 //   - There may also exist WAL entries for unflushed keys in this range. This
 //     estimation currently excludes space used for the range in the WAL.
 func (d *DB) EstimateDiskUsage(start, end []byte) (uint64, error) {
-	bytes, _, _, err := d.EstimateDiskUsageByBackingType(start, end)
-	return bytes, err
-}
-
-// EstimateDiskUsageByBackingType is like EstimateDiskUsage but additionally
-// returns the subsets of that size in remote ane external files.
-func (d *DB) EstimateDiskUsageByBackingType(
-	start, end []byte,
-) (totalSize, remoteSize, externalSize uint64, _ error) {
 	if err := d.closed.Load(); err != nil {
 		panic(err)
 	}
 	if d.opts.Comparer.Compare(start, end) > 0 {
-		return 0, 0, 0, errors.New("invalid key-range specified (start > end)")
+		return 0, errors.New("invalid key-range specified (start > end)")
 	}
 
 	// Grab and reference the current readState. This prevents the underlying
@@ -2269,6 +1908,7 @@ func (d *DB) EstimateDiskUsageByBackingType(
 	readState := d.loadReadState()
 	defer readState.unref()
 
+	var totalSize uint64
 	for level, files := range readState.current.Levels {
 		iter := files.Iter()
 		if level > 0 {
@@ -2283,56 +1923,22 @@ func (d *DB) EstimateDiskUsageByBackingType(
 				d.opts.Comparer.Compare(file.Largest.UserKey, end) <= 0 {
 				// The range fully contains the file, so skip looking it up in
 				// table cache/looking at its indexes, and add the full file size.
-				meta, err := d.objProvider.Lookup(fileTypeTable, file.FileBacking.DiskFileNum)
-				if err != nil {
-					return 0, 0, 0, err
-				}
-				if meta.IsRemote() {
-					remoteSize += file.Size
-					if meta.Remote.CleanupMethod == objstorage.SharedNoCleanup {
-						externalSize += file.Size
-					}
-				}
 				totalSize += file.Size
 			} else if d.opts.Comparer.Compare(file.Smallest.UserKey, end) <= 0 &&
 				d.opts.Comparer.Compare(start, file.Largest.UserKey) <= 0 {
 				var size uint64
-				var err error
-				if file.Virtual {
-					err = d.tableCache.withVirtualReader(
-						file.VirtualMeta(),
-						func(r sstable.VirtualReader) (err error) {
-							size, err = r.EstimateDiskUsage(start, end)
-							return err
-						},
-					)
-				} else {
-					err = d.tableCache.withReader(
-						file.PhysicalMeta(),
-						func(r *sstable.Reader) (err error) {
-							size, err = r.EstimateDiskUsage(start, end)
-							return err
-						},
-					)
-				}
+				err := d.tableCache.withReader(file, func(r *sstable.Reader) (err error) {
+					size, err = r.EstimateDiskUsage(start, end)
+					return err
+				})
 				if err != nil {
-					return 0, 0, 0, err
-				}
-				meta, err := d.objProvider.Lookup(fileTypeTable, file.FileBacking.DiskFileNum)
-				if err != nil {
-					return 0, 0, 0, err
-				}
-				if meta.IsRemote() {
-					remoteSize += size
-					if meta.Remote.CleanupMethod == objstorage.SharedNoCleanup {
-						externalSize += size
-					}
+					return 0, err
 				}
 				totalSize += size
 			}
 		}
 	}
-	return totalSize, remoteSize, externalSize, nil
+	return totalSize, nil
 }
 
 func (d *DB) walPreallocateSize() int {
@@ -2346,10 +1952,10 @@ func (d *DB) walPreallocateSize() int {
 	// RocksDB. Could a smaller preallocation block size be used?
 	size := d.opts.MemTableSize
 	size = (size / 10) + size
-	return int(size)
+	return size
 }
 
-func (d *DB) newMemTable(logNum base.DiskFileNum, logSeqNum uint64) (*memTable, *flushableEntry) {
+func (d *DB) newMemTable(logNum FileNum, logSeqNum uint64) (*memTable, *flushableEntry) {
 	size := d.mu.mem.nextSize
 	if d.mu.mem.nextSize < d.opts.MemTableSize {
 		d.mu.mem.nextSize *= 2
@@ -2358,81 +1964,40 @@ func (d *DB) newMemTable(logNum base.DiskFileNum, logSeqNum uint64) (*memTable, 
 		}
 	}
 
-	memtblOpts := memTableOptions{
+	atomic.AddInt64(&d.atomic.memTableCount, 1)
+	atomic.AddInt64(&d.atomic.memTableReserved, int64(size))
+	releaseAccountingReservation := d.opts.Cache.Reserve(size)
+
+	mem := newMemTable(memTableOptions{
 		Options:   d.opts,
+		arenaBuf:  manual.New(int(size)),
 		logSeqNum: logSeqNum,
-	}
+	})
 
-	// Before attempting to allocate a new memtable, check if there's one
-	// available for recycling in memTableRecycle. Large contiguous allocations
-	// can be costly as fragmentation makes it more difficult to find a large
-	// contiguous free space. We've observed 64MB allocations taking 10ms+.
-	//
-	// To reduce these costly allocations, up to 1 obsolete memtable is stashed
-	// in `d.memTableRecycle` to allow a future memtable rotation to reuse
-	// existing memory.
-	var mem *memTable
-	mem = d.memTableRecycle.Swap(nil)
-	if mem != nil && uint64(len(mem.arenaBuf)) != size {
-		d.freeMemTable(mem)
-		mem = nil
-	}
-	if mem != nil {
-		// Carry through the existing buffer and memory reservation.
-		memtblOpts.arenaBuf = mem.arenaBuf
-		memtblOpts.releaseAccountingReservation = mem.releaseAccountingReservation
-	} else {
-		mem = new(memTable)
-		memtblOpts.arenaBuf = manual.New(int(size))
-		memtblOpts.releaseAccountingReservation = d.opts.Cache.Reserve(int(size))
-		d.memTableCount.Add(1)
-		d.memTableReserved.Add(int64(size))
-
-		// Note: this is a no-op if invariants are disabled or race is enabled.
-		invariants.SetFinalizer(mem, checkMemTable)
-	}
-	mem.init(memtblOpts)
+	// Note: this is a no-op if invariants are disabled or race is enabled.
+	invariants.SetFinalizer(mem, checkMemTable)
 
 	entry := d.newFlushableEntry(mem, logNum, logSeqNum)
 	entry.releaseMemAccounting = func() {
-		// If the user leaks iterators, we may be releasing the memtable after
-		// the DB is already closed. In this case, we want to just release the
-		// memory because DB.Close won't come along to free it for us.
-		if err := d.closed.Load(); err != nil {
-			d.freeMemTable(mem)
-			return
-		}
-
-		// The next memtable allocation might be able to reuse this memtable.
-		// Stash it on d.memTableRecycle.
-		if unusedMem := d.memTableRecycle.Swap(mem); unusedMem != nil {
-			// There was already a memtable waiting to be recycled. We're now
-			// responsible for freeing it.
-			d.freeMemTable(unusedMem)
-		}
+		manual.Free(mem.arenaBuf)
+		mem.arenaBuf = nil
+		atomic.AddInt64(&d.atomic.memTableCount, -1)
+		atomic.AddInt64(&d.atomic.memTableReserved, -int64(size))
+		releaseAccountingReservation()
 	}
 	return mem, entry
 }
 
-func (d *DB) freeMemTable(m *memTable) {
-	d.memTableCount.Add(-1)
-	d.memTableReserved.Add(-int64(len(m.arenaBuf)))
-	m.free()
-}
-
-func (d *DB) newFlushableEntry(
-	f flushable, logNum base.DiskFileNum, logSeqNum uint64,
-) *flushableEntry {
-	fe := &flushableEntry{
+func (d *DB) newFlushableEntry(f flushable, logNum FileNum, logSeqNum uint64) *flushableEntry {
+	return &flushableEntry{
 		flushable:      f,
 		flushed:        make(chan struct{}),
 		logNum:         logNum,
 		logSeqNum:      logSeqNum,
+		readerRefs:     1,
 		deleteFn:       d.mu.versions.addObsolete,
 		deleteFnLocked: d.mu.versions.addObsoleteLocked,
 	}
-	fe.readerRefs.Store(1)
-	return fe
 }
 
 // makeRoomForWrite ensures that the memtable has room to hold the contents of
@@ -2472,7 +2037,7 @@ func (d *DB) makeRoomForWrite(b *Batch) error {
 			for i := range d.mu.mem.queue {
 				size += d.mu.mem.queue[i].totalBytes()
 			}
-			if size >= uint64(d.opts.MemTableStopWritesThreshold)*d.opts.MemTableSize {
+			if size >= uint64(d.opts.MemTableStopWritesThreshold)*uint64(d.opts.MemTableSize) {
 				// We have filled up the current memtable, but already queued memtables
 				// are still flushing, so we wait.
 				if !stalled {
@@ -2506,7 +2071,7 @@ func (d *DB) makeRoomForWrite(b *Batch) error {
 			continue
 		}
 
-		var newLogNum base.DiskFileNum
+		var newLogNum base.FileNum
 		var prevLogSize uint64
 		if !d.opts.DisableWAL {
 			now := time.Now()
@@ -2526,7 +2091,7 @@ func (d *DB) makeRoomForWrite(b *Batch) error {
 		// reduces memtable memory pressure when an application is frequently
 		// manually flushing.
 		if (b == nil) && uint64(immMem.availBytes()) > immMem.totalBytes()/2 {
-			d.mu.mem.nextSize = immMem.totalBytes()
+			d.mu.mem.nextSize = int(immMem.totalBytes())
 		}
 
 		if b != nil && b.flushable != nil {
@@ -2555,7 +2120,7 @@ func (d *DB) makeRoomForWrite(b *Batch) error {
 				logSeqNum += uint64(b.Count())
 			}
 		} else {
-			logSeqNum = d.mu.versions.logSeqNum.Load()
+			logSeqNum = atomic.LoadUint64(&d.mu.versions.atomic.logSeqNum)
 		}
 		d.rotateMemtable(newLogNum, logSeqNum, immMem)
 		force = false
@@ -2563,7 +2128,7 @@ func (d *DB) makeRoomForWrite(b *Batch) error {
 }
 
 // Both DB.mu and commitPipeline.mu must be held by the caller.
-func (d *DB) rotateMemtable(newLogNum base.DiskFileNum, logSeqNum uint64, prev *memTable) {
+func (d *DB) rotateMemtable(newLogNum FileNum, logSeqNum uint64, prev *memTable) {
 	// Create a new memtable, scheduling the previous one for flushing. We do
 	// this even if the previous memtable was empty because the DB.Flush
 	// mechanism is dependent on being able to wait for the empty memtable to
@@ -2590,14 +2155,14 @@ func (d *DB) rotateMemtable(newLogNum base.DiskFileNum, logSeqNum uint64, prev *
 
 // Both DB.mu and commitPipeline.mu must be held by the caller. Note that DB.mu
 // may be released and reacquired.
-func (d *DB) recycleWAL() (newLogNum base.DiskFileNum, prevLogSize uint64) {
+func (d *DB) recycleWAL() (newLogNum FileNum, prevLogSize uint64) {
 	if d.opts.DisableWAL {
 		panic("pebble: invalid function call")
 	}
 
 	jobID := d.mu.nextJobID
 	d.mu.nextJobID++
-	newLogNum = d.mu.versions.getNextDiskFileNum()
+	newLogNum = d.mu.versions.getNextFileNum()
 
 	prevLogSize = uint64(d.mu.log.Size())
 
@@ -2619,7 +2184,7 @@ func (d *DB) recycleWAL() (newLogNum base.DiskFileNum, prevLogSize uint64) {
 	metrics := d.mu.log.LogWriter.Metrics()
 	d.mu.Lock()
 	if err := d.mu.log.metrics.Merge(metrics); err != nil {
-		d.opts.Logger.Errorf("metrics error: %s", err)
+		d.opts.Logger.Infof("metrics error: %s", err)
 	}
 	d.mu.Unlock()
 
@@ -2680,18 +2245,19 @@ func (d *DB) recycleWAL() (newLogNum base.DiskFileNum, prevLogSize uint64) {
 	}
 
 	if recycleOK {
-		err = firstError(err, d.logRecycler.pop(recycleLog.fileNum.FileNum()))
+		err = firstError(err, d.logRecycler.pop(recycleLog.fileNum))
 	}
 
 	d.opts.EventListener.WALCreated(WALCreateInfo{
 		JobID:           jobID,
 		Path:            newLogName,
 		FileNum:         newLogNum,
-		RecycledFileNum: recycleLog.fileNum.FileNum(),
+		RecycledFileNum: recycleLog.fileNum,
 		Err:             err,
 	})
 
 	d.mu.Lock()
+	d.mu.mem.cond.Broadcast()
 
 	d.mu.versions.metrics.WAL.Files++
 
@@ -2732,11 +2298,10 @@ func (d *DB) getInProgressCompactionInfoLocked(finishing *compaction) (rv []comp
 	for c := range d.mu.compact.inProgress {
 		if len(c.flushing) == 0 && (finishing == nil || c != finishing) {
 			info := compactionInfo{
-				versionEditApplied: c.versionEditApplied,
-				inputs:             c.inputs,
-				smallest:           c.smallest,
-				largest:            c.largest,
-				outputLevel:        -1,
+				inputs:      c.inputs,
+				smallest:    c.smallest,
+				largest:     c.largest,
+				outputLevel: -1,
 			}
 			if c.outputLevel != nil {
 				info.outputLevel = c.outputLevel.level
@@ -2750,14 +2315,6 @@ func (d *DB) getInProgressCompactionInfoLocked(finishing *compaction) (rv []comp
 func inProgressL0Compactions(inProgress []compactionInfo) []manifest.L0Compaction {
 	var compactions []manifest.L0Compaction
 	for _, info := range inProgress {
-		// Skip in-progress compactions that have already committed; the L0
-		// sublevels initialization code requires the set of in-progress
-		// compactions to be consistent with the current version. Compactions
-		// with versionEditApplied=true are already applied to the current
-		// version and but are performing cleanup without the database mutex.
-		if info.versionEditApplied {
-			continue
-		}
 		l0 := false
 		for _, cl := range info.inputs {
 			l0 = l0 || cl.level == 0
@@ -2784,246 +2341,14 @@ func firstError(err0, err1 error) error {
 }
 
 // SetCreatorID sets the CreatorID which is needed in order to use shared objects.
-// Remote object usage is disabled until this method is called the first time.
+// Shared object usage is disabled until this method is called the first time.
 // Once set, the Creator ID is persisted and cannot change.
 //
 // Does nothing if SharedStorage was not set in the options when the DB was
 // opened or if the DB is in read-only mode.
 func (d *DB) SetCreatorID(creatorID uint64) error {
-	if d.opts.Experimental.RemoteStorage == nil || d.opts.ReadOnly {
+	if d.opts.Experimental.SharedStorage == nil || d.opts.ReadOnly {
 		return nil
 	}
 	return d.objProvider.SetCreatorID(objstorage.CreatorID(creatorID))
-}
-
-// KeyStatistics keeps track of the number of keys that have been pinned by a
-// snapshot as well as counts of the different key kinds in the lsm.
-//
-// One way of using the accumulated stats, when we only have sets and dels,
-// and say the counts are represented as del_count, set_count,
-// del_latest_count, set_latest_count, snapshot_pinned_count.
-//
-//   - del_latest_count + set_latest_count is the set of unique user keys
-//     (unique).
-//
-//   - set_latest_count is the set of live unique user keys (live_unique).
-//
-//   - Garbage is del_count + set_count - live_unique.
-//
-//   - If everything were in the LSM, del_count+set_count-snapshot_pinned_count
-//     would also be the set of unique user keys (note that
-//     snapshot_pinned_count is counting something different -- see comment below).
-//     But snapshot_pinned_count only counts keys in the LSM so the excess here
-//     must be keys in memtables.
-type KeyStatistics struct {
-	// TODO(sumeer): the SnapshotPinned* are incorrect in that these older
-	// versions can be in a different level. Either fix the accounting or
-	// rename these fields.
-
-	// SnapshotPinnedKeys represents obsolete keys that cannot be elided during
-	// a compaction, because they are required by an open snapshot.
-	SnapshotPinnedKeys int
-	// SnapshotPinnedKeysBytes is the total number of bytes of all snapshot
-	// pinned keys.
-	SnapshotPinnedKeysBytes uint64
-	// KindsCount is the count for each kind of key. It includes point keys,
-	// range deletes and range keys.
-	KindsCount [InternalKeyKindMax + 1]int
-	// LatestKindsCount is the count for each kind of key when it is the latest
-	// kind for a user key. It is only populated for point keys.
-	LatestKindsCount [InternalKeyKindMax + 1]int
-}
-
-// LSMKeyStatistics is used by DB.ScanStatistics.
-type LSMKeyStatistics struct {
-	Accumulated KeyStatistics
-	// Levels contains statistics only for point keys. Range deletions and range keys will
-	// appear in Accumulated but not Levels.
-	Levels [numLevels]KeyStatistics
-	// BytesRead represents the logical, pre-compression size of keys and values read
-	BytesRead uint64
-}
-
-// ScanStatisticsOptions is used by DB.ScanStatistics.
-type ScanStatisticsOptions struct {
-	// LimitBytesPerSecond indicates the number of bytes that are able to be read
-	// per second using ScanInternal.
-	// A value of 0 indicates that there is no limit set.
-	LimitBytesPerSecond int64
-}
-
-// ScanStatistics returns the count of different key kinds within the lsm for a
-// key span [lower, upper) as well as the number of snapshot keys.
-func (d *DB) ScanStatistics(
-	ctx context.Context, lower, upper []byte, opts ScanStatisticsOptions,
-) (LSMKeyStatistics, error) {
-	stats := LSMKeyStatistics{}
-	var prevKey InternalKey
-	var rateLimitFunc func(key *InternalKey, val LazyValue) error
-	tb := tokenbucket.TokenBucket{}
-
-	if opts.LimitBytesPerSecond != 0 {
-		// Each "token" roughly corresponds to a byte that was read.
-		tb.Init(tokenbucket.TokensPerSecond(opts.LimitBytesPerSecond), tokenbucket.Tokens(1024))
-		rateLimitFunc = func(key *InternalKey, val LazyValue) error {
-			return tb.WaitCtx(ctx, tokenbucket.Tokens(key.Size()+val.Len()))
-		}
-	}
-
-	scanInternalOpts := &scanInternalOptions{
-		visitPointKey: func(key *InternalKey, value LazyValue, iterInfo IteratorLevel) error {
-			// If the previous key is equal to the current point key, the current key was
-			// pinned by a snapshot.
-			size := uint64(key.Size())
-			kind := key.Kind()
-			sameKey := d.equal(prevKey.UserKey, key.UserKey)
-			if iterInfo.Kind == IteratorLevelLSM && sameKey {
-				stats.Levels[iterInfo.Level].SnapshotPinnedKeys++
-				stats.Levels[iterInfo.Level].SnapshotPinnedKeysBytes += size
-				stats.Accumulated.SnapshotPinnedKeys++
-				stats.Accumulated.SnapshotPinnedKeysBytes += size
-			}
-			if iterInfo.Kind == IteratorLevelLSM {
-				stats.Levels[iterInfo.Level].KindsCount[kind]++
-			}
-			if !sameKey {
-				if iterInfo.Kind == IteratorLevelLSM {
-					stats.Levels[iterInfo.Level].LatestKindsCount[kind]++
-				}
-				stats.Accumulated.LatestKindsCount[kind]++
-			}
-
-			stats.Accumulated.KindsCount[kind]++
-			prevKey.CopyFrom(*key)
-			stats.BytesRead += uint64(key.Size() + value.Len())
-			return nil
-		},
-		visitRangeDel: func(start, end []byte, seqNum uint64) error {
-			stats.Accumulated.KindsCount[InternalKeyKindRangeDelete]++
-			stats.BytesRead += uint64(len(start) + len(end))
-			return nil
-		},
-		visitRangeKey: func(start, end []byte, keys []rangekey.Key) error {
-			stats.BytesRead += uint64(len(start) + len(end))
-			for _, key := range keys {
-				stats.Accumulated.KindsCount[key.Kind()]++
-				stats.BytesRead += uint64(len(key.Value) + len(key.Suffix))
-			}
-			return nil
-		},
-		includeObsoleteKeys: true,
-		IterOptions: IterOptions{
-			KeyTypes:   IterKeyTypePointsAndRanges,
-			LowerBound: lower,
-			UpperBound: upper,
-		},
-		rateLimitFunc: rateLimitFunc,
-	}
-	iter := d.newInternalIter(ctx, snapshotIterOpts{}, scanInternalOpts)
-	defer iter.close()
-
-	err := scanInternalImpl(ctx, lower, upper, iter, scanInternalOpts)
-
-	if err != nil {
-		return LSMKeyStatistics{}, err
-	}
-
-	return stats, nil
-}
-
-// ObjProvider returns the objstorage.Provider for this database. Meant to be
-// used for internal purposes only.
-func (d *DB) ObjProvider() objstorage.Provider {
-	return d.objProvider
-}
-
-func (d *DB) checkVirtualBounds(m *fileMetadata) {
-	if !invariants.Enabled {
-		return
-	}
-
-	if m.HasPointKeys {
-		pointIter, rangeDelIter, err := d.newIters(context.TODO(), m, nil, internalIterOpts{})
-		if err != nil {
-			panic(errors.Wrap(err, "pebble: error creating point iterator"))
-		}
-
-		defer pointIter.Close()
-		if rangeDelIter != nil {
-			defer rangeDelIter.Close()
-		}
-
-		pointKey, _ := pointIter.First()
-		var rangeDel *keyspan.Span
-		if rangeDelIter != nil {
-			rangeDel = rangeDelIter.First()
-		}
-
-		// Check that the lower bound is tight.
-		if (rangeDel == nil || d.cmp(rangeDel.SmallestKey().UserKey, m.SmallestPointKey.UserKey) != 0) &&
-			(pointKey == nil || d.cmp(pointKey.UserKey, m.SmallestPointKey.UserKey) != 0) {
-			panic(errors.Newf("pebble: virtual sstable %s lower point key bound is not tight", m.FileNum))
-		}
-
-		pointKey, _ = pointIter.Last()
-		rangeDel = nil
-		if rangeDelIter != nil {
-			rangeDel = rangeDelIter.Last()
-		}
-
-		// Check that the upper bound is tight.
-		if (rangeDel == nil || d.cmp(rangeDel.LargestKey().UserKey, m.LargestPointKey.UserKey) != 0) &&
-			(pointKey == nil || d.cmp(pointKey.UserKey, m.LargestPointKey.UserKey) != 0) {
-			panic(errors.Newf("pebble: virtual sstable %s upper point key bound is not tight", m.FileNum))
-		}
-
-		// Check that iterator keys are within bounds.
-		for key, _ := pointIter.First(); key != nil; key, _ = pointIter.Next() {
-			if d.cmp(key.UserKey, m.SmallestPointKey.UserKey) < 0 || d.cmp(key.UserKey, m.LargestPointKey.UserKey) > 0 {
-				panic(errors.Newf("pebble: virtual sstable %s point key %s is not within bounds", m.FileNum, key.UserKey))
-			}
-		}
-
-		if rangeDelIter != nil {
-			for key := rangeDelIter.First(); key != nil; key = rangeDelIter.Next() {
-				if d.cmp(key.SmallestKey().UserKey, m.SmallestPointKey.UserKey) < 0 {
-					panic(errors.Newf("pebble: virtual sstable %s point key %s is not within bounds", m.FileNum, key.SmallestKey().UserKey))
-				}
-
-				if d.cmp(key.LargestKey().UserKey, m.LargestPointKey.UserKey) > 0 {
-					panic(errors.Newf("pebble: virtual sstable %s point key %s is not within bounds", m.FileNum, key.LargestKey().UserKey))
-				}
-			}
-		}
-	}
-
-	if !m.HasRangeKeys {
-		return
-	}
-
-	rangeKeyIter, err := d.tableNewRangeKeyIter(m, keyspan.SpanIterOptions{})
-	defer rangeKeyIter.Close()
-
-	if err != nil {
-		panic(errors.Wrap(err, "pebble: error creating range key iterator"))
-	}
-
-	// Check that the lower bound is tight.
-	if d.cmp(rangeKeyIter.First().SmallestKey().UserKey, m.SmallestRangeKey.UserKey) != 0 {
-		panic(errors.Newf("pebble: virtual sstable %s lower range key bound is not tight", m.FileNum))
-	}
-
-	// Check that upper bound is tight.
-	if d.cmp(rangeKeyIter.Last().LargestKey().UserKey, m.LargestRangeKey.UserKey) != 0 {
-		panic(errors.Newf("pebble: virtual sstable %s upper range key bound is not tight", m.FileNum))
-	}
-
-	for key := rangeKeyIter.First(); key != nil; key = rangeKeyIter.Next() {
-		if d.cmp(key.SmallestKey().UserKey, m.SmallestRangeKey.UserKey) < 0 {
-			panic(errors.Newf("pebble: virtual sstable %s point key %s is not within bounds", m.FileNum, key.SmallestKey().UserKey))
-		}
-		if d.cmp(key.LargestKey().UserKey, m.LargestRangeKey.UserKey) > 0 {
-			panic(errors.Newf("pebble: virtual sstable %s point key %s is not within bounds", m.FileNum, key.LargestKey().UserKey))
-		}
-	}
 }

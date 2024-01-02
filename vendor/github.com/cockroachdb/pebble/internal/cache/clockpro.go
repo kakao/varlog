@@ -33,7 +33,7 @@ import (
 type fileKey struct {
 	// id is the namespace for fileNums.
 	id      uint64
-	fileNum base.DiskFileNum
+	fileNum base.FileNum
 }
 
 type key struct {
@@ -71,12 +71,14 @@ func (h Handle) Get() []byte {
 
 // Release releases the reference to the cache entry.
 func (h Handle) Release() {
-	h.value.release()
+	if h.value != nil {
+		h.value.release()
+	}
 }
 
 type shard struct {
-	hits   atomic.Int64
-	misses atomic.Int64
+	hits   int64
+	misses int64
 
 	mu sync.RWMutex
 
@@ -111,25 +113,25 @@ type shard struct {
 	countTest int64
 }
 
-func (c *shard) Get(id uint64, fileNum base.DiskFileNum, offset uint64) Handle {
+func (c *shard) Get(id uint64, fileNum base.FileNum, offset uint64) Handle {
 	c.mu.RLock()
 	var value *Value
 	if e := c.blocks.Get(key{fileKey{id, fileNum}, offset}); e != nil {
 		value = e.acquireValue()
 		if value != nil {
-			e.referenced.Store(true)
+			atomic.StoreInt32(&e.referenced, 1)
 		}
 	}
 	c.mu.RUnlock()
 	if value == nil {
-		c.misses.Add(1)
+		atomic.AddInt64(&c.misses, 1)
 		return Handle{}
 	}
-	c.hits.Add(1)
+	atomic.AddInt64(&c.hits, 1)
 	return Handle{value: value}
 }
 
-func (c *shard) Set(id uint64, fileNum base.DiskFileNum, offset uint64, value *Value) Handle {
+func (c *shard) Set(id uint64, fileNum base.FileNum, offset uint64, value *Value) Handle {
 	if n := value.refs(); n != 1 {
 		panic(fmt.Sprintf("pebble: Value has already been added to the cache: refs=%d", n))
 	}
@@ -158,7 +160,7 @@ func (c *shard) Set(id uint64, fileNum base.DiskFileNum, offset uint64, value *V
 	case e.peekValue() != nil:
 		// cache entry was a hot or cold page
 		e.setValue(value)
-		e.referenced.Store(true)
+		atomic.StoreInt32(&e.referenced, 1)
 		delta := int64(len(value.buf)) - e.size
 		e.size = int64(len(value.buf))
 		if e.ptype == etHot {
@@ -174,7 +176,7 @@ func (c *shard) Set(id uint64, fileNum base.DiskFileNum, offset uint64, value *V
 		// cache entry was a test page
 		c.sizeTest -= e.size
 		c.countTest--
-		c.metaDel(e).release()
+		c.metaDel(e)
 		c.metaCheck(e)
 
 		e.size = int64(len(value.buf))
@@ -183,7 +185,7 @@ func (c *shard) Set(id uint64, fileNum base.DiskFileNum, offset uint64, value *V
 			c.coldTarget = c.targetSize()
 		}
 
-		e.referenced.Store(false)
+		atomic.StoreInt32(&e.referenced, 0)
 		e.setValue(value)
 		e.ptype = etHot
 		if c.metaAdd(k, e) {
@@ -220,7 +222,7 @@ func (c *shard) checkConsistency() {
 }
 
 // Delete deletes the cached value for the specified file and offset.
-func (c *shard) Delete(id uint64, fileNum base.DiskFileNum, offset uint64) {
+func (c *shard) Delete(id uint64, fileNum base.FileNum, offset uint64) {
 	// The common case is there is nothing to delete, so do a quick check with
 	// shared lock.
 	k := key{fileKey{id, fileNum}, offset}
@@ -231,75 +233,37 @@ func (c *shard) Delete(id uint64, fileNum base.DiskFileNum, offset uint64) {
 		return
 	}
 
-	var deletedValue *Value
-	func() {
-		c.mu.Lock()
-		defer c.mu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-		e := c.blocks.Get(k)
-		if e == nil {
-			return
-		}
-		deletedValue = c.metaEvict(e)
-		c.checkConsistency()
-	}()
-	// Now that the mutex has been dropped, release the reference which will
-	// potentially free the memory associated with the previous cached value.
-	deletedValue.release()
+	e := c.blocks.Get(k)
+	if e == nil {
+		return
+	}
+	c.metaEvict(e)
+
+	c.checkConsistency()
 }
 
 // EvictFile evicts all of the cache values for the specified file.
-func (c *shard) EvictFile(id uint64, fileNum base.DiskFileNum) {
-	fkey := key{fileKey{id, fileNum}, 0}
-	for c.evictFileRun(fkey) {
-		// Sched switch to give another goroutine an opportunity to acquire the
-		// shard mutex.
-		runtime.Gosched()
-	}
-}
-
-func (c *shard) evictFileRun(fkey key) (moreRemaining bool) {
-	// If most of the file's blocks are held in the block cache, evicting all
-	// the blocks may take a while. We don't want to block the entire cache
-	// shard, forcing concurrent readers to wait until we're finished. We drop
-	// the mutex every [blocksPerMutexAcquisition] blocks to give other
-	// goroutines an opportunity to make progress.
-	const blocksPerMutexAcquisition = 5
+func (c *shard) EvictFile(id uint64, fileNum base.FileNum) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	// Releasing a value may result in free-ing it back to the memory allocator.
-	// This can have a nontrivial cost that we'd prefer to not pay while holding
-	// the shard mutex, so we collect the evicted values in a local slice and
-	// only release them in a defer after dropping the cache mutex.
-	var obsoleteValuesAlloc [blocksPerMutexAcquisition]*Value
-	obsoleteValues := obsoleteValuesAlloc[:0]
-	defer func() {
-		c.mu.Unlock()
-		for _, v := range obsoleteValues {
-			v.release()
-		}
-	}()
-
+	fkey := key{fileKey{id, fileNum}, 0}
 	blocks := c.files.Get(fkey)
 	if blocks == nil {
-		// No blocks for this file.
-		return false
+		return
 	}
-
-	// b is the current head of the doubly linked list, and n is the entry after b.
-	for b, n := blocks, (*entry)(nil); len(obsoleteValues) < cap(obsoleteValues); b = n {
+	for b, n := blocks, (*entry)(nil); ; b = n {
 		n = b.fileLink.next
-		obsoleteValues = append(obsoleteValues, c.metaEvict(b))
+		c.metaEvict(b)
 		if b == n {
-			// b == n represents the case where b was the last entry remaining
-			// in the doubly linked list, which is why it pointed at itself. So
-			// no more entries left.
-			c.checkConsistency()
-			return false
+			break
 		}
 	}
-	// Exhausted blocksPerMutexAcquisition.
-	return true
+
+	c.checkConsistency()
 }
 
 func (c *shard) Free() {
@@ -310,7 +274,7 @@ func (c *shard) Free() {
 	// metaCheck call when the "invariants" build tag is specified.
 	for c.handHot != nil {
 		e := c.handHot
-		c.metaDel(c.handHot).release()
+		c.metaDel(c.handHot)
 		e.free()
 	}
 
@@ -395,14 +359,12 @@ func (c *shard) metaAdd(key key, e *entry) bool {
 
 // Remove the entry from the cache. This removes the entry from the blocks map,
 // the files map, and ensures that hand{Hot,Cold,Test} are not pointing at the
-// entry. Returns the deleted value that must be released, if any.
-func (c *shard) metaDel(e *entry) (deletedValue *Value) {
+// entry.
+func (c *shard) metaDel(e *entry) {
 	if value := e.peekValue(); value != nil {
 		value.ref.trace("metaDel")
 	}
-	// Remove the pointer to the value.
-	deletedValue = e.val
-	e.val = nil
+	e.setValue(nil)
 
 	c.blocks.Delete(e.key)
 	if entriesGoAllocated {
@@ -434,7 +396,6 @@ func (c *shard) metaDel(e *entry) (deletedValue *Value) {
 	} else {
 		c.files.Put(fkey, next)
 	}
-	return deletedValue
 }
 
 // Check that the specified entry is not referenced by the cache.
@@ -494,7 +455,7 @@ func (c *shard) metaCheck(e *entry) {
 	}
 }
 
-func (c *shard) metaEvict(e *entry) (evictedValue *Value) {
+func (c *shard) metaEvict(e *entry) {
 	switch e.ptype {
 	case etHot:
 		c.sizeHot -= e.size
@@ -506,10 +467,9 @@ func (c *shard) metaEvict(e *entry) (evictedValue *Value) {
 		c.sizeTest -= e.size
 		c.countTest--
 	}
-	evictedValue = c.metaDel(e)
+	c.metaDel(e)
 	c.metaCheck(e)
 	e.free()
-	return evictedValue
 }
 
 func (c *shard) evict() {
@@ -531,8 +491,8 @@ func (c *shard) runHandCold(countColdDebug, sizeColdDebug int64) {
 
 	e := c.handCold
 	if e.ptype == etCold {
-		if e.referenced.Load() {
-			e.referenced.Store(false)
+		if atomic.LoadInt32(&e.referenced) == 1 {
+			atomic.StoreInt32(&e.referenced, 0)
 			e.ptype = etHot
 			c.sizeCold -= e.size
 			c.countCold--
@@ -568,8 +528,8 @@ func (c *shard) runHandHot() {
 
 	e := c.handHot
 	if e.ptype == etHot {
-		if e.referenced.Load() {
-			e.referenced.Store(false)
+		if atomic.LoadInt32(&e.referenced) == 1 {
+			atomic.StoreInt32(&e.referenced, 0)
 		} else {
 			e.ptype = etCold
 			c.sizeHot -= e.size
@@ -604,7 +564,7 @@ func (c *shard) runHandTest() {
 		if c.coldTarget < 0 {
 			c.coldTarget = 0
 		}
-		c.metaDel(e).release()
+		c.metaDel(e)
 		c.metaCheck(e)
 		e.free()
 	}
@@ -627,7 +587,7 @@ type Metrics struct {
 // Cache implements Pebble's sharded block cache. The Clock-PRO algorithm is
 // used for page replacement
 // (http://static.usenix.org/event/usenix05/tech/general/full_papers/jiang/jiang_html/html.html). In
-// order to provide better concurrency, 4 x NumCPUs shards are created, with
+// order to provide better concurrency, 2 x NumCPUs shards are created, with
 // each shard being given 1/n of the target cache size. The Clock-PRO algorithm
 // is run independently on each shard.
 //
@@ -661,9 +621,9 @@ type Metrics struct {
 // used in combination by specifying `-tags invariants,tracing`. Note that
 // "tracing" produces a significant slowdown, while "invariants" does not.
 type Cache struct {
-	refs    atomic.Int64
+	refs    int64
 	maxSize int64
-	idAlloc atomic.Uint64
+	idAlloc uint64
 	shards  []shard
 
 	// Traces recorded by Cache.trace. Used for debugging.
@@ -683,44 +643,17 @@ type Cache struct {
 //	defer c.Unref()
 //	d, err := pebble.Open(pebble.Options{Cache: c})
 func New(size int64) *Cache {
-	// How many cache shards should we create?
-	//
-	// Note that the probability two processors will try to access the same
-	// shard at the same time increases superlinearly with the number of
-	// processors (Eg, consider the brithday problem where each CPU is a person,
-	// and each shard is a possible birthday).
-	//
-	// We could consider growing the number of shards superlinearly, but
-	// increasing the shard count may reduce the effectiveness of the caching
-	// algorithm if frequently-accessed blocks are insufficiently distributed
-	// across shards. If a shard's size is smaller than a single frequently
-	// scanned sstable, then the shard will be unable to hold the entire
-	// frequently-scanned table in memory despite other shards still holding
-	// infrequently accessed blocks.
-	//
-	// Experimentally, we've observed contention contributing to tail latencies
-	// at 2 shards per processor. For now we use 4 shards per processor,
-	// recognizing this may not be final word.
-	m := 4 * runtime.GOMAXPROCS(0)
-
-	// In tests we can use large CPU machines with small cache sizes and have
-	// many caches in existence at a time. If sharding into m shards would
-	// produce too small shards, constrain the number of shards to 4.
-	const minimumShardSize = 4 << 20 // 4 MiB
-	if m > 4 && int(size)/m < minimumShardSize {
-		m = 4
-	}
-	return newShards(size, m)
+	return newShards(size, 2*runtime.GOMAXPROCS(0))
 }
 
 func newShards(size int64, shards int) *Cache {
 	c := &Cache{
+		refs:    1,
 		maxSize: size,
+		idAlloc: 1,
 		shards:  make([]shard, shards),
 	}
-	c.refs.Store(1)
-	c.idAlloc.Store(1)
-	c.trace("alloc", c.refs.Load())
+	c.trace("alloc", c.refs)
 	for i := range c.shards {
 		c.shards[i] = shard{
 			maxSize:    size / int64(len(c.shards)),
@@ -736,7 +669,7 @@ func newShards(size int64, shards int) *Cache {
 	// Note: this is a no-op if invariants are disabled or race is enabled.
 	invariants.SetFinalizer(c, func(obj interface{}) {
 		c := obj.(*Cache)
-		if v := c.refs.Load(); v != 0 {
+		if v := atomic.LoadInt64(&c.refs); v != 0 {
 			c.tr.Lock()
 			fmt.Fprintf(os.Stderr,
 				"pebble: cache (%p) has non-zero reference count: %d\n", c, v)
@@ -750,7 +683,7 @@ func newShards(size int64, shards int) *Cache {
 	return c
 }
 
-func (c *Cache) getShard(id uint64, fileNum base.DiskFileNum, offset uint64) *shard {
+func (c *Cache) getShard(id uint64, fileNum base.FileNum, offset uint64) *shard {
 	if id == 0 {
 		panic("pebble: 0 cache ID is invalid")
 	}
@@ -765,11 +698,10 @@ func (c *Cache) getShard(id uint64, fileNum base.DiskFileNum, offset uint64) *sh
 		h ^= uint64(id & 0xff)
 		id >>= 8
 	}
-	fileNumVal := uint64(fileNum.FileNum())
 	for i := 0; i < 8; i++ {
 		h *= prime64
-		h ^= uint64(fileNumVal) & 0xff
-		fileNumVal >>= 8
+		h ^= uint64(fileNum & 0xff)
+		fileNum >>= 8
 	}
 	for i := 0; i < 8; i++ {
 		h *= prime64
@@ -783,7 +715,7 @@ func (c *Cache) getShard(id uint64, fileNum base.DiskFileNum, offset uint64) *sh
 // Ref adds a reference to the cache. The cache only remains valid as long a
 // reference is maintained to it.
 func (c *Cache) Ref() {
-	v := c.refs.Add(1)
+	v := atomic.AddInt64(&c.refs, 1)
 	if v <= 1 {
 		panic(fmt.Sprintf("pebble: inconsistent reference count: %d", v))
 	}
@@ -792,7 +724,7 @@ func (c *Cache) Ref() {
 
 // Unref releases a reference on the cache.
 func (c *Cache) Unref() {
-	v := c.refs.Add(-1)
+	v := atomic.AddInt64(&c.refs, -1)
 	c.trace("unref", v)
 	switch {
 	case v < 0:
@@ -806,7 +738,7 @@ func (c *Cache) Unref() {
 
 // Get retrieves the cache value for the specified file and offset, returning
 // nil if no value is present.
-func (c *Cache) Get(id uint64, fileNum base.DiskFileNum, offset uint64) Handle {
+func (c *Cache) Get(id uint64, fileNum base.FileNum, offset uint64) Handle {
 	return c.getShard(id, fileNum, offset).Get(id, fileNum, offset)
 }
 
@@ -814,17 +746,17 @@ func (c *Cache) Get(id uint64, fileNum base.DiskFileNum, offset uint64) Handle {
 // existing value if present. A Handle is returned which provides faster
 // retrieval of the cached value than Get (lock-free and avoidance of the map
 // lookup). The value must have been allocated by Cache.Alloc.
-func (c *Cache) Set(id uint64, fileNum base.DiskFileNum, offset uint64, value *Value) Handle {
+func (c *Cache) Set(id uint64, fileNum base.FileNum, offset uint64, value *Value) Handle {
 	return c.getShard(id, fileNum, offset).Set(id, fileNum, offset, value)
 }
 
 // Delete deletes the cached value for the specified file and offset.
-func (c *Cache) Delete(id uint64, fileNum base.DiskFileNum, offset uint64) {
+func (c *Cache) Delete(id uint64, fileNum base.FileNum, offset uint64) {
 	c.getShard(id, fileNum, offset).Delete(id, fileNum, offset)
 }
 
 // EvictFile evicts all of the cache values for the specified file.
-func (c *Cache) EvictFile(id uint64, fileNum base.DiskFileNum) {
+func (c *Cache) EvictFile(id uint64, fileNum base.FileNum) {
 	if id == 0 {
 		panic("pebble: 0 cache ID is invalid")
 	}
@@ -852,14 +784,14 @@ func (c *Cache) Size() int64 {
 // manually managed. The caller MUST either add the value to the cache (via
 // Cache.Set), or release the value (via Cache.Free). Failure to do so will
 // result in a memory leak.
-func Alloc(n int) *Value {
+func (c *Cache) Alloc(n int) *Value {
 	return newValue(n)
 }
 
 // Free frees the specified value. The buffer associated with the value will
 // possibly be reused, making it invalid to use the buffer after calling
 // Free. Do not call Free on a value that has been added to the cache.
-func Free(v *Value) {
+func (c *Cache) Free(v *Value) {
 	if n := v.refs(); n > 1 {
 		panic(fmt.Sprintf("pebble: Value has been added to the cache: refs=%d", n))
 	}
@@ -896,8 +828,8 @@ func (c *Cache) Metrics() Metrics {
 		m.Count += int64(s.blocks.Count())
 		m.Size += s.sizeHot + s.sizeCold
 		s.mu.RUnlock()
-		m.Hits += s.hits.Load()
-		m.Misses += s.misses.Load()
+		m.Hits += atomic.LoadInt64(&s.hits)
+		m.Misses += atomic.LoadInt64(&s.misses)
 	}
 	return m
 }
@@ -905,5 +837,5 @@ func (c *Cache) Metrics() Metrics {
 // NewID returns a new ID to be used as a namespace for cached file
 // blocks.
 func (c *Cache) NewID() uint64 {
-	return c.idAlloc.Add(1)
+	return atomic.AddUint64(&c.idAlloc, 1)
 }

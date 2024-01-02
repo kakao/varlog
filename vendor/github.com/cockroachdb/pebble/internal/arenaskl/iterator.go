@@ -18,7 +18,7 @@
 package arenaskl
 
 import (
-	"context"
+	"encoding/binary"
 	"sync"
 
 	"github.com/cockroachdb/pebble/internal/base"
@@ -239,12 +239,18 @@ func (it *Iterator) SetBounds(lower, upper []byte) {
 	it.upper = upper
 }
 
-// SetContext implements base.InternalIterator.
-func (it *Iterator) SetContext(_ context.Context) {}
-
 func (it *Iterator) decodeKey() {
-	it.key.UserKey = it.list.arena.getBytes(it.nd.keyOffset, it.nd.keySize)
-	it.key.Trailer = it.nd.keyTrailer
+	b := it.list.arena.getBytes(it.nd.keyOffset, it.nd.keySize)
+	// This is a manual inline of base.DecodeInternalKey, because the Go compiler
+	// seems to refuse to automatically inline it currently.
+	l := len(b) - 8
+	if l >= 0 {
+		it.key.Trailer = binary.LittleEndian.Uint64(b[l:])
+		it.key.UserKey = b[:l:l]
+	} else {
+		it.key.Trailer = uint64(base.InternalKeyKindInvalid)
+		it.key.UserKey = nil
+	}
 }
 
 func (it *Iterator) seekForBaseSplice(key []byte) (prev, next *node, found bool) {

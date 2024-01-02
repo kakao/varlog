@@ -6,7 +6,6 @@ package pebble
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"runtime/debug"
 	"unsafe"
@@ -28,10 +27,6 @@ type mergingIterLevel struct {
 	// iterKey and iterValue cache the current key and value iter are pointed at.
 	iterKey   *InternalKey
 	iterValue base.LazyValue
-	// levelIter is non-nil if this level's iter is ultimately backed by a
-	// *levelIter. The handle in iter may have wrapped the levelIter with
-	// intermediary internalIterator implementations.
-	levelIter *levelIter
 
 	// levelIterBoundaryContext's fields are set when using levelIter, in order
 	// to surface sstable boundary keys and file-level context. See levelIter
@@ -1359,12 +1354,6 @@ func (m *mergingIter) SetBounds(lower, upper []byte) {
 	m.heap.clear()
 }
 
-func (m *mergingIter) SetContext(ctx context.Context) {
-	for i := range m.levels {
-		m.levels[i].iter.SetContext(ctx)
-	}
-}
-
 func (m *mergingIter) DebugString() string {
 	var buf bytes.Buffer
 	sep := ""
@@ -1382,9 +1371,9 @@ func (m *mergingIter) DebugString() string {
 }
 
 func (m *mergingIter) ForEachLevelIter(fn func(li *levelIter) bool) {
-	for _, ml := range m.levels {
-		if ml.levelIter != nil {
-			if done := fn(ml.levelIter); done {
+	for _, iter := range m.levels {
+		if li, ok := iter.iter.(*levelIter); ok {
+			if done := fn(li); done {
 				break
 			}
 		}

@@ -6,14 +6,12 @@ package pebble
 
 import (
 	"bytes"
-	"cmp"
-	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
 	"os"
-	"slices"
+	"sort"
 	"sync/atomic"
 	"time"
 
@@ -22,14 +20,11 @@ import (
 	"github.com/cockroachdb/pebble/internal/arenaskl"
 	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/internal/cache"
-	"github.com/cockroachdb/pebble/internal/constants"
 	"github.com/cockroachdb/pebble/internal/invariants"
 	"github.com/cockroachdb/pebble/internal/manifest"
 	"github.com/cockroachdb/pebble/internal/manual"
 	"github.com/cockroachdb/pebble/objstorage"
-	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/record"
-	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -39,23 +34,11 @@ const (
 
 	// The max batch size is limited by the uint32 offsets stored in
 	// internal/batchskl.node, DeferredBatchOp, and flushableBatchEntry.
-	//
-	// We limit the size to MaxUint32 (just short of 4GB) so that the exclusive
-	// end of an allocation fits in uint32.
-	//
-	// On 32-bit systems, slices are naturally limited to MaxInt (just short of
-	// 2GB).
-	maxBatchSize = constants.MaxUint32OrInt
+	maxBatchSize = 4 << 30 // 4 GB
 
 	// The max memtable size is limited by the uint32 offsets stored in
 	// internal/arenaskl.node, DeferredBatchOp, and flushableBatchEntry.
-	//
-	// We limit the size to MaxUint32 (just short of 4GB) so that the exclusive
-	// end of an allocation fits in uint32.
-	//
-	// On 32-bit systems, slices are naturally limited to MaxInt (just short of
-	// 2GB).
-	maxMemTableSize = constants.MaxUint32OrInt
+	maxMemTableSize = 4 << 30 // 4 GB
 )
 
 // TableCacheSize can be used to determine the table
@@ -174,7 +157,7 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		merge:               opts.Merger.Merge,
 		split:               opts.Comparer.Split,
 		abbreviatedKey:      opts.Comparer.AbbreviatedKey,
-		largeBatchThreshold: (opts.MemTableSize - uint64(memTableEmptySize)) / 2,
+		largeBatchThreshold: (opts.MemTableSize - int(memTableEmptySize)) / 2,
 		fileLock:            fileLock,
 		dataDir:             dataDir,
 		walDir:              walDir,
@@ -183,7 +166,8 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		closedCh:            make(chan struct{}),
 	}
 	d.mu.versions = &versionSet{}
-	d.diskAvailBytes.Store(math.MaxUint64)
+	d.atomic.diskAvailBytes = math.MaxUint64
+	d.mu.versions.diskAvailBytes = d.getDiskAvailableBytesCached
 
 	defer func() {
 		// If an error or panic occurs during open, attempt to release the manually
@@ -208,9 +192,6 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 					t.arenaBuf = nil
 				}
 			}
-			if d.cleanupManager != nil {
-				d.cleanupManager.Close()
-			}
 			if d.objProvider != nil {
 				d.objProvider.Close()
 			}
@@ -221,30 +202,34 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 	}()
 
 	d.commit = newCommitPipeline(commitEnv{
-		logSeqNum:     &d.mu.versions.logSeqNum,
-		visibleSeqNum: &d.mu.versions.visibleSeqNum,
+		logSeqNum:     &d.mu.versions.atomic.logSeqNum,
+		visibleSeqNum: &d.mu.versions.atomic.visibleSeqNum,
 		apply:         d.commitApply,
 		write:         d.commitWrite,
 	})
+	if d.opts.Experimental.MinDeletionRate > 0 {
+		d.deletionPacer = newDeletionPacer(int64(d.opts.Experimental.MinDeletionRate), d.getDeletionPacerInfo)
+	} else {
+		d.deletionPacer = nilPacer
+	}
 	d.mu.nextJobID = 1
 	d.mu.mem.nextSize = opts.MemTableSize
 	if d.mu.mem.nextSize > initialMemTableSize {
 		d.mu.mem.nextSize = initialMemTableSize
 	}
+	d.mu.mem.cond.L = &d.mu.Mutex
+	d.mu.cleaner.cond.L = &d.mu.Mutex
 	d.mu.compact.cond.L = &d.mu.Mutex
 	d.mu.compact.inProgress = make(map[*compaction]struct{})
 	d.mu.compact.noOngoingFlushStartTime = time.Now()
 	d.mu.snapshots.init()
-	// logSeqNum is the next sequence number that will be assigned.
-	// Start assigning sequence numbers from base.SeqNumStart to leave
-	// room for reserved sequence numbers (see comments around
-	// SeqNumStart).
-	d.mu.versions.logSeqNum.Store(base.SeqNumStart)
+	// logSeqNum is the next sequence number that will be assigned. Start
+	// assigning sequence numbers from 1 to match rocksdb.
+	d.mu.versions.atomic.logSeqNum = 1
 	d.mu.formatVers.vers.Store(uint64(formatVersion))
 	d.mu.formatVers.marker = formatVersionMarker
 
 	d.timeNow = time.Now
-	d.openedAt = d.timeNow()
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -261,7 +246,7 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		}
 
 		// Create the DB.
-		if err := d.mu.versions.create(jobID, dirname, opts, manifestMarker, setCurrent, d.FormatMajorVersion, &d.mu.Mutex); err != nil {
+		if err := d.mu.versions.create(jobID, dirname, opts, manifestMarker, setCurrent, &d.mu.Mutex); err != nil {
 			return nil, err
 		}
 	} else {
@@ -269,11 +254,11 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 			return nil, errors.Wrapf(ErrDBAlreadyExists, "dirname=%q", dirname)
 		}
 		// Load the version set.
-		if err := d.mu.versions.load(dirname, opts, manifestFileNum, manifestMarker, setCurrent, d.FormatMajorVersion, &d.mu.Mutex); err != nil {
+		if err := d.mu.versions.load(dirname, opts, manifestFileNum, manifestMarker, setCurrent, &d.mu.Mutex); err != nil {
 			return nil, err
 		}
 		if opts.ErrorIfNotPristine {
-			liveFileNums := make(map[base.DiskFileNum]struct{})
+			liveFileNums := make(map[FileNum]struct{})
 			d.mu.versions.addLiveFileNums(liveFileNums)
 			if len(liveFileNums) != 0 {
 				return nil, errors.Wrapf(ErrDBNotPristine, "dirname=%q", dirname)
@@ -286,7 +271,7 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 	// sequence number of the first batch that will be inserted.
 	if !d.opts.ReadOnly {
 		var entry *flushableEntry
-		d.mu.mem.mutable, entry = d.newMemTable(0 /* logNum */, d.mu.versions.logSeqNum.Load())
+		d.mu.mem.mutable, entry = d.newMemTable(0 /* logNum */, d.mu.versions.atomic.logSeqNum)
 		d.mu.mem.queue = append(d.mu.mem.queue, entry)
 	}
 
@@ -302,7 +287,7 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		}
 		ls = append(ls, ls2...)
 	}
-	providerSettings := objstorageprovider.Settings{
+	providerSettings := objstorage.Settings{
 		Logger:              opts.Logger,
 		FS:                  opts.FS,
 		FSDirName:           dirname,
@@ -311,17 +296,12 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		NoSyncOnClose:       opts.NoSyncOnClose,
 		BytesPerSync:        opts.BytesPerSync,
 	}
-	providerSettings.Remote.StorageFactory = opts.Experimental.RemoteStorage
-	providerSettings.Remote.CreateOnShared = opts.Experimental.CreateOnShared
-	providerSettings.Remote.CreateOnSharedLocator = opts.Experimental.CreateOnSharedLocator
-	providerSettings.Remote.CacheSizeBytes = opts.Experimental.SecondaryCacheSizeBytes
+	providerSettings.Shared.Storage = opts.Experimental.SharedStorage
 
-	d.objProvider, err = objstorageprovider.Open(providerSettings)
+	d.objProvider, err = objstorage.Open(providerSettings)
 	if err != nil {
 		return nil, err
 	}
-
-	d.cleanupManager = openCleanupManager(opts, d.objProvider, d.onObsoleteTableDelete, d.getDeletionPacerInfo)
 
 	if manifestExists {
 		curVersion := d.mu.versions.currentVersion()
@@ -331,15 +311,13 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 	}
 
 	tableCacheSize := TableCacheSize(opts.MaxOpenFiles)
-	d.tableCache = newTableCacheContainer(
-		opts.TableCache, d.cacheID, d.objProvider, d.opts, tableCacheSize,
-		&sstable.CategoryStatsCollector{})
+	d.tableCache = newTableCacheContainer(opts.TableCache, d.cacheID, d.objProvider, d.opts, tableCacheSize)
 	d.newIters = d.tableCache.newIters
 	d.tableNewRangeKeyIter = d.tableCache.newRangeKeyIter
 
 	// Replay any newer log files than the ones named in the manifest.
 	type fileNumAndName struct {
-		num  base.DiskFileNum
+		num  FileNum
 		name string
 	}
 	var logFiles []fileNumAndName
@@ -353,8 +331,8 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 
 		// Don't reuse any obsolete file numbers to avoid modifying an
 		// ingested sstable's original external file.
-		if d.mu.versions.nextFileNum <= uint64(fn.FileNum()) {
-			d.mu.versions.nextFileNum = uint64(fn.FileNum()) + 1
+		if d.mu.versions.nextFileNum <= fn {
+			d.mu.versions.nextFileNum = fn + 1
 		}
 
 		switch ft {
@@ -362,12 +340,12 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 			if fn >= d.mu.versions.minUnflushedLogNum {
 				logFiles = append(logFiles, fileNumAndName{fn, filename})
 			}
-			if d.logRecycler.minRecycleLogNum <= fn.FileNum() {
-				d.logRecycler.minRecycleLogNum = fn.FileNum() + 1
+			if d.logRecycler.minRecycleLogNum <= fn {
+				d.logRecycler.minRecycleLogNum = fn + 1
 			}
 		case fileTypeOptions:
-			if previousOptionsFileNum < fn.FileNum() {
-				previousOptionsFileNum = fn.FileNum()
+			if previousOptionsFileNum < fn {
+				previousOptionsFileNum = fn
 				previousOptionsFilename = filename
 			}
 		case fileTypeTemp, fileTypeOldTemp:
@@ -384,15 +362,6 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		}
 	}
 
-	// Ratchet d.mu.versions.nextFileNum ahead of all known objects in the
-	// objProvider. This avoids FileNum collisions with obsolete sstables.
-	objects := d.objProvider.List()
-	for _, obj := range objects {
-		if d.mu.versions.nextFileNum <= uint64(obj.DiskFileNum) {
-			d.mu.versions.nextFileNum = uint64(obj.DiskFileNum) + 1
-		}
-	}
-
 	// Validate the most-recent OPTIONS file, if there is one.
 	var strictWALTail bool
 	if previousOptionsFilename != "" {
@@ -403,8 +372,8 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		}
 	}
 
-	slices.SortFunc(logFiles, func(a, b fileNumAndName) int {
-		return cmp.Compare(a.num, b.num)
+	sort.Slice(logFiles, func(i, j int) bool {
+		return logFiles[i].num < logFiles[j].num
 	})
 
 	var ve versionEdit
@@ -418,15 +387,15 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 		}
 		toFlush = append(toFlush, flush...)
 		d.mu.versions.markFileNumUsed(lf.num)
-		if d.mu.versions.logSeqNum.Load() < maxSeqNum {
-			d.mu.versions.logSeqNum.Store(maxSeqNum)
+		if d.mu.versions.atomic.logSeqNum < maxSeqNum {
+			d.mu.versions.atomic.logSeqNum = maxSeqNum
 		}
 	}
-	d.mu.versions.visibleSeqNum.Store(d.mu.versions.logSeqNum.Load())
+	d.mu.versions.atomic.visibleSeqNum = d.mu.versions.atomic.logSeqNum
 
 	if !d.opts.ReadOnly {
 		// Create an empty .log file.
-		newLogNum := d.mu.versions.getNextDiskFileNum()
+		newLogNum := d.mu.versions.getNextFileNum()
 
 		// This logic is slightly different than RocksDB's. Specifically, RocksDB
 		// sets MinUnflushedLogNum to max-recovered-log-num + 1. We set it to the
@@ -500,7 +469,7 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 
 	if !d.opts.ReadOnly {
 		// Write the current options to disk.
-		d.optionsFileNum = d.mu.versions.getNextDiskFileNum()
+		d.optionsFileNum = d.mu.versions.getNextFileNum()
 		tmpPath := base.MakeFilepath(opts.FS, dirname, fileTypeTemp, d.optionsFileNum)
 		optionsPath := base.MakeFilepath(opts.FS, dirname, fileTypeOptions, d.optionsFileNum)
 
@@ -535,7 +504,7 @@ func Open(dirname string, opts *Options) (db *DB, _ error) {
 
 	if !d.opts.ReadOnly {
 		d.scanObsoleteFiles(ls)
-		d.deleteObsoleteFiles(jobID)
+		d.deleteObsoleteFiles(jobID, true /* waitForOngoing */)
 	} else {
 		// All the log files are obsolete.
 		d.mu.versions.metrics.WAL.Files = int64(len(logFiles))
@@ -644,9 +613,9 @@ func GetVersion(dir string, fs vfs.FS) (string, error) {
 			// processed, reset version. This is because rocksdb often
 			// writes multiple options files without deleting previous ones.
 			// Otherwise, skip parsing this options file.
-			if fn.FileNum() > lastOptionsSeen {
+			if fn > lastOptionsSeen {
 				version = ""
-				lastOptionsSeen = fn.FileNum()
+				lastOptionsSeen = fn
 			} else {
 				continue
 			}
@@ -693,12 +662,7 @@ func GetVersion(dir string, fs vfs.FS) (string, error) {
 // d.mu must be held when calling this, but the mutex may be dropped and
 // re-acquired during the course of this method.
 func (d *DB) replayWAL(
-	jobID int,
-	ve *versionEdit,
-	fs vfs.FS,
-	filename string,
-	logNum base.DiskFileNum,
-	strictWALTail bool,
+	jobID int, ve *versionEdit, fs vfs.FS, filename string, logNum FileNum, strictWALTail bool,
 ) (toFlush flushableList, maxSeqNum uint64, err error) {
 	file, err := fs.Open(filename)
 	if err != nil {
@@ -713,8 +677,6 @@ func (d *DB) replayWAL(
 		rr              = record.NewReader(file, logNum)
 		offset          int64 // byte offset in rr
 		lastFlushOffset int64
-		keysReplayed    int64 // number of keys replayed
-		batchesReplayed int64 // number of batches replayed
 	)
 
 	if d.opts.ReadOnly {
@@ -763,7 +725,7 @@ func (d *DB) replayWAL(
 		// TODO(bananabrick): See if we can use the actual base level here,
 		// instead of using 1.
 		c := newFlush(d.opts, d.mu.versions.currentVersion(),
-			1 /* base level */, toFlush, d.timeNow())
+			1 /* base level */, toFlush)
 		newVE, _, _, err := d.runCompaction(jobID, c)
 		if err != nil {
 			return errors.Wrapf(err, "running compaction during WAL replay")
@@ -803,23 +765,21 @@ func (d *DB) replayWAL(
 
 		// Specify Batch.db so that Batch.SetRepr will compute Batch.memTableSize
 		// which is used below.
-		b = Batch{}
-		b.db = d
+		b = Batch{db: d}
 		b.SetRepr(buf.Bytes())
 		seqNum := b.SeqNum()
 		maxSeqNum = seqNum + uint64(b.Count())
-		keysReplayed += int64(b.Count())
-		batchesReplayed++
+
 		{
 			br := b.Reader()
 			if kind, encodedFileNum, _, _ := br.Next(); kind == InternalKeyKindIngestSST {
-				fileNums := make([]base.DiskFileNum, 0, b.Count())
+				fileNums := make([]FileNum, 0, b.Count())
 				addFileNum := func(encodedFileNum []byte) {
 					fileNum, n := binary.Uvarint(encodedFileNum)
 					if n <= 0 {
 						panic("pebble: ingest sstable file num is invalid.")
 					}
-					fileNums = append(fileNums, base.FileNum(fileNum).DiskFileNum())
+					fileNums = append(fileNums, base.FileNum(fileNum))
 				}
 				addFileNum(encodedFileNum)
 
@@ -838,35 +798,17 @@ func (d *DB) replayWAL(
 					panic("pebble: invalid number of entries in batch.")
 				}
 
-				meta := make([]*fileMetadata, len(fileNums))
+				paths := make([]string, len(fileNums))
 				for i, n := range fileNums {
-					var readable objstorage.Readable
-					objMeta, err := d.objProvider.Lookup(fileTypeTable, n)
-					if err != nil {
-						return nil, 0, errors.Wrap(err, "pebble: error when looking up ingested SSTs")
-					}
-					if objMeta.IsRemote() {
-						readable, err = d.objProvider.OpenForReading(context.TODO(), fileTypeTable, n, objstorage.OpenOptions{MustExist: true})
-						if err != nil {
-							return nil, 0, errors.Wrap(err, "pebble: error when opening flushable ingest files")
-						}
-					} else {
-						path := base.MakeFilepath(d.opts.FS, d.dirname, fileTypeTable, n)
-						f, err := d.opts.FS.Open(path)
-						if err != nil {
-							return nil, 0, err
-						}
+					paths[i] = base.MakeFilepath(d.opts.FS, d.dirname, fileTypeTable, n)
+				}
 
-						readable, err = sstable.NewSimpleReadable(f)
-						if err != nil {
-							return nil, 0, err
-						}
-					}
-					// NB: ingestLoad1 will close readable.
-					meta[i], err = ingestLoad1(d.opts, d.FormatMajorVersion(), readable, d.cacheID, n)
-					if err != nil {
-						return nil, 0, errors.Wrap(err, "pebble: error when loading flushable ingest files")
-					}
+				var meta []*manifest.FileMetadata
+				meta, _, err = ingestLoad(
+					d.opts, d.FormatMajorVersion(), paths, d.cacheID, fileNums,
+				)
+				if err != nil {
+					return nil, 0, err
 				}
 
 				if uint32(len(meta)) != b.Count() {
@@ -912,10 +854,9 @@ func (d *DB) replayWAL(
 						d.opts, d.mu.versions.currentVersion(),
 						1, /* base level */
 						[]*flushableEntry{entry},
-						d.timeNow(),
 					)
 					for _, file := range c.flushing[0].flushable.(*ingestedFlushable).files {
-						ve.NewFiles = append(ve.NewFiles, newFileEntry{Level: 0, Meta: file.FileMetadata})
+						ve.NewFiles = append(ve.NewFiles, newFileEntry{Level: 0, Meta: file})
 					}
 				}
 				return toFlush, maxSeqNum, nil
@@ -926,12 +867,12 @@ func (d *DB) replayWAL(
 			flushMem()
 			// Make a copy of the data slice since it is currently owned by buf and will
 			// be reused in the next iteration.
-			b.data = slices.Clone(b.data)
+			b.data = append([]byte(nil), b.data...)
 			b.flushable = newFlushableBatch(&b, d.opts.Comparer)
 			entry := d.newFlushableEntry(b.flushable, logNum, b.SeqNum())
 			// Disable memory accounting by adding a reader ref that will never be
 			// removed.
-			entry.readerRefs.Add(1)
+			entry.readerRefs++
 			if d.opts.ReadOnly {
 				d.mu.mem.queue = append(d.mu.mem.queue, entry)
 				// We added the flushable batch to the flushable to the queue.
@@ -969,10 +910,7 @@ func (d *DB) replayWAL(
 		}
 		buf.Reset()
 	}
-
-	d.opts.Logger.Infof("[JOB %d] WAL file %s with log number %s stopped reading at offset: %d; replayed %d keys in %d batches", jobID, filename, logNum.String(), offset, keysReplayed, batchesReplayed)
 	flushMem()
-
 	// mem is nil here.
 	if !d.opts.ReadOnly {
 		err = updateVE()
@@ -1052,7 +990,7 @@ func Peek(dirname string, fs vfs.FS) (*DBDesc, error) {
 // LockDirectory may be used to expand the critical section protected by the
 // database lock to include setup before the call to Open.
 func LockDirectory(dirname string, fs vfs.FS) (*Lock, error) {
-	fileLock, err := fs.Lock(base.MakeFilepath(fs, dirname, fileTypeLock, base.FileNum(0).DiskFileNum()))
+	fileLock, err := fs.Lock(base.MakeFilepath(fs, dirname, fileTypeLock, 0))
 	if err != nil {
 		return nil, err
 	}
@@ -1130,42 +1068,35 @@ func IsCorruptionError(err error) bool {
 	return errors.Is(err, base.ErrCorruption)
 }
 
-func checkConsistency(v *manifest.Version, dirname string, objProvider objstorage.Provider) error {
-	var errs []error
-	dedup := make(map[base.DiskFileNum]struct{})
+func checkConsistency(v *manifest.Version, dirname string, objProvider *objstorage.Provider) error {
+	var buf bytes.Buffer
+	var args []interface{}
+
 	for level, files := range v.Levels {
 		iter := files.Iter()
 		for f := iter.First(); f != nil; f = iter.Next() {
-			backingState := f.FileBacking
-			if _, ok := dedup[backingState.DiskFileNum]; ok {
-				continue
-			}
-			dedup[backingState.DiskFileNum] = struct{}{}
-			fileNum := backingState.DiskFileNum
-			fileSize := backingState.Size
-			// We skip over remote objects; those are instead checked asynchronously
-			// by the table stats loading job.
-			meta, err := objProvider.Lookup(base.FileTypeTable, fileNum)
+			meta, err := objProvider.Lookup(base.FileTypeTable, f.FileNum)
 			var size int64
 			if err == nil {
-				if meta.IsRemote() {
-					continue
-				}
 				size, err = objProvider.Size(meta)
 			}
 			if err != nil {
-				errs = append(errs, errors.Wrapf(err, "L%d: %s", errors.Safe(level), fileNum))
+				buf.WriteString("L%d: %s: %v\n")
+				args = append(args, errors.Safe(level), errors.Safe(f.FileNum), err)
 				continue
 			}
 
-			if size != int64(fileSize) {
-				errs = append(errs, errors.Errorf(
-					"L%d: %s: object size mismatch (%s): %d (disk) != %d (MANIFEST)",
-					errors.Safe(level), fileNum, objProvider.Path(meta),
-					errors.Safe(size), errors.Safe(fileSize)))
+			if size != int64(f.Size) {
+				buf.WriteString("L%d: %s: object size mismatch (%s): %d (disk) != %d (MANIFEST)\n")
+				args = append(args, errors.Safe(level), errors.Safe(f.FileNum), objProvider.Path(meta),
+					errors.Safe(size), errors.Safe(f.Size))
 				continue
 			}
 		}
 	}
-	return errors.Join(errs...)
+
+	if buf.Len() == 0 {
+		return nil
+	}
+	return errors.Errorf(buf.String(), args...)
 }

@@ -18,21 +18,22 @@
 package arenaskl
 
 import (
+	"math"
 	"sync/atomic"
 	"unsafe"
 
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble/internal/constants"
-	"github.com/cockroachdb/pebble/internal/invariants"
 )
 
 // Arena is lock-free.
 type Arena struct {
-	n   atomic.Uint64
+	n   uint64
 	buf []byte
 }
 
-const nodeAlignment = 4
+const (
+	align4 = 3
+)
 
 var (
 	// ErrArenaFull indicates that the arena is full and cannot perform any more
@@ -43,28 +44,20 @@ var (
 // NewArena allocates a new arena using the specified buffer as the backing
 // store.
 func NewArena(buf []byte) *Arena {
-	if len(buf) > constants.MaxUint32OrInt {
-		if invariants.Enabled {
-			panic(errors.AssertionFailedf("attempting to create arena of size %d", len(buf)))
-		}
-		buf = buf[:constants.MaxUint32OrInt]
-	}
-	a := &Arena{
+	// Don't store data at position 0 in order to reserve offset=0 as a kind
+	// of nil pointer.
+	return &Arena{
+		n:   1,
 		buf: buf,
 	}
-	// We don't store data at position 0 in order to reserve offset=0 as a kind of
-	// nil pointer.
-	a.n.Store(1)
-	return a
 }
 
 // Size returns the number of bytes allocated by the arena.
 func (a *Arena) Size() uint32 {
-	s := a.n.Load()
-	if s > constants.MaxUint32OrInt {
-		// The last failed allocation can push the size higher than len(a.buf).
-		// Saturate at the maximum representable offset.
-		return constants.MaxUint32OrInt
+	s := atomic.LoadUint64(&a.n)
+	if s > math.MaxUint32 {
+		// Saturate at MaxUint32.
+		return math.MaxUint32
 	}
 	return uint32(s)
 }
@@ -74,33 +67,24 @@ func (a *Arena) Capacity() uint32 {
 	return uint32(len(a.buf))
 }
 
-// alloc allocates a buffer of the given size and with the given alignment
-// (which must be a power of 2).
-//
-// If overflow is not 0, it also ensures that many bytes after the buffer are
-// inside the arena (this is used for structures that are larger than the
-// requested size but don't use those extra bytes).
-func (a *Arena) alloc(size, alignment, overflow uint32) (uint32, uint32, error) {
-	if invariants.Enabled && (alignment&(alignment-1)) != 0 {
-		panic(errors.AssertionFailedf("invalid alignment %d", alignment))
-	}
+func (a *Arena) alloc(size, align, overflow uint32) (uint32, uint32, error) {
 	// Verify that the arena isn't already full.
-	origSize := a.n.Load()
+	origSize := atomic.LoadUint64(&a.n)
 	if int(origSize) > len(a.buf) {
 		return 0, 0, ErrArenaFull
 	}
 
 	// Pad the allocation with enough bytes to ensure the requested alignment.
-	padded := uint64(size) + uint64(alignment) - 1
+	padded := uint32(size) + align
 
-	newSize := a.n.Add(padded)
-	if newSize+uint64(overflow) > uint64(len(a.buf)) {
+	newSize := atomic.AddUint64(&a.n, uint64(padded))
+	if int(newSize)+int(overflow) > len(a.buf) {
 		return 0, 0, ErrArenaFull
 	}
 
 	// Return the aligned offset.
-	offset := (uint32(newSize) - size) & ^(alignment - 1)
-	return offset, uint32(padded), nil
+	offset := (uint32(newSize) - padded + align) & ^align
+	return offset, padded, nil
 }
 
 func (a *Arena) getBytes(offset uint32, size uint32) []byte {

@@ -4,7 +4,7 @@ GOFLAGS :=
 STRESSFLAGS :=
 TAGS := invariants
 TESTS := .
-COVER_PROFILE := coverprofile.out
+LATEST_RELEASE := $(shell git fetch origin && git branch -r --list '*/crl-release-*' | grep -o 'crl-release-.*$$' | sort | tail -1)
 
 .PHONY: all
 all:
@@ -15,20 +15,13 @@ all:
 	@echo "  make stressrace"
 	@echo "  make stressmeta"
 	@echo "  make crossversion-meta"
-	@echo "  make testcoverage"
 	@echo "  make mod-update"
-	@echo "  make generate"
-	@echo "  make generate-test-data"
 	@echo "  make clean"
 
 override testflags :=
 .PHONY: test
 test:
 	${GO} test -tags '$(TAGS)' ${testflags} -run ${TESTS} ${PKG}
-
-.PHONY: testcoverage
-testcoverage:
-	${GO} test -tags '$(TAGS)' ${testflags} -run ${TESTS} ${PKG} -coverprofile ${COVER_PROFILE}
 
 .PHONY: testrace
 testrace: testflags += -race -timeout 20m
@@ -40,10 +33,6 @@ testasan: test
 testmsan: export CC=clang
 testmsan: testflags += -msan -timeout 20m
 testmsan: test
-
-.PHONY: testobjiotracing
-testobjiotracing:
-	${GO} test -tags '$(TAGS) pebble_obj_io_tracing' ${testflags} -run ${TESTS} ./objstorage/objstorageprovider/objiotracing
 
 .PHONY: lint
 lint:
@@ -62,7 +51,6 @@ stressmeta: stress
 
 .PHONY: crossversion-meta
 crossversion-meta:
-	$(eval LATEST_RELEASE := $(shell git fetch origin && git branch -r --list '*/crl-release-*' | grep -o 'crl-release-.*$$' | sort | tail -1))
 	git checkout ${LATEST_RELEASE}; \
 		${GO} test -c ./internal/metamorphic -o './internal/metamorphic/crossversion/${LATEST_RELEASE}.test'; \
 		git checkout -; \
@@ -71,22 +59,11 @@ crossversion-meta:
 
 .PHONY: stress-crossversion
 stress-crossversion:
-	STRESS=1 ./scripts/run-crossversion-meta.sh crl-release-21.2 crl-release-22.1 crl-release-22.2 crl-release-23.1 master
+	STRESS=1 ./scripts/run-crossversion-meta.sh crl-release-21.2 crl-release-22.1 crl-release-22.2 master
 
 .PHONY: generate
 generate:
 	${GO} generate ${PKG}
-
-generate:
-
-# Note that the output of generate-test-data is not deterministic. This should
-# only be run manually as needed.
-.PHONY: generate-test-data
-generate-test-data:
-	${GO} run -tags make_incorrect_manifests ./tool/make_incorrect_manifests.go
-	${GO} run -tags make_test_find_db ./tool/make_test_find_db.go
-	${GO} run -tags make_test_sstables ./tool/make_test_sstables.go
-	${GO} run -tags make_test_remotecat ./tool/make_test_remotecat.go
 
 mod-update:
 	${GO} get -u
@@ -115,11 +92,9 @@ endif
 	@${GO} mod tidy
 	$(MAKE) git-clean-check
 
-# TODO(radu): switch back to @latest once bogus doc changes are
-# addressed; see https://github.com/cockroachdb/crlfmt/pull/44
 .PHONY: format
 format:
-	go install github.com/cockroachdb/crlfmt@44a36ec7 && crlfmt -w -tab 2 .
+	go install github.com/cockroachdb/crlfmt@latest && crlfmt -w -tab 2 .
 
 .PHONY: format-check
 format-check:

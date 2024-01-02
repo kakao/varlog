@@ -4,31 +4,26 @@
 
 package objstorage
 
-import "context"
+import "io"
 
 // NoopReadHandle can be used by Readable implementations that don't
 // support read-ahead.
 type NoopReadHandle struct {
-	readable Readable
+	io.ReaderAt
 }
 
 // MakeNoopReadHandle initializes a NoopReadHandle.
-func MakeNoopReadHandle(r Readable) NoopReadHandle {
-	return NoopReadHandle{readable: r}
+func MakeNoopReadHandle(r io.ReaderAt) NoopReadHandle {
+	return NoopReadHandle{ReaderAt: r}
 }
 
 var _ ReadHandle = (*NoopReadHandle)(nil)
 
-// ReadAt is part of the ReadHandle interface.
-func (h *NoopReadHandle) ReadAt(ctx context.Context, p []byte, off int64) error {
-	return h.readable.ReadAt(ctx, p, off)
-}
-
 // Close is part of the ReadHandle interface.
 func (*NoopReadHandle) Close() error { return nil }
 
-// SetupForCompaction is part of the ReadHandle interface.
-func (*NoopReadHandle) SetupForCompaction() {}
+// MaxReadahead is part of the ReadHandle interface.
+func (*NoopReadHandle) MaxReadahead() {}
 
 // RecordCacheHit is part of the ReadHandle interface.
-func (*NoopReadHandle) RecordCacheHit(_ context.Context, offset, size int64) {}
+func (*NoopReadHandle) RecordCacheHit(offset, size int64) {}

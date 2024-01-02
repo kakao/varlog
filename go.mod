@@ -3,7 +3,7 @@ module github.com/kakao/varlog
 go 1.21
 
 require (
-	github.com/cockroachdb/pebble v0.0.0-20231114155657-6682fd5e8763
+	github.com/cockroachdb/pebble v1.0.0
 	github.com/docker/go-units v0.5.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.1
@@ -51,7 +51,6 @@ require (
 	github.com/cockroachdb/errors v1.11.1 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b // indirect
 	github.com/cockroachdb/redact v1.1.5 // indirect
-	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 // indirect
 	github.com/coreos/go-semver v0.2.0 // indirect
 	github.com/coreos/go-systemd v0.0.0-20180511133405-39ca1b05acc7 // indirect
 	github.com/coreos/pkg v0.0.0-20160727233714-3ac0863d7acf // indirect

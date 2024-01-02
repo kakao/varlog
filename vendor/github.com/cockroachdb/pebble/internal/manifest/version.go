@@ -6,7 +6,6 @@ package manifest
 
 import (
 	"bytes"
-	stdcmp "cmp"
 	"fmt"
 	"sort"
 	"strconv"
@@ -50,9 +49,6 @@ type TableStats struct {
 	// The number of point and range deletion entries in the table.
 	NumDeletions uint64
 	// NumRangeKeySets is the total number of range key sets in the table.
-	//
-	// NB: If there's a chance that the sstable contains any range key sets,
-	// then NumRangeKeySets must be > 0.
 	NumRangeKeySets uint64
 	// Estimate of the total disk space that may be dropped by this table's
 	// point deletions by compacting them.
@@ -64,11 +60,9 @@ type TableStats struct {
 	// overlapping data in L0 and ignores L0 sublevels, but the error that
 	// introduces is expected to be small.
 	//
-	// Tables in the bottommost level of the LSM may have a nonzero estimate if
-	// snapshots or move compactions prevented the elision of their range
-	// tombstones. A table in the bottommost level that was ingested into L6
-	// will have a zero estimate, because the file's sequence numbers indicate
-	// that the tombstone cannot drop any data contained within the file itself.
+	// Tables in the bottommost level of the LSM may have a nonzero estimate
+	// if snapshots or move compactions prevented the elision of their range
+	// tombstones.
 	RangeDeletionsBytesEstimate uint64
 	// Total size of value blocks and value index block.
 	ValueBlocksSize uint64
@@ -125,72 +119,43 @@ func (s CompactionState) String() string {
 	}
 }
 
-// FileMetadata is maintained for leveled-ssts, i.e., they belong to a level of
-// some version. FileMetadata does not contain the actual level of the sst,
-// since such leveled-ssts can move across levels in different versions, while
-// sharing the same FileMetadata. There are two kinds of leveled-ssts, physical
-// and virtual. Underlying both leveled-ssts is a backing-sst, for which the
-// only state is FileBacking. A backing-sst is level-less. It is possible for a
-// backing-sst to be referred to by a physical sst in one version and by one or
-// more virtual ssts in one or more versions. A backing-sst becomes obsolete
-// and can be deleted once it is no longer required by any physical or virtual
-// sst in any version.
-//
-// We maintain some invariants:
-//
-//  1. Each physical and virtual sst will have a unique FileMetadata.FileNum,
-//     and there will be exactly one FileMetadata associated with the FileNum.
-//
-//  2. Within a version, a backing-sst is either only referred to by one
-//     physical sst or one or more virtual ssts.
-//
-//  3. Once a backing-sst is referred to by a virtual sst in the latest version,
-//     it cannot go back to being referred to by a physical sst in any future
-//     version.
-//
-// Once a physical sst is no longer needed by any version, we will no longer
-// maintain the file metadata associated with it. We will still maintain the
-// FileBacking associated with the physical sst if the backing sst is required
-// by any virtual ssts in any version.
+// FileMetadata holds the metadata for an on-disk table.
 type FileMetadata struct {
-	// AllowedSeeks is used to determine if a file should be picked for
-	// a read triggered compaction. It is decremented when read sampling
-	// in pebble.Iterator after every after every positioning operation
-	// that returns a user key (eg. Next, Prev, SeekGE, SeekLT, etc).
-	AllowedSeeks atomic.Int64
+	// Atomic contains fields which are accessed atomically. Go allocations
+	// are guaranteed to be 64-bit aligned which we take advantage of by
+	// placing the 64-bit fields which we access atomically at the beginning
+	// of the FileMetadata struct. For more information, see
+	// https://golang.org/pkg/sync/atomic/#pkg-note-BUG.
+	Atomic struct {
+		// AllowedSeeks is used to determine if a file should be picked for
+		// a read triggered compaction. It is decremented when read sampling
+		// in pebble.Iterator after every after every positioning operation
+		// that returns a user key (eg. Next, Prev, SeekGE, SeekLT, etc).
+		AllowedSeeks int64
 
-	// statsValid indicates if stats have been loaded for the table. The
-	// TableStats structure is populated only if valid is true.
-	statsValid atomic.Bool
-
-	// FileBacking is the state which backs either a physical or virtual
-	// sstables.
-	FileBacking *FileBacking
+		// statsValid is 1 if stats have been loaded for the table. The
+		// TableStats structure is populated only if valid is 1.
+		statsValid uint32
+	}
 
 	// InitAllowedSeeks is the inital value of allowed seeks. This is used
 	// to re-set allowed seeks on a file once it hits 0.
 	InitAllowedSeeks int64
+
+	// Reference count for the file: incremented when a file is added to a
+	// version and decremented when the version is unreferenced. The file is
+	// obsolete when the reference count falls to zero.
+	Refs int32
 	// FileNum is the file number.
-	//
-	// INVARIANT: when !FileMetadata.Virtual, FileNum == FileBacking.DiskFileNum.
 	FileNum base.FileNum
-	// Size is the size of the file, in bytes. Size is an approximate value for
-	// virtual sstables.
-	//
-	// INVARIANTS:
-	// - When !FileMetadata.Virtual, Size == FileBacking.Size.
-	// - Size should be non-zero. Size 0 virtual sstables must not be created.
+	// Size is the size of the file, in bytes.
 	Size uint64
 	// File creation time in seconds since the epoch (1970-01-01 00:00:00
 	// UTC). For ingested sstables, this corresponds to the time the file was
-	// ingested. For virtual sstables, this corresponds to the wall clock time
-	// when the FileMetadata for the virtual sstable was first created.
+	// ingested.
 	CreationTime int64
-	// Lower and upper bounds for the smallest and largest sequence numbers in
-	// the table, across both point and range keys. For physical sstables, these
-	// values are tight bounds. For virtual sstables, there is no guarantee that
-	// there will be keys with SmallestSeqNum or LargestSeqNum within virtual
-	// sstable bounds.
+	// Smallest and largest sequence numbers in the table, across both point and
+	// range keys.
 	SmallestSeqNum uint64
 	LargestSeqNum  uint64
 	// SmallestPointKey and LargestPointKey are the inclusive bounds for the
@@ -213,17 +178,8 @@ type FileMetadata struct {
 	Smallest InternalKey
 	Largest  InternalKey
 	// Stats describe table statistics. Protected by DB.mu.
-	//
-	// For virtual sstables, set stats upon virtual sstable creation as
-	// asynchronous computation of stats is not currently supported.
-	//
-	// TODO(bananabrick): To support manifest replay for virtual sstables, we
-	// probably need to compute virtual sstable stats asynchronously. Otherwise,
-	// we'd have to write virtual sstable stats to the version edit.
 	Stats TableStats
 
-	// For L0 files only. Protected by DB.mu. Used to generate L0 sublevels and
-	// pick L0 compactions. Only accurate for the most recent Version.
 	SubLevel         int
 	L0Index          int
 	minIntervalIndex int
@@ -232,6 +188,9 @@ type FileMetadata struct {
 	// NB: the alignment of this struct is 8 bytes. We pack all the bools to
 	// ensure an optimal packing.
 
+	// For L0 files only. Protected by DB.mu. Used to generate L0 sublevels and
+	// pick L0 compactions. Only accurate for the most recent Version.
+	//
 	// IsIntraL0Compacting is set to True if this file is part of an intra-L0
 	// compaction. When it's true, IsCompacting must also return true. If
 	// Compacting is true and IsIntraL0Compacting is false for an L0 file, the
@@ -267,212 +226,6 @@ type FileMetadata struct {
 	// key type (point or range) corresponds to the smallest and largest overall
 	// table bounds.
 	boundTypeSmallest, boundTypeLargest boundType
-	// Virtual is true if the FileMetadata belongs to a virtual sstable.
-	Virtual bool
-}
-
-// PhysicalFileMeta is used by functions which want a guarantee that their input
-// belongs to a physical sst and not a virtual sst.
-//
-// NB: This type should only be constructed by calling
-// FileMetadata.PhysicalMeta.
-type PhysicalFileMeta struct {
-	*FileMetadata
-}
-
-// VirtualFileMeta is used by functions which want a guarantee that their input
-// belongs to a virtual sst and not a physical sst.
-//
-// A VirtualFileMeta inherits all the same fields as a FileMetadata. These
-// fields have additional invariants imposed on them, and/or slightly varying
-// meanings:
-//   - Smallest and Largest (and their counterparts
-//     {Smallest, Largest}{Point,Range}Key) remain tight bounds that represent a
-//     key at that exact bound. We make the effort to determine the next smallest
-//     or largest key in an sstable after virtualizing it, to maintain this
-//     tightness. If the largest is a sentinel key (IsExclusiveSentinel()), it
-//     could mean that a rangedel or range key ends at that user key, or has been
-//     truncated to that user key.
-//   - One invariant is that if a rangedel or range key is truncated on its
-//     upper bound, the virtual sstable *must* have a rangedel or range key
-//     sentinel key as its upper bound. This is because truncation yields
-//     an exclusive upper bound for the rangedel/rangekey, and if there are
-//     any points at that exclusive upper bound within the same virtual
-//     sstable, those could get uncovered by this truncation. We enforce this
-//     invariant in calls to keyspan.Truncate.
-//   - Size is an estimate of the size of the virtualized portion of this sstable.
-//     The underlying file's size is stored in FileBacking.Size, though it could
-//     also be estimated or could correspond to just the referenced portion of
-//     a file (eg. if the file originated on another node).
-//   - Size must be > 0.
-//   - SmallestSeqNum and LargestSeqNum are loose bounds for virtual sstables.
-//     This means that all keys in the virtual sstable must have seqnums within
-//     [SmallestSeqNum, LargestSeqNum], however there's no guarantee that there's
-//     a key with a seqnum at either of the bounds. Calculating tight seqnum
-//     bounds would be too expensive and deliver little value.
-//
-// NB: This type should only be constructed by calling FileMetadata.VirtualMeta.
-type VirtualFileMeta struct {
-	*FileMetadata
-}
-
-// PhysicalMeta should be the only source of creating the PhysicalFileMeta
-// wrapper type.
-func (m *FileMetadata) PhysicalMeta() PhysicalFileMeta {
-	if m.Virtual {
-		panic("pebble: file metadata does not belong to a physical sstable")
-	}
-	return PhysicalFileMeta{
-		m,
-	}
-}
-
-// VirtualMeta should be the only source of creating the VirtualFileMeta wrapper
-// type.
-func (m *FileMetadata) VirtualMeta() VirtualFileMeta {
-	if !m.Virtual {
-		panic("pebble: file metadata does not belong to a virtual sstable")
-	}
-	return VirtualFileMeta{
-		m,
-	}
-}
-
-// FileBacking either backs a single physical sstable, or one or more virtual
-// sstables.
-//
-// See the comment above the FileMetadata type for sstable terminology.
-type FileBacking struct {
-	// Reference count for the backing file on disk: incremented when a
-	// physical or virtual sstable which is backed by the FileBacking is
-	// added to a version and decremented when the version is unreferenced.
-	// We ref count in order to determine when it is safe to delete a
-	// backing sst file from disk. The backing file is obsolete when the
-	// reference count falls to zero.
-	refs atomic.Int32
-	// latestVersionRefs are the references to the FileBacking in the
-	// latest version. This reference can be through a single physical
-	// sstable in the latest version, or one or more virtual sstables in the
-	// latest version.
-	//
-	// INVARIANT: latestVersionRefs <= refs.
-	latestVersionRefs atomic.Int32
-	// VirtualizedSize is set iff the backing sst is only referred to by
-	// virtual ssts in the latest version. VirtualizedSize is the sum of the
-	// virtual sstable sizes of all of the virtual sstables in the latest
-	// version which are backed by the physical sstable. When a virtual
-	// sstable is removed from the latest version, we will decrement the
-	// VirtualizedSize. During compaction picking, we'll compensate a
-	// virtual sstable file size by
-	// (FileBacking.Size - FileBacking.VirtualizedSize) / latestVersionRefs.
-	// The intuition is that if FileBacking.Size - FileBacking.VirtualizedSize
-	// is high, then the space amplification due to virtual sstables is
-	// high, and we should pick the virtual sstable with a higher priority.
-	//
-	// TODO(bananabrick): Compensate the virtual sstable file size using
-	// the VirtualizedSize during compaction picking and test.
-	VirtualizedSize atomic.Uint64
-	DiskFileNum     base.DiskFileNum
-	Size            uint64
-}
-
-// InitPhysicalBacking allocates and sets the FileBacking which is required by a
-// physical sstable FileMetadata.
-//
-// Ensure that the state required by FileBacking, such as the FileNum, is
-// already set on the FileMetadata before InitPhysicalBacking is called.
-// Calling InitPhysicalBacking only after the relevant state has been set in the
-// FileMetadata is not necessary in tests which don't rely on FileBacking.
-func (m *FileMetadata) InitPhysicalBacking() {
-	if m.Virtual {
-		panic("pebble: virtual sstables should use a pre-existing FileBacking")
-	}
-	if m.FileBacking == nil {
-		m.FileBacking = &FileBacking{Size: m.Size, DiskFileNum: m.FileNum.DiskFileNum()}
-	}
-}
-
-// InitProviderBacking creates a new FileBacking for a file backed by
-// an objstorage.Provider.
-func (m *FileMetadata) InitProviderBacking(fileNum base.DiskFileNum) {
-	if !m.Virtual {
-		panic("pebble: provider-backed sstables must be virtual")
-	}
-	if m.FileBacking == nil {
-		m.FileBacking = &FileBacking{DiskFileNum: fileNum}
-	}
-}
-
-// ValidateVirtual should be called once the FileMetadata for a virtual sstable
-// is created to verify that the fields of the virtual sstable are sound.
-func (m *FileMetadata) ValidateVirtual(createdFrom *FileMetadata) {
-	if !m.Virtual {
-		panic("pebble: invalid virtual sstable")
-	}
-
-	if createdFrom.SmallestSeqNum != m.SmallestSeqNum {
-		panic("pebble: invalid smallest sequence number for virtual sstable")
-	}
-
-	if createdFrom.LargestSeqNum != m.LargestSeqNum {
-		panic("pebble: invalid largest sequence number for virtual sstable")
-	}
-
-	if createdFrom.FileBacking != nil && createdFrom.FileBacking != m.FileBacking {
-		panic("pebble: invalid physical sstable state for virtual sstable")
-	}
-
-	if m.Size == 0 {
-		panic("pebble: virtual sstable size must be set upon creation")
-	}
-}
-
-// Refs returns the refcount of backing sstable.
-func (m *FileMetadata) Refs() int32 {
-	return m.FileBacking.refs.Load()
-}
-
-// Ref increments the ref count associated with the backing sstable.
-func (m *FileMetadata) Ref() {
-	m.FileBacking.refs.Add(1)
-}
-
-// Unref decrements the ref count associated with the backing sstable.
-func (m *FileMetadata) Unref() int32 {
-	v := m.FileBacking.refs.Add(-1)
-	if invariants.Enabled && v < 0 {
-		panic("pebble: invalid FileMetadata refcounting")
-	}
-	return v
-}
-
-// LatestRef increments the latest ref count associated with the backing
-// sstable.
-func (m *FileMetadata) LatestRef() {
-	m.FileBacking.latestVersionRefs.Add(1)
-
-	if m.Virtual {
-		m.FileBacking.VirtualizedSize.Add(m.Size)
-	}
-}
-
-// LatestUnref decrements the latest ref count associated with the backing
-// sstable.
-func (m *FileMetadata) LatestUnref() int32 {
-	if m.Virtual {
-		m.FileBacking.VirtualizedSize.Add(-m.Size)
-	}
-
-	v := m.FileBacking.latestVersionRefs.Add(-1)
-	if invariants.Enabled && v < 0 {
-		panic("pebble: invalid FileMetadata latest refcounting")
-	}
-	return v
-}
-
-// LatestRefs returns the latest ref count associated with the backing sstable.
-func (m *FileMetadata) LatestRefs() int32 {
-	return m.FileBacking.latestVersionRefs.Load()
 }
 
 // SetCompactionState transitions this file's compaction state to the given
@@ -510,14 +263,22 @@ func (m *FileMetadata) IsCompacting() bool {
 // returns true, the Stats field may be read (with or without holding the
 // database mutex).
 func (m *FileMetadata) StatsValid() bool {
-	return m.statsValid.Load()
+	return atomic.LoadUint32(&m.Atomic.statsValid) == 1
+}
+
+// StatsValidLocked returns true if the table stats have been populated.
+// StatsValidLocked requires DB.mu is held when it's invoked, and it avoids the
+// overhead of an atomic load. This is possible because table stats validity is
+// only set while DB.mu is held.
+func (m *FileMetadata) StatsValidLocked() bool {
+	return m.Atomic.statsValid == 1
 }
 
 // StatsMarkValid marks the TableStats as valid. The caller must hold DB.mu
 // while populating TableStats and calling StatsMarkValud. Once stats are
 // populated, they must not be mutated.
 func (m *FileMetadata) StatsMarkValid() {
-	m.statsValid.Store(true)
+	atomic.StoreUint32(&m.Atomic.statsValid, 1)
 }
 
 // ExtendPointKeyBounds attempts to extend the lower and upper point key bounds
@@ -606,13 +367,6 @@ func (m *FileMetadata) Overlaps(cmp Compare, start []byte, end []byte, exclusive
 		return false
 	}
 	return true
-}
-
-// ContainedWithinSpan returns true if the file key range completely overlaps with the
-// given range ("end" is assumed to exclusive).
-func (m *FileMetadata) ContainedWithinSpan(cmp Compare, start, end []byte) bool {
-	lowerCmp, upperCmp := cmp(m.Smallest.UserKey, start), cmp(m.Largest.UserKey, end)
-	return lowerCmp >= 0 && (upperCmp < 0 || (upperCmp == 0 && m.Largest.IsExclusiveSentinel()))
 }
 
 // ContainsKeyType returns whether or not the file contains keys of the provided
@@ -712,7 +466,6 @@ func (m *FileMetadata) DebugString(format base.FormatKey, verbose bool) string {
 	if !verbose {
 		return b.String()
 	}
-	fmt.Fprintf(&b, " seqnums:[%d-%d]", m.SmallestSeqNum, m.LargestSeqNum)
 	if m.HasPointKeys {
 		fmt.Fprintf(&b, " points:[%s-%s]",
 			m.SmallestPointKey.Pretty(format), m.LargestPointKey.Pretty(format))
@@ -726,9 +479,9 @@ func (m *FileMetadata) DebugString(format base.FormatKey, verbose bool) string {
 
 // ParseFileMetadataDebug parses a FileMetadata from its DebugString
 // representation.
-func ParseFileMetadataDebug(s string) (*FileMetadata, error) {
+func ParseFileMetadataDebug(s string) (m FileMetadata, err error) {
 	// Split lines of the form:
-	//  000000:[a#0,SET-z#0,SET] seqnums:[5-5] points:[...] ranges:[...]
+	//  000000:[a#0,SET-z#0,SET] points:[...] ranges:[...]
 	fields := strings.FieldsFunc(s, func(c rune) bool {
 		switch c {
 		case ':', '[', '-', ']':
@@ -738,24 +491,10 @@ func ParseFileMetadataDebug(s string) (*FileMetadata, error) {
 		}
 	})
 	if len(fields)%3 != 0 {
-		return nil, errors.Newf("malformed input: %s", s)
+		return m, errors.Newf("malformed input: %s", s)
 	}
-	m := &FileMetadata{}
 	for len(fields) > 0 {
 		prefix := fields[0]
-		if prefix == "seqnums" {
-			smallestSeqNum, err := strconv.ParseUint(fields[1], 10, 64)
-			if err != nil {
-				return m, errors.Newf("malformed input: %s: %s", s, err)
-			}
-			largestSeqNum, err := strconv.ParseUint(fields[2], 10, 64)
-			if err != nil {
-				return m, errors.Newf("malformed input: %s: %s", s, err)
-			}
-			m.SmallestSeqNum, m.LargestSeqNum = smallestSeqNum, largestSeqNum
-			fields = fields[3:]
-			continue
-		}
 		smallest := base.ParsePrettyInternalKey(fields[1])
 		largest := base.ParsePrettyInternalKey(fields[2])
 		switch prefix {
@@ -783,8 +522,7 @@ func ParseFileMetadataDebug(s string) (*FileMetadata, error) {
 		m.SmallestPointKey, m.LargestPointKey = m.Smallest, m.Largest
 		m.HasPointKeys = true
 	}
-	m.InitPhysicalBacking()
-	return m, nil
+	return
 }
 
 // Validate validates the metadata for consistency with itself, returning an
@@ -846,11 +584,6 @@ func (m *FileMetadata) Validate(cmp Compare, formatKey base.FormatKey) error {
 		}
 	}
 
-	// Ensure that FileMetadata.Init was called.
-	if m.FileBacking == nil {
-		return base.CorruptionErrorf("file metadata FileBacking not set")
-	}
-
 	return nil
 }
 
@@ -867,19 +600,30 @@ func (m *FileMetadata) TableInfo() TableInfo {
 	}
 }
 
+func cmpUint64(a, b uint64) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return +1
+	default:
+		return 0
+	}
+}
+
 func (m *FileMetadata) cmpSeqNum(b *FileMetadata) int {
 	// NB: This is the same ordering that RocksDB uses for L0 files.
 
 	// Sort first by largest sequence number.
-	if v := stdcmp.Compare(m.LargestSeqNum, b.LargestSeqNum); v != 0 {
-		return v
+	if m.LargestSeqNum != b.LargestSeqNum {
+		return cmpUint64(m.LargestSeqNum, b.LargestSeqNum)
 	}
 	// Then by smallest sequence number.
-	if v := stdcmp.Compare(m.SmallestSeqNum, b.SmallestSeqNum); v != 0 {
-		return v
+	if m.SmallestSeqNum != b.SmallestSeqNum {
+		return cmpUint64(m.SmallestSeqNum, b.SmallestSeqNum)
 	}
 	// Break ties by file number.
-	return stdcmp.Compare(m.FileNum, b.FileNum)
+	return cmpUint64(uint64(m.FileNum), uint64(b.FileNum))
 }
 
 func (m *FileMetadata) lessSeqNum(b *FileMetadata) bool {
@@ -1012,9 +756,6 @@ func NewVersion(
 		} else {
 			v.Levels[l].tree.cmp = btreeCmpSmallestKey(cmp)
 		}
-		for _, f := range files[l] {
-			v.Levels[l].totalSize += f.Size
-		}
 	}
 	if err := v.InitL0Sublevels(cmp, formatKey, flushSplitBytes); err != nil {
 		panic(err)
@@ -1047,7 +788,7 @@ func NewVersion(
 // key in a higher level table that has both the same user key and a higher
 // sequence number.
 type Version struct {
-	refs atomic.Int32
+	refs int32
 
 	// The level 0 sstables are organized in a series of sublevels. Similar to
 	// the seqnum invariant in normal levels, there is no internal key in a
@@ -1064,7 +805,7 @@ type Version struct {
 	// usage.
 	//
 	// L0Sublevels.Levels contains L0 files ordered by sublevels. All the files
-	// in Levels[0] are in L0Sublevels.Levels. L0SublevelFiles is also set to
+	// in Files[0] are in L0Sublevels.Levels. L0SublevelFiles is also set to
 	// a reference to that slice, as that slice is necessary for iterator
 	// creation and needs to outlast L0Sublevels.
 	L0Sublevels     *L0Sublevels
@@ -1079,7 +820,7 @@ type Version struct {
 
 	// The callback to invoke when the last reference to a version is
 	// removed. Will be called with list.mu held.
-	Deleted func(obsolete []*FileBacking)
+	Deleted func(obsolete []*FileMetadata)
 
 	// Stats holds aggregated stats about the version maintained from
 	// version to version.
@@ -1108,21 +849,15 @@ func (v *Version) DebugString(format base.FormatKey) string {
 	return v.string(format, true)
 }
 
-func describeSublevels(format base.FormatKey, verbose bool, sublevels []LevelSlice) string {
-	var buf bytes.Buffer
-	for sublevel := len(sublevels) - 1; sublevel >= 0; sublevel-- {
-		fmt.Fprintf(&buf, "0.%d:\n", sublevel)
-		sublevels[sublevel].Each(func(f *FileMetadata) {
-			fmt.Fprintf(&buf, "  %s\n", f.DebugString(format, verbose))
-		})
-	}
-	return buf.String()
-}
-
 func (v *Version) string(format base.FormatKey, verbose bool) string {
 	var buf bytes.Buffer
 	if len(v.L0SublevelFiles) > 0 {
-		fmt.Fprintf(&buf, "%s", describeSublevels(format, verbose, v.L0SublevelFiles))
+		for sublevel := len(v.L0SublevelFiles) - 1; sublevel >= 0; sublevel-- {
+			fmt.Fprintf(&buf, "0.%d:\n", sublevel)
+			v.L0SublevelFiles[sublevel].Each(func(f *FileMetadata) {
+				fmt.Fprintf(&buf, "  %s\n", f.DebugString(format, verbose))
+			})
+		}
 	}
 	for level := 1; level < NumLevels; level++ {
 		if v.Levels[level].Empty() {
@@ -1163,7 +898,7 @@ func ParseVersionDebug(
 				m.SmallestPointKey, m.LargestPointKey = m.Smallest, m.Largest
 				m.HasPointKeys = true
 			}
-			files[level] = append(files[level], m)
+			files[level] = append(files[level], &m)
 		}
 	}
 	// Reverse the order of L0 files. This ensures we construct the same
@@ -1177,12 +912,12 @@ func ParseVersionDebug(
 
 // Refs returns the number of references to the version.
 func (v *Version) Refs() int32 {
-	return v.refs.Load()
+	return atomic.LoadInt32(&v.refs)
 }
 
 // Ref increments the version refcount.
 func (v *Version) Ref() {
-	v.refs.Add(1)
+	atomic.AddInt32(&v.refs, 1)
 }
 
 // Unref decrements the version refcount. If the last reference to the version
@@ -1190,11 +925,12 @@ func (v *Version) Ref() {
 // Deleted callback is invoked. Requires that the VersionList mutex is NOT
 // locked.
 func (v *Version) Unref() {
-	if v.refs.Add(-1) == 0 {
+	if atomic.AddInt32(&v.refs, -1) == 0 {
+		obsolete := v.unrefFiles()
 		l := v.list
 		l.mu.Lock()
 		l.Remove(v)
-		v.Deleted(v.unrefFiles())
+		v.Deleted(obsolete)
 		l.mu.Unlock()
 	}
 }
@@ -1204,14 +940,14 @@ func (v *Version) Unref() {
 // the Deleted callback is invoked. Requires that the VersionList mutex is
 // already locked.
 func (v *Version) UnrefLocked() {
-	if v.refs.Add(-1) == 0 {
+	if atomic.AddInt32(&v.refs, -1) == 0 {
 		v.list.Remove(v)
 		v.Deleted(v.unrefFiles())
 	}
 }
 
-func (v *Version) unrefFiles() []*FileBacking {
-	var obsolete []*FileBacking
+func (v *Version) unrefFiles() []*FileMetadata {
+	var obsolete []*FileMetadata
 	for _, lm := range v.Levels {
 		obsolete = append(obsolete, lm.release()...)
 	}

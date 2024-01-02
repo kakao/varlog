@@ -18,29 +18,11 @@ type FilterMetrics struct {
 	Misses int64
 }
 
-// FilterMetricsTracker is used to keep track of filter metrics. It contains the
-// same metrics as FilterMetrics, but they can be updated atomically. An
-// instance of FilterMetricsTracker can be passed to a Reader as a ReaderOption.
-type FilterMetricsTracker struct {
-	// See FilterMetrics.Hits.
-	hits atomic.Int64
-	// See FilterMetrics.Misses.
-	misses atomic.Int64
-}
+var dummyFilterMetrics FilterMetrics
 
-var _ ReaderOption = (*FilterMetricsTracker)(nil)
-
-func (m *FilterMetricsTracker) readerApply(r *Reader) {
+func (m *FilterMetrics) readerApply(r *Reader) {
 	if r.tableFilter != nil {
 		r.tableFilter.metrics = m
-	}
-}
-
-// Load returns the current values as FilterMetrics.
-func (m *FilterMetricsTracker) Load() FilterMetrics {
-	return FilterMetrics{
-		Hits:   m.hits.Load(),
-		Misses: m.misses.Load(),
 	}
 }
 
@@ -65,24 +47,22 @@ type filterWriter interface {
 
 type tableFilterReader struct {
 	policy  FilterPolicy
-	metrics *FilterMetricsTracker
+	metrics *FilterMetrics
 }
 
 func newTableFilterReader(policy FilterPolicy) *tableFilterReader {
 	return &tableFilterReader{
 		policy:  policy,
-		metrics: nil,
+		metrics: &dummyFilterMetrics,
 	}
 }
 
 func (f *tableFilterReader) mayContain(data, key []byte) bool {
 	mayContain := f.policy.MayContain(TableFilter, data, key)
-	if f.metrics != nil {
-		if mayContain {
-			f.metrics.misses.Add(1)
-		} else {
-			f.metrics.hits.Add(1)
-		}
+	if mayContain {
+		atomic.AddInt64(&f.metrics.Misses, 1)
+	} else {
+		atomic.AddInt64(&f.metrics.Hits, 1)
 	}
 	return mayContain
 }

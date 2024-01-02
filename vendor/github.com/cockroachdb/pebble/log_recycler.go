@@ -32,14 +32,14 @@ type logRecycler struct {
 // the log file should not be deleted (i.e. the log is being recycled), and
 // false otherwise.
 func (r *logRecycler) add(logInfo fileInfo) bool {
-	if logInfo.fileNum.FileNum() < r.minRecycleLogNum {
+	if logInfo.fileNum < r.minRecycleLogNum {
 		return false
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if logInfo.fileNum.FileNum() <= r.mu.maxLogNum {
+	if logInfo.fileNum <= r.mu.maxLogNum {
 		// The log file number was already considered for recycling. Don't consider
 		// it again. This avoids a race between adding the same log file for
 		// recycling multiple times, and removing the log file for actual
@@ -49,7 +49,7 @@ func (r *logRecycler) add(logInfo fileInfo) bool {
 		// shouldn't be deleted.
 		return true
 	}
-	r.mu.maxLogNum = logInfo.fileNum.FileNum()
+	r.mu.maxLogNum = logInfo.fileNum
 	if len(r.mu.logs) >= r.limit {
 		return false
 	}
@@ -89,7 +89,7 @@ func (r *logRecycler) pop(logNum FileNum) error {
 	if len(r.mu.logs) == 0 {
 		return errors.New("pebble: log recycler empty")
 	}
-	if r.mu.logs[0].fileNum.FileNum() != logNum {
+	if r.mu.logs[0].fileNum != logNum {
 		return errors.Errorf("pebble: log recycler invalid %d vs %d", errors.Safe(logNum), errors.Safe(fileInfoNums(r.mu.logs)))
 	}
 	r.mu.logs = r.mu.logs[1:]
@@ -102,7 +102,7 @@ func fileInfoNums(finfos []fileInfo) []FileNum {
 	}
 	nums := make([]FileNum, len(finfos))
 	for i := range finfos {
-		nums[i] = finfos[i].fileNum.FileNum()
+		nums[i] = finfos[i].fileNum
 	}
 	return nums
 }

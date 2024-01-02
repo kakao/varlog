@@ -37,24 +37,6 @@ func (fs *loggingFS) Create(name string) (File, error) {
 	return newLoggingFile(f, name, fs.logFn), nil
 }
 
-func (fs *loggingFS) Open(name string, opts ...OpenOption) (File, error) {
-	fs.logFn("open: %s", name)
-	f, err := fs.FS.Open(name, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return newLoggingFile(f, name, fs.logFn), nil
-}
-
-func (fs *loggingFS) OpenReadWrite(name string, opts ...OpenOption) (File, error) {
-	fs.logFn("open-read-write: %s", name)
-	f, err := fs.FS.OpenReadWrite(name, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return newLoggingFile(f, name, fs.logFn), nil
-}
-
 func (fs *loggingFS) Link(oldname, newname string) error {
 	fs.logFn("link: %s -> %s", oldname, newname)
 	return fs.FS.Link(oldname, newname)
@@ -139,19 +121,4 @@ func (f *loggingFile) SyncData() error {
 func (f *loggingFile) SyncTo(length int64) (fullSync bool, err error) {
 	f.logFn("sync-to(%d): %s", length, f.name)
 	return f.File.SyncTo(length)
-}
-
-func (f *loggingFile) ReadAt(p []byte, offset int64) (int, error) {
-	f.logFn("read-at(%d, %d): %s", offset, len(p), f.name)
-	return f.File.ReadAt(p, offset)
-}
-
-func (f *loggingFile) WriteAt(p []byte, offset int64) (int, error) {
-	f.logFn("write-at(%d, %d): %s", offset, len(p), f.name)
-	return f.File.WriteAt(p, offset)
-}
-
-func (f *loggingFile) Prefetch(offset int64, length int64) error {
-	f.logFn("prefetch(%d, %d): %s", offset, length, f.name)
-	return f.File.Prefetch(offset, length)
 }

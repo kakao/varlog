@@ -10,12 +10,12 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/arenaskl"
 	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/internal/keyspan"
-	"github.com/cockroachdb/pebble/internal/manual"
 	"github.com/cockroachdb/pebble/internal/rangedel"
 	"github.com/cockroachdb/pebble/internal/rangekey"
 )
@@ -80,21 +80,12 @@ type memTable struct {
 	// inflight mutations that have reserved space in the memtable but not yet
 	// applied. The memtable cannot be flushed to disk until the writer refs
 	// drops to zero.
-	writerRefs atomic.Int32
+	writerRefs int32
 	tombstones keySpanCache
 	rangeKeys  keySpanCache
 	// The current logSeqNum at the time the memtable was created. This is
 	// guaranteed to be less than or equal to any seqnum stored in the memtable.
-	logSeqNum                    uint64
-	releaseAccountingReservation func()
-}
-
-func (m *memTable) free() {
-	if m != nil {
-		m.releaseAccountingReservation()
-		manual.Free(m.arenaBuf)
-		m.arenaBuf = nil
-	}
+	logSeqNum uint64
 }
 
 // memTableOptions holds configuration used when creating a memTable. All of
@@ -102,10 +93,9 @@ func (m *memTable) free() {
 // which is used by tests.
 type memTableOptions struct {
 	*Options
-	arenaBuf                     []byte
-	size                         int
-	logSeqNum                    uint64
-	releaseAccountingReservation func()
+	arenaBuf  []byte
+	size      int
+	logSeqNum uint64
 }
 
 func checkMemTable(obj interface{}) {
@@ -120,24 +110,18 @@ func checkMemTable(obj interface{}) {
 // Options.MemTableSize is used instead.
 func newMemTable(opts memTableOptions) *memTable {
 	opts.Options = opts.Options.EnsureDefaults()
-	m := new(memTable)
-	m.init(opts)
-	return m
-}
-
-func (m *memTable) init(opts memTableOptions) {
 	if opts.size == 0 {
-		opts.size = int(opts.MemTableSize)
+		opts.size = opts.MemTableSize
 	}
-	*m = memTable{
-		cmp:                          opts.Comparer.Compare,
-		formatKey:                    opts.Comparer.FormatKey,
-		equal:                        opts.Comparer.Equal,
-		arenaBuf:                     opts.arenaBuf,
-		logSeqNum:                    opts.logSeqNum,
-		releaseAccountingReservation: opts.releaseAccountingReservation,
+
+	m := &memTable{
+		cmp:        opts.Comparer.Compare,
+		formatKey:  opts.Comparer.FormatKey,
+		equal:      opts.Comparer.Equal,
+		arenaBuf:   opts.arenaBuf,
+		writerRefs: 1,
+		logSeqNum:  opts.logSeqNum,
 	}
-	m.writerRefs.Store(1)
 	m.tombstones = keySpanCache{
 		cmp:           m.cmp,
 		formatKey:     m.formatKey,
@@ -160,18 +144,18 @@ func (m *memTable) init(opts memTableOptions) {
 	m.rangeDelSkl.Reset(arena, m.cmp)
 	m.rangeKeySkl.Reset(arena, m.cmp)
 	m.reserved = arena.Size()
+	return m
 }
 
 func (m *memTable) writerRef() {
-	switch v := m.writerRefs.Add(1); {
+	switch v := atomic.AddInt32(&m.writerRefs, 1); {
 	case v <= 1:
 		panic(fmt.Sprintf("pebble: inconsistent reference count: %d", v))
 	}
 }
 
-// writerUnref drops a ref on the memtable. Returns true if this was the last ref.
-func (m *memTable) writerUnref() (wasLastRef bool) {
-	switch v := m.writerRefs.Add(-1); {
+func (m *memTable) writerUnref() bool {
+	switch v := atomic.AddInt32(&m.writerRefs, -1); {
 	case v < 0:
 		panic(fmt.Sprintf("pebble: inconsistent reference count: %d", v))
 	case v == 0:
@@ -181,9 +165,8 @@ func (m *memTable) writerUnref() (wasLastRef bool) {
 	}
 }
 
-// readyForFlush is part of the flushable interface.
 func (m *memTable) readyForFlush() bool {
-	return m.writerRefs.Load() == 0
+	return atomic.LoadInt32(&m.writerRefs) == 0
 }
 
 // Prepare reserves space for the batch in the memtable and references the
@@ -250,19 +233,17 @@ func (m *memTable) apply(batch *Batch, seqNum uint64) error {
 	return nil
 }
 
-// newIter is part of the flushable interface. It returns an iterator that is
-// unpositioned (Iterator.Valid() will return false). The iterator can be
-// positioned via a call to SeekGE, SeekLT, First or Last.
+// newIter returns an iterator that is unpositioned (Iterator.Valid() will
+// return false). The iterator can be positioned via a call to SeekGE,
+// SeekLT, First or Last.
 func (m *memTable) newIter(o *IterOptions) internalIterator {
 	return m.skl.NewIter(o.GetLowerBound(), o.GetUpperBound())
 }
 
-// newFlushIter is part of the flushable interface.
 func (m *memTable) newFlushIter(o *IterOptions, bytesFlushed *uint64) internalIterator {
 	return m.skl.NewFlushIter(bytesFlushed)
 }
 
-// newRangeDelIter is part of the flushable interface.
 func (m *memTable) newRangeDelIter(*IterOptions) keyspan.FragmentIterator {
 	tombstones := m.tombstones.get()
 	if tombstones == nil {
@@ -271,7 +252,6 @@ func (m *memTable) newRangeDelIter(*IterOptions) keyspan.FragmentIterator {
 	return keyspan.NewIter(m.cmp, tombstones)
 }
 
-// newRangeKeyIter is part of the flushable interface.
 func (m *memTable) newRangeKeyIter(*IterOptions) keyspan.FragmentIterator {
 	rangeKeys := m.rangeKeys.get()
 	if rangeKeys == nil {
@@ -280,14 +260,13 @@ func (m *memTable) newRangeKeyIter(*IterOptions) keyspan.FragmentIterator {
 	return keyspan.NewIter(m.cmp, rangeKeys)
 }
 
-// containsRangeKeys is part of the flushable interface.
 func (m *memTable) containsRangeKeys() bool {
-	return m.rangeKeys.count.Load() > 0
+	return atomic.LoadUint32(&m.rangeKeys.atomicCount) > 0
 }
 
 func (m *memTable) availBytes() uint32 {
 	a := m.skl.Arena()
-	if m.writerRefs.Load() == 1 {
+	if atomic.LoadInt32(&m.writerRefs) == 1 {
 		// If there are no other concurrent apply operations, we can update the
 		// reserved bytes setting to accurately reflect how many bytes of been
 		// allocated vs the over-estimation present in memTableEntrySize.
@@ -296,12 +275,10 @@ func (m *memTable) availBytes() uint32 {
 	return a.Capacity() - m.reserved
 }
 
-// inuseBytes is part of the flushable interface.
 func (m *memTable) inuseBytes() uint64 {
 	return uint64(m.skl.Size() - memTableEmptySize)
 }
 
-// totalBytes is part of the flushable interface.
 func (m *memTable) totalBytes() uint64 {
 	return uint64(m.skl.Arena().Capacity())
 }
@@ -378,8 +355,8 @@ func (f *keySpanFrags) get(
 // invalidated whenever a key of the same kind is added to a memTable, and
 // populated when empty when a span iterator of that key kind is created.
 type keySpanCache struct {
-	count         atomic.Uint32
-	frags         atomic.Pointer[keySpanFrags]
+	atomicCount   uint32
+	frags         unsafe.Pointer
 	cmp           Compare
 	formatKey     base.FormatKey
 	constructSpan constructSpan
@@ -389,20 +366,23 @@ type keySpanCache struct {
 // Invalidate the current set of cached spans, indicating the number of
 // spans that were added.
 func (c *keySpanCache) invalidate(count uint32) {
-	newCount := c.count.Add(count)
+	newCount := atomic.AddUint32(&c.atomicCount, count)
 	var frags *keySpanFrags
 
 	for {
-		oldFrags := c.frags.Load()
-		if oldFrags != nil && oldFrags.count >= newCount {
-			// Someone else invalidated the cache before us and their invalidation
-			// subsumes ours.
-			break
+		oldPtr := atomic.LoadPointer(&c.frags)
+		if oldPtr != nil {
+			oldFrags := (*keySpanFrags)(oldPtr)
+			if oldFrags.count >= newCount {
+				// Someone else invalidated the cache before us and their invalidation
+				// subsumes ours.
+				break
+			}
 		}
 		if frags == nil {
 			frags = &keySpanFrags{count: newCount}
 		}
-		if c.frags.CompareAndSwap(oldFrags, frags) {
+		if atomic.CompareAndSwapPointer(&c.frags, oldPtr, unsafe.Pointer(frags)) {
 			// We successfully invalidated the cache.
 			break
 		}
@@ -411,7 +391,7 @@ func (c *keySpanCache) invalidate(count uint32) {
 }
 
 func (c *keySpanCache) get() []keyspan.Span {
-	frags := c.frags.Load()
+	frags := (*keySpanFrags)(atomic.LoadPointer(&c.frags))
 	if frags == nil {
 		return nil
 	}

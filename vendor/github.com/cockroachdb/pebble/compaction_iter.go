@@ -6,7 +6,6 @@ package pebble
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"sort"
@@ -206,29 +205,7 @@ type compactionIter struct {
 	// compaction iterator was only returned because an open snapshot prevents
 	// its elision. This field only applies to point keys, and not to range
 	// deletions or range keys.
-	//
-	// For MERGE, it is possible that doing the merge is interrupted even when
-	// the next point key is in the same stripe. This can happen if the loop in
-	// mergeNext gets interrupted by sameStripeNonSkippable.
-	// sameStripeNonSkippable occurs due to RANGEDELs that sort before
-	// SET/MERGE/DEL with the same seqnum, so the RANGEDEL does not necessarily
-	// delete the subsequent SET/MERGE/DEL keys.
 	snapshotPinned bool
-	// forceObsoleteDueToRangeDel is set to true in a subset of the cases that
-	// snapshotPinned is true. This value is true when the point is obsolete due
-	// to a RANGEDEL but could not be deleted due to a snapshot.
-	//
-	// NB: it may seem that the additional cases that snapshotPinned captures
-	// are harmless in that they can also be used to mark a point as obsolete
-	// (it is merely a duplication of some logic that happens in
-	// Writer.AddWithForceObsolete), but that is not quite accurate as of this
-	// writing -- snapshotPinned originated in stats collection and for a
-	// sequence MERGE, SET, where the MERGE cannot merge with the (older) SET
-	// due to a snapshot, the snapshotPinned value for the SET is true.
-	//
-	// TODO(sumeer,jackson): improve the logic of snapshotPinned and reconsider
-	// whether we need forceObsoleteDueToRangeDel.
-	forceObsoleteDueToRangeDel bool
 	// The index of the snapshot for the current key within the snapshots slice.
 	curSnapshotIdx    int
 	curSnapshotSeqNum uint64
@@ -263,10 +240,6 @@ type compactionIter struct {
 	// The on-disk format major version. This informs the types of keys that
 	// may be written to disk during a compaction.
 	formatVersion FormatMajorVersion
-	stats         struct {
-		// count of DELSIZED keys that were missized.
-		countMissizedDels uint64
-	}
 }
 
 func newCompactionIter(
@@ -337,10 +310,10 @@ func (i *compactionIter) Next() (*InternalKey, []byte) {
 	// respect to `iterKey` and related state:
 	//
 	// - `!skip && pos == iterPosNext`: `iterKey` is already at the next key.
-	// - `!skip && pos == iterPosCurForward`: We are at the key that has been returned.
+	// - `!skip && pos == iterPosCur`: We are at the key that has been returned.
 	//   To move forward we advance by one key, even if that lands us in the same
 	//   snapshot stripe.
-	// - `skip && pos == iterPosCurForward`: We are at the key that has been returned.
+	// - `skip && pos == iterPosCur`: We are at the key that has been returned.
 	//   To move forward we skip skippable entries in the stripe.
 	if i.pos == iterPosCurForward {
 		if i.skip {
@@ -409,21 +382,11 @@ func (i *compactionIter) Next() (*InternalKey, []byte) {
 		} else if cover == keyspan.CoversInvisibly {
 			// i.iterKey would be deleted by a range deletion if there weren't
 			// any open snapshots. Mark it as pinned.
-			//
-			// NB: there are multiple places in this file where we call
-			// i.rangeDelFrag.Covers and this is the only one where we are writing
-			// to i.snapshotPinned. Those other cases occur in mergeNext where the
-			// caller is deciding whether the value should be merged or not, and the
-			// key is in the same snapshot stripe. Hence, snapshotPinned is by
-			// definition false in those cases.
 			i.snapshotPinned = true
-			i.forceObsoleteDueToRangeDel = true
-		} else {
-			i.forceObsoleteDueToRangeDel = false
 		}
 
 		switch i.iterKey.Kind() {
-		case InternalKeyKindDelete, InternalKeyKindSingleDelete, InternalKeyKindDeleteSized:
+		case InternalKeyKindDelete, InternalKeyKindSingleDelete:
 			if i.elideTombstone(i.iterKey.UserKey) {
 				if i.curSnapshotIdx == 0 {
 					// If we're at the last snapshot stripe and the tombstone
@@ -446,12 +409,6 @@ func (i *compactionIter) Next() (*InternalKey, []byte) {
 				i.valid = true
 				i.skip = true
 				return &i.key, i.value
-
-			case InternalKeyKindDeleteSized:
-				// We may skip subsequent keys because of this tombstone. Scan
-				// ahead to see just how much data this tombstone drops and if
-				// the tombstone's value should be updated accordingly.
-				return i.deleteSizedNext()
 
 			case InternalKeyKindSingleDelete:
 				if i.singleDeleteNext() {
@@ -729,12 +686,11 @@ func (i *compactionIter) setNext() {
 			i.skip = true
 			return
 		case sameStripeSkippable:
-			// We're still in the same stripe. If this is a
-			// DEL/SINGLEDEL/DELSIZED, we stop looking and emit a SETWITHDEL.
-			// Subsequent keys are eligible for skipping.
+			// We're still in the same stripe. If this is a DEL/SINGLEDEL, we
+			// stop looking and emit a SETWITHDEL. Subsequent keys are
+			// eligible for skipping.
 			if i.iterKey.Kind() == InternalKeyKindDelete ||
-				i.iterKey.Kind() == InternalKeyKindSingleDelete ||
-				i.iterKey.Kind() == InternalKeyKindDeleteSized {
+				i.iterKey.Kind() == InternalKeyKindSingleDelete {
 				i.key.SetKind(InternalKeyKindSetWithDelete)
 				i.skip = true
 				return
@@ -759,7 +715,7 @@ func (i *compactionIter) mergeNext(valueMerger ValueMerger) stripeChangeType {
 		}
 		key := i.iterKey
 		switch key.Kind() {
-		case InternalKeyKindDelete, InternalKeyKindSingleDelete, InternalKeyKindDeleteSized:
+		case InternalKeyKindDelete, InternalKeyKindSingleDelete:
 			// We've hit a deletion tombstone. Return everything up to this point and
 			// then skip entries until the next snapshot stripe. We change the kind
 			// of the result key to a Set so that it shadows keys in lower
@@ -846,9 +802,9 @@ func (i *compactionIter) singleDeleteNext() bool {
 
 		key := i.iterKey
 		switch key.Kind() {
-		case InternalKeyKindDelete, InternalKeyKindMerge, InternalKeyKindSetWithDelete, InternalKeyKindDeleteSized:
-			// We've hit a Delete, DeleteSized, Merge, SetWithDelete, transform
-			// the SingleDelete into a full Delete.
+		case InternalKeyKindDelete, InternalKeyKindMerge, InternalKeyKindSetWithDelete:
+			// We've hit a Delete, Merge or SetWithDelete, transform the
+			// SingleDelete into a full Delete.
 			i.key.SetKind(InternalKeyKindDelete)
 			i.skip = true
 			return true
@@ -867,138 +823,6 @@ func (i *compactionIter) singleDeleteNext() bool {
 			return false
 		}
 	}
-}
-
-// deleteSizedNext processes a DELSIZED point tombstone. Unlike ordinary DELs,
-// these tombstones carry a value that's a varint indicating the size of the
-// entry (len(key)+len(value)) that the tombstone is expected to delete.
-//
-// When a deleteSizedNext is encountered, we skip ahead to see which keys, if
-// any, are elided as a result of the tombstone.
-func (i *compactionIter) deleteSizedNext() (*base.InternalKey, []byte) {
-	i.saveKey()
-	i.valid = true
-	i.skip = true
-
-	// The DELSIZED tombstone may have no value at all. This happens when the
-	// tombstone has already deleted the key that the user originally predicted.
-	// In this case, we still peek forward in case there's another DELSIZED key
-	// with a lower sequence number, in which case we'll adopt its value.
-	if len(i.iterValue) == 0 {
-		i.value = i.valueBuf[:0]
-	} else {
-		i.valueBuf = append(i.valueBuf[:0], i.iterValue...)
-		i.value = i.valueBuf
-	}
-
-	// Loop through all the keys within this stripe that are skippable.
-	i.pos = iterPosNext
-	for i.nextInStripe() == sameStripeSkippable {
-		switch i.iterKey.Kind() {
-		case InternalKeyKindDelete, InternalKeyKindDeleteSized:
-			// We encountered a tombstone (DEL, or DELSIZED) that's deleted by
-			// the original DELSIZED tombstone. This can happen in two cases:
-			//
-			// (1) These tombstones were intended to delete two distinct values,
-			//     and this DELSIZED has already dropped the relevant key. For
-			//     example:
-			//
-			//     a.DELSIZED.9   a.SET.7   a.DELSIZED.5   a.SET.4
-			//
-			//     If a.DELSIZED.9 has already deleted a.SET.7, its size has
-			//     already been zeroed out. In this case, we want to adopt the
-			//     value of the DELSIZED with the lower sequence number, in
-			//     case the a.SET.4 key has not yet been elided.
-			//
-			// (2) This DELSIZED was missized. The user thought they were
-			//     deleting a key with this user key, but this user key had
-			//     already been deleted.
-			//
-			// We can differentiate these two cases by examining the length of
-			// the DELSIZED's value. A DELSIZED's value holds the size of both
-			// the user key and value that it intends to delete. For any user
-			// key with a length > 1, a DELSIZED that has not deleted a key must
-			// have a value with a length > 1.
-			//
-			// We treat both cases the same functionally, adopting the identity
-			// of the lower-sequence numbered tombstone. However in the second
-			// case, we also increment the stat counting missized tombstones.
-			if len(i.value) > 0 {
-				// The original DELSIZED key was missized. The key that the user
-				// thought they were deleting does not exist.
-				i.stats.countMissizedDels++
-			}
-			i.valueBuf = append(i.valueBuf[:0], i.iterValue...)
-			i.value = i.valueBuf
-			if i.iterKey.Kind() == InternalKeyKindDelete {
-				// Convert the DELSIZED to a DEL—The DEL we're eliding may not
-				// have deleted the key(s) it was intended to yet. The ordinary
-				// DEL compaction heuristics are better suited at that, plus we
-				// don't want to count it as a missized DEL. We early exit in
-				// this case, after skipping the remainder of the snapshot
-				// stripe.
-				i.key.SetKind(i.iterKey.Kind())
-				i.skipInStripe()
-				return &i.key, i.value
-			}
-			// Continue, in case we uncover another DELSIZED or a key this
-			// DELSIZED deletes.
-		default:
-			// If the DELSIZED is value-less, it already deleted the key that it
-			// was intended to delete. This is possible with a sequence like:
-			//
-			//      DELSIZED.8     SET.7     SET.3
-			//
-			// The DELSIZED only describes the size of the SET.7, which in this
-			// case has already been elided. We don't count it as a missizing,
-			// instead converting the DELSIZED to a DEL. Skip the remainder of
-			// the snapshot stripe and return.
-			if len(i.value) == 0 {
-				i.key.SetKind(InternalKeyKindDelete)
-				i.skipInStripe()
-				return &i.key, i.value
-			}
-			// The deleted key is not a DEL, DELSIZED, and the DELSIZED in i.key
-			// has a positive size.
-			expectedSize, n := binary.Uvarint(i.value)
-			if n != len(i.value) {
-				i.err = base.CorruptionErrorf("DELSIZED holds invalid value: %x", errors.Safe(i.value))
-				i.valid = false
-				return nil, nil
-			}
-			elidedSize := uint64(len(i.iterKey.UserKey)) + uint64(len(i.iterValue))
-			if elidedSize != expectedSize {
-				// The original DELSIZED key was missized. It's unclear what to
-				// do. The user-provided size was wrong, so it's unlikely to be
-				// accurate or meaningful. We could:
-				//
-				//   1. return the DELSIZED with the original user-provided size unmodified
-				//   2. return the DELZIZED with a zeroed size to reflect that a key was
-				//   elided, even if it wasn't the anticipated size.
-				//   3. subtract the elided size from the estimate and re-encode.
-				//   4. convert the DELSIZED into a value-less DEL, so that
-				//      ordinary DEL heuristics apply.
-				//
-				// We opt for (4) under the rationale that we can't rely on the
-				// user-provided size for accuracy, so ordinary DEL heuristics
-				// are safer.
-				i.key.SetKind(InternalKeyKindDelete)
-				i.stats.countMissizedDels++
-			}
-			// NB: We remove the value regardless of whether the key was sized
-			// appropriately. The size encoded is 'consumed' the first time it
-			// meets a key that it deletes.
-			i.value = i.valueBuf[:0]
-		}
-	}
-	// Reset skip if we landed outside the original stripe. Otherwise, we landed
-	// in the same stripe on a non-skippable key. In that case we should preserve
-	// `i.skip == true` such that later keys in the stripe will continue to be
-	// skipped.
-	if i.iterStripeChange == newStripeNewKey || i.iterStripeChange == newStripeSameKey {
-		i.skip = false
-	}
-	return &i.key, i.value
 }
 
 func (i *compactionIter) saveKey() {
@@ -1133,7 +957,7 @@ func (i *compactionIter) maybeZeroSeqnum(snapshotIdx int) {
 		// This is not the last snapshot
 		return
 	}
-	i.key.SetSeqNum(base.SeqNumZero)
+	i.key.SetSeqNum(0)
 }
 
 // A frontier is used to monitor a compaction's progression across the user

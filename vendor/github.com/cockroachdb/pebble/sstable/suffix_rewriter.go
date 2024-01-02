@@ -2,7 +2,6 @@ package sstable
 
 import (
 	"bytes"
-	"context"
 	"math"
 	"sync"
 
@@ -43,9 +42,6 @@ func RewriteKeySuffixes(
 // modification as they are not affected by the suffix, while block and table
 // properties are only minimally recomputed.
 //
-// TODO(sumeer): document limitations, if any, due to this limited
-// re-computation of properties (is there any loss of fidelity?).
-//
 // Any block and table property collectors configured in the WriterOptions must
 // implement SuffixReplaceableTableCollector/SuffixReplaceableBlockCollector.
 //
@@ -53,26 +49,6 @@ func RewriteKeySuffixes(
 // same TableFormat as the input, which is returned in case the caller wants
 // to do some error checking. Suffix rewriting is meant to be efficient, and
 // allowing changes in the TableFormat detracts from that efficiency.
-//
-// Any obsolete bits that key-value pairs may be annotated with are ignored
-// and lost during the rewrite. Additionally, the output sstable has the
-// pebble.obsolete.is_strict property set to false. These limitations could be
-// removed if needed. The current use case for
-// RewriteKeySuffixesAndReturnFormat in CockroachDB is for MVCC-compliant file
-// ingestion, where these files do not contain RANGEDELs and have one
-// key-value pair per userkey -- so they trivially satisfy the strict
-// criteria, and we don't need the obsolete bit as a performance optimization.
-// For disaggregated storage, strict obsolete sstables are needed for L5 and
-// L6, but at the time of writing, we expect such MVCC-compliant file
-// ingestion to only ingest into levels L4 and higher. If this changes, we can
-// do one of two things to get rid of this limitation:
-//   - Validate that there are no duplicate userkeys and no RANGEDELs/MERGEs
-//     in the sstable to be rewritten. Validating no duplicate userkeys is
-//     non-trivial when rewriting blocks in parallel, so we could encode the
-//     pre-existing condition in the (existing) SnapshotPinnedKeys property --
-//     we need to update the external sst writer to calculate and encode this
-//     property.
-//   - Preserve the obsolete bit (with changes to the blockIter).
 func RewriteKeySuffixesAndReturnFormat(
 	sst []byte,
 	rOpts ReaderOptions,
@@ -207,7 +183,7 @@ func rewriteBlocks(
 		if err != nil {
 			return err
 		}
-		if err := iter.init(r.Compare, inputBlock, r.Properties.GlobalSeqNum, false); err != nil {
+		if err := iter.init(r.Compare, inputBlock, r.Properties.GlobalSeqNum); err != nil {
 			return err
 		}
 
@@ -241,12 +217,12 @@ func rewriteBlocks(
 			copy(scratch.UserKey, key.UserKey[:si])
 			copy(scratch.UserKey[si:], to)
 
-			// NB: for TableFormatPebblev3 and higher, since
+			// NB: for TableFormatPebblev3, since
 			// !iter.lazyValueHandling.hasValuePrefix, it will return the raw value
 			// in the block, which includes the 1-byte prefix. This is fine since bw
 			// also does not know about the prefix and will preserve it in bw.add.
 			v := val.InPlaceValue()
-			if invariants.Enabled && r.tableFormat >= TableFormatPebblev3 &&
+			if invariants.Enabled && r.tableFormat == TableFormatPebblev3 &&
 				key.Kind() == InternalKeyKindSet {
 				if len(v) < 1 {
 					return errors.Errorf("value has no prefix")
@@ -456,13 +432,8 @@ func (c copyFilterWriter) policyName() string      { return c.origPolicyName }
 // RewriteKeySuffixesViaWriter is similar to RewriteKeySuffixes but uses just a
 // single loop over the Reader that writes each key to the Writer with the new
 // suffix. The is significantly slower than the parallelized rewriter, and does
-// more work to rederive filters, props, etc.
-//
-// Any obsolete bits that key-value pairs may be annotated with are ignored
-// and lost during the rewrite. Some of the obsolete bits may be recreated --
-// specifically when there are multiple keys with the same user key.
-// Additionally, the output sstable has the pebble.obsolete.is_strict property
-// set to false. See the longer comment at RewriteKeySuffixesAndReturnFormat.
+// more work to rederive filters, props, etc, however re-doing that work makes
+// it less restrictive -- props no longer need to
 func RewriteKeySuffixesViaWriter(
 	r *Reader, out objstorage.Writable, o WriterOptions, from, to []byte,
 ) (*WriterMetadata, error) {
@@ -470,7 +441,6 @@ func RewriteKeySuffixesViaWriter(
 		return nil, errors.New("a valid splitter is required to rewrite suffixes")
 	}
 
-	o.IsStrictObsolete = false
 	w := NewWriter(out, o)
 	defer func() {
 		if w != nil {
@@ -501,7 +471,7 @@ func RewriteKeySuffixesViaWriter(
 		if err != nil {
 			return nil, err
 		}
-		if w.addPoint(scratch, val, false); err != nil {
+		if w.addPoint(scratch, val); err != nil {
 			return nil, err
 		}
 		k, v = i.Next()
@@ -544,7 +514,7 @@ func readBlockBuf(r *Reader, bh BlockHandle, buf []byte) ([]byte, []byte, error)
 	return res, buf, err
 }
 
-// memReader is a thin wrapper around a []byte such that it can be passed to
+// memReader is a thin wrapper around a []byte such that it can be passed to an
 // sstable.Reader. It supports concurrent use, and does so without locking in
 // contrast to the heavier read/write vfs.MemFile.
 type memReader struct {
@@ -564,26 +534,22 @@ func newMemReader(b []byte) *memReader {
 	return r
 }
 
-// ReadAt is part of objstorage.Readable.
-func (m *memReader) ReadAt(_ context.Context, p []byte, off int64) error {
-	n, err := m.r.ReadAt(p, off)
-	if invariants.Enabled && err == nil && n != len(p) {
-		panic("short read")
-	}
-	return err
+// ReadAt implements io.ReaderAt.
+func (m *memReader) ReadAt(p []byte, off int64) (n int, err error) {
+	return m.r.ReadAt(p, off)
 }
 
-// Close is part of objstorage.Readable.
+// Close implements io.Closer.
 func (*memReader) Close() error {
 	return nil
 }
 
-// Stat is part of objstorage.Readable.
+// Stat implements objstorage.Readable.
 func (m *memReader) Size() int64 {
 	return int64(len(m.b))
 }
 
-// NewReadHandle is part of objstorage.Readable.
-func (m *memReader) NewReadHandle(_ context.Context) objstorage.ReadHandle {
+// NewReadHandle implements objstorage.Readable.
+func (m *memReader) NewReadHandle() objstorage.ReadHandle {
 	return &m.rh
 }

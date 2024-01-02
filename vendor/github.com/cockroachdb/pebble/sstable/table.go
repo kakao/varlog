@@ -68,8 +68,8 @@
 package sstable // import "github.com/cockroachdb/pebble/sstable"
 
 import (
-	"context"
 	"encoding/binary"
+	"io"
 
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/base"
@@ -160,27 +160,8 @@ The metaindex block also contains block handles as values, with keys being
 the names of the meta blocks.
 
 For a description of value blocks and the meta value index block, see
-value_block.go.
+value_block.go
 
-Data blocks have some additional features:
-- For TableFormatPebblev3 onwards:
-  - For SETs, the value has a 1 byte value prefix, which indicates whether the
-    value is inline, or in a separate value block, and indicates whether the
-    prefix of the userkey (as defined by split) has changed or not. See
-    value_block.go for details.
-  - The most significant bit of the restart points is used to indicate whether
-    userkey prefix has changed since the last restart point. See the detailed
-    comment in blockWriter.
-  - The maximum length of the "shared prefix" when encoding the key, is the
-    length of the prefix of the userkey (as defined by split) of the previous
-    key.
-
-- For TableFormatPebblev4 onwards:
-  - The key kinds may be altered to set the
-    InternalKeyKindSSTableInternalObsoleteBit if the key-value pair is obsolete
-    in the context of that sstable (for a reader that reads at a higher seqnum
-    than the highest seqnum in the sstable). For details, see the comment in
-    format.go.
 */
 
 const (
@@ -335,11 +316,12 @@ func readFooter(f objstorage.Readable) (footer, error) {
 	off := size - maxFooterLen
 	if off < 0 {
 		off = 0
-		buf = buf[:size]
 	}
-	if err := f.ReadAt(context.TODO(), buf, off); err != nil {
+	n, err := f.ReadAt(buf, off)
+	if err != nil && err != io.EOF {
 		return footer, errors.Wrap(err, "pebble/table: invalid table (could not read footer)")
 	}
+	buf = buf[:n]
 
 	switch magic := buf[len(buf)-len(rocksDBMagic):]; string(magic) {
 	case levelDBMagic:
@@ -406,14 +388,18 @@ func (f footer) encode(buf []byte) []byte {
 	switch magic, version := f.format.AsTuple(); magic {
 	case levelDBMagic:
 		buf = buf[:levelDBFooterLen]
-		clear(buf)
+		for i := range buf {
+			buf[i] = 0
+		}
 		n := encodeBlockHandle(buf[0:], f.metaindexBH)
 		encodeBlockHandle(buf[n:], f.indexBH)
 		copy(buf[len(buf)-len(levelDBMagic):], levelDBMagic)
 
 	case rocksDBMagic, pebbleDBMagic:
 		buf = buf[:rocksDBFooterLen]
-		clear(buf)
+		for i := range buf {
+			buf[i] = 0
+		}
 		switch f.checksum {
 		case ChecksumTypeNone:
 			buf[0] = byte(ChecksumTypeNone)
@@ -443,7 +429,7 @@ func supportsTwoLevelIndex(format TableFormat) bool {
 	switch format {
 	case TableFormatLevelDB:
 		return false
-	case TableFormatRocksDBv2, TableFormatPebblev1, TableFormatPebblev2, TableFormatPebblev3, TableFormatPebblev4:
+	case TableFormatRocksDBv2, TableFormatPebblev1, TableFormatPebblev2, TableFormatPebblev3:
 		return true
 	default:
 		panic("sstable: unspecified table format version")

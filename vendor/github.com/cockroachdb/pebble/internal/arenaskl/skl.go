@@ -44,6 +44,7 @@ Key differences:
 package arenaskl // import "github.com/cockroachdb/pebble/internal/arenaskl"
 
 import (
+	"encoding/binary"
 	"math"
 	"runtime"
 	"sync/atomic"
@@ -67,7 +68,7 @@ const (
 // keys.
 var ErrRecordExists = errors.New("record with this key already exists")
 
-// Skiplist is a fast, concurrent skiplist implementation that supports forward
+// Skiplist is a fast, cocnurrent skiplist implementation that supports forward
 // and backward iteration. See batchskl.Skiplist for a non-concurrent
 // skiplist. Keys and values are immutable once added to the skiplist and
 // deletion is not supported. Instead, higher-level code is expected to add new
@@ -79,7 +80,7 @@ type Skiplist struct {
 	cmp    base.Compare
 	head   *node
 	tail   *node
-	height atomic.Uint32 // Current height. 1 <= height <= maxHeight. CAS.
+	height uint32 // Current height. 1 <= height <= maxHeight. CAS.
 
 	// If set to true by tests, then extra delays are added to make it easier to
 	// detect unusual race conditions.
@@ -139,22 +140,22 @@ func (s *Skiplist) Reset(arena *Arena, cmp base.Compare) {
 	headOffset := arena.getPointerOffset(unsafe.Pointer(head))
 	tailOffset := arena.getPointerOffset(unsafe.Pointer(tail))
 	for i := 0; i < maxHeight; i++ {
-		head.tower[i].nextOffset.Store(tailOffset)
-		tail.tower[i].prevOffset.Store(headOffset)
+		head.tower[i].nextOffset = tailOffset
+		tail.tower[i].prevOffset = headOffset
 	}
 
 	*s = Skiplist{
-		arena: arena,
-		cmp:   cmp,
-		head:  head,
-		tail:  tail,
+		arena:  arena,
+		cmp:    cmp,
+		head:   head,
+		tail:   tail,
+		height: 1,
 	}
-	s.height.Store(1)
 }
 
 // Height returns the height of the highest tower within any of the nodes that
 // have ever been allocated as part of this skiplist.
-func (s *Skiplist) Height() uint32 { return s.height.Load() }
+func (s *Skiplist) Height() uint32 { return atomic.LoadUint32(&s.height) }
 
 // Arena returns the arena backing this skiplist.
 func (s *Skiplist) Arena() *Arena { return s.arena }
@@ -326,7 +327,7 @@ func (s *Skiplist) newNode(
 	// Try to increase s.height via CAS.
 	listHeight := s.Height()
 	for height > listHeight {
-		if s.height.CompareAndSwap(listHeight, height) {
+		if atomic.CompareAndSwapUint32(&s.height, listHeight, height) {
 			// Successfully increased skiplist.height.
 			break
 		}
@@ -411,19 +412,26 @@ func (s *Skiplist) findSpliceForLevel(
 
 		offset, size := next.keyOffset, next.keySize
 		nextKey := s.arena.buf[offset : offset+size]
-		cmp := s.cmp(key.UserKey, nextKey)
+		n := int32(size) - 8
+		cmp := s.cmp(key.UserKey, nextKey[:n])
 		if cmp < 0 {
 			// We are done for this level, since prev.key < key < next.key.
 			break
 		}
 		if cmp == 0 {
 			// User-key equality.
-			if key.Trailer == next.keyTrailer {
+			var nextTrailer uint64
+			if n >= 0 {
+				nextTrailer = binary.LittleEndian.Uint64(nextKey[n:])
+			} else {
+				nextTrailer = uint64(base.InternalKeyKindInvalid)
+			}
+			if key.Trailer == nextTrailer {
 				// Internal key equality.
 				found = true
 				break
 			}
-			if key.Trailer > next.keyTrailer {
+			if key.Trailer > nextTrailer {
 				// We are done for this level, since prev.key < key < next.key.
 				break
 			}
@@ -438,7 +446,8 @@ func (s *Skiplist) findSpliceForLevel(
 
 func (s *Skiplist) keyIsAfterNode(nd *node, key base.InternalKey) bool {
 	ndKey := s.arena.buf[nd.keyOffset : nd.keyOffset+nd.keySize]
-	cmp := s.cmp(ndKey, key.UserKey)
+	n := int32(nd.keySize) - 8
+	cmp := s.cmp(ndKey[:n], key.UserKey)
 	if cmp < 0 {
 		return true
 	}
@@ -446,19 +455,25 @@ func (s *Skiplist) keyIsAfterNode(nd *node, key base.InternalKey) bool {
 		return false
 	}
 	// User-key equality.
-	if key.Trailer == nd.keyTrailer {
+	var ndTrailer uint64
+	if n >= 0 {
+		ndTrailer = binary.LittleEndian.Uint64(ndKey[n:])
+	} else {
+		ndTrailer = uint64(base.InternalKeyKindInvalid)
+	}
+	if key.Trailer == ndTrailer {
 		// Internal key equality.
 		return false
 	}
-	return key.Trailer < nd.keyTrailer
+	return key.Trailer < ndTrailer
 }
 
 func (s *Skiplist) getNext(nd *node, h int) *node {
-	offset := nd.tower[h].nextOffset.Load()
+	offset := atomic.LoadUint32(&nd.tower[h].nextOffset)
 	return (*node)(s.arena.getPointer(offset))
 }
 
 func (s *Skiplist) getPrev(nd *node, h int) *node {
-	offset := nd.tower[h].prevOffset.Load()
+	offset := atomic.LoadUint32(&nd.tower[h].prevOffset)
 	return (*node)(s.arena.getPointer(offset))
 }
