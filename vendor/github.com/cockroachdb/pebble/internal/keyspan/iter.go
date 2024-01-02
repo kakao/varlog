@@ -51,6 +51,8 @@ type FragmentIterator interface {
 	Prev() *Span
 
 	// Error returns any accumulated error.
+	//
+	// TODO(jackson): Lift errors into return values on the positioning methods.
 	Error() error
 
 	// Close closes the iterator and returns any accumulated error. Exhausting
@@ -70,9 +72,6 @@ type SpanIterOptions struct {
 	// RangeKeyFilters can be used to avoid scanning tables and blocks in tables
 	// when iterating over range keys.
 	RangeKeyFilters []base.BlockPropertyFilter
-	// Level specifies the level where this sstable is being read. Must be
-	// specified for foreign (i.e. shared not-created-by-this-instance) sstables.
-	Level manifest.Level
 }
 
 // Iter is an iterator over a set of fragmented spans.

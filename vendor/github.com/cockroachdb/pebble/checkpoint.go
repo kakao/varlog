@@ -135,9 +135,6 @@ func mkdirAllAndSyncParents(fs vfs.FS, destDir string) (vfs.File, error) {
 // space overhead for a checkpoint if hard links are disabled. Also beware that
 // even if hard links are used, the space overhead for the checkpoint will
 // increase over time as the DB performs compactions.
-//
-// TODO(bananabrick): Test checkpointing of virtual sstables once virtual
-// sstables is running e2e.
 func (d *DB) Checkpoint(
 	destDir string, opts ...CheckpointOption,
 ) (
@@ -192,7 +189,7 @@ func (d *DB) Checkpoint(
 	manifestSize := d.mu.versions.manifest.Size()
 	optionsFileNum := d.optionsFileNum
 	virtualBackingFiles := make(map[base.DiskFileNum]struct{})
-	for diskFileNum := range d.mu.versions.fileBackingMap {
+	for diskFileNum := range d.mu.versions.backingState.fileBackingMap {
 		virtualBackingFiles[diskFileNum] = struct{}{}
 	}
 	// Release the manifest and DB.mu so we don't block other operations on
@@ -301,7 +298,7 @@ func (d *DB) Checkpoint(
 	}
 
 	ckErr = d.writeCheckpointManifest(
-		fs, formatVers, destDir, dir, manifestFileNum.DiskFileNum(), manifestSize,
+		fs, formatVers, destDir, dir, manifestFileNum, manifestSize,
 		excludedFiles, removeBackingTables,
 	)
 	if ckErr != nil {
@@ -316,7 +313,7 @@ func (d *DB) Checkpoint(
 		if logNum == 0 {
 			continue
 		}
-		srcPath := base.MakeFilepath(fs, d.walDirname, fileTypeLog, logNum.DiskFileNum())
+		srcPath := base.MakeFilepath(fs, d.walDirname, fileTypeLog, logNum)
 		destPath := fs.PathJoin(destDir, fs.PathBase(srcPath))
 		ckErr = vfs.Copy(fs, srcPath, destPath)
 		if ckErr != nil {
@@ -371,7 +368,7 @@ func (d *DB) writeCheckpointManifest(
 		// need to append another record with the excluded files (we cannot simply
 		// append a record after a raw data copy; see
 		// https://github.com/cockroachdb/cockroach/issues/100935).
-		r := record.NewReader(&io.LimitedReader{R: src, N: manifestSize}, manifestFileNum.FileNum())
+		r := record.NewReader(&io.LimitedReader{R: src, N: manifestSize}, manifestFileNum)
 		w := record.NewWriter(dst)
 		for {
 			rr, err := r.Next()
@@ -424,7 +421,7 @@ func (d *DB) writeCheckpointManifest(
 	if err != nil {
 		return err
 	}
-	if err := setCurrentFunc(formatVers, manifestMarker, fs, destDirPath, destDir)(manifestFileNum.FileNum()); err != nil {
+	if err := setCurrentFunc(formatVers, manifestMarker, fs, destDirPath, destDir)(manifestFileNum); err != nil {
 		return err
 	}
 	return manifestMarker.Close()

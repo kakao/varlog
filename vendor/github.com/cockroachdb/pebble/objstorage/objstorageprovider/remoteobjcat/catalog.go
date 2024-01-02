@@ -5,9 +5,10 @@
 package remoteobjcat
 
 import (
+	"cmp"
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"sync"
 
 	"github.com/cockroachdb/errors"
@@ -22,7 +23,7 @@ import (
 // Catalog is used to manage the on-disk remote object catalog.
 //
 // The catalog file is a log of records, where each record is an encoded
-// versionEdit.
+// VersionEdit.
 type Catalog struct {
 	fs      vfs.FS
 	dirname string
@@ -114,8 +115,8 @@ func Open(fs vfs.FS, dirname string) (*Catalog, CatalogContents, error) {
 		res.Objects = append(res.Objects, meta)
 	}
 	// Sort the objects so the function is deterministic.
-	sort.Slice(res.Objects, func(i, j int) bool {
-		return res.Objects[i].FileNum.FileNum() < res.Objects[j].FileNum.FileNum()
+	slices.SortFunc(res.Objects, func(a, b RemoteObjectMetadata) int {
+		return cmp.Compare(a.FileNum, b.FileNum)
 	})
 	return c, res, nil
 }
@@ -136,9 +137,9 @@ func (c *Catalog) SetCreatorID(id objstorage.CreatorID) error {
 		return nil
 	}
 
-	ve := versionEdit{CreatorID: id}
+	ve := VersionEdit{CreatorID: id}
 	if err := c.writeToCatalogFileLocked(&ve); err != nil {
-		return errors.Wrapf(err, "pebble: could not write to remote object catalog: %v", err)
+		return errors.Wrapf(err, "pebble: could not write to remote object catalog")
 	}
 	c.mu.creatorID = id
 	return nil
@@ -165,7 +166,7 @@ func (c *Catalog) closeCatalogFile() error {
 
 // Batch is used to perform multiple object additions/deletions at once.
 type Batch struct {
-	ve versionEdit
+	ve VersionEdit
 }
 
 // AddObject adds a new object to the batch.
@@ -218,37 +219,40 @@ func (c *Catalog) ApplyBatch(b Batch) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Add new objects before deleting any objects. This allows for cases where
-	// the same batch adds and deletes an object.
+	// Sanity checks.
+	toAdd := make(map[base.DiskFileNum]struct{}, len(b.ve.NewObjects))
+	exists := func(n base.DiskFileNum) bool {
+		_, ok := c.mu.objects[n]
+		if !ok {
+			_, ok = toAdd[n]
+		}
+		return ok
+	}
 	for _, meta := range b.ve.NewObjects {
-		if _, exists := c.mu.objects[meta.FileNum]; exists {
+		if exists(meta.FileNum) {
 			return errors.AssertionFailedf("adding existing object %s", meta.FileNum)
 		}
-	}
-	for _, meta := range b.ve.NewObjects {
-		c.mu.objects[meta.FileNum] = meta
-	}
-	removeAddedObjects := func() {
-		for i := range b.ve.NewObjects {
-			delete(c.mu.objects, b.ve.NewObjects[i].FileNum)
-		}
+		toAdd[meta.FileNum] = struct{}{}
 	}
 	for _, n := range b.ve.DeletedObjects {
-		if _, exists := c.mu.objects[n]; !exists {
-			removeAddedObjects()
+		if !exists(n) {
 			return errors.AssertionFailedf("deleting non-existent object %s", n)
 		}
 	}
-	// Apply the remainder of the batch to our current state.
+
+	if err := c.writeToCatalogFileLocked(&b.ve); err != nil {
+		return errors.Wrapf(err, "pebble: could not write to remote object catalog")
+	}
+
+	// Add new objects before deleting any objects. This allows for cases where
+	// the same batch adds and deletes an object.
+	for _, meta := range b.ve.NewObjects {
+		c.mu.objects[meta.FileNum] = meta
+	}
 	for _, n := range b.ve.DeletedObjects {
 		delete(c.mu.objects, n)
 	}
 
-	if err := c.writeToCatalogFileLocked(&b.ve); err != nil {
-		return errors.Wrapf(err, "pebble: could not write to remote object catalog: %v", err)
-	}
-
-	b.Reset()
 	return nil
 }
 
@@ -272,29 +276,23 @@ func (c *Catalog) loadFromCatalogFile(filename string) error {
 			return errors.Wrapf(err, "pebble: error when loading remote object catalog file %q",
 				errors.Safe(filename))
 		}
-		var ve versionEdit
-		err = ve.Decode(r)
-		if err != nil {
+		var ve VersionEdit
+		if err := ve.Decode(r); err != nil {
 			return errors.Wrapf(err, "pebble: error when loading remote object catalog file %q",
 				errors.Safe(filename))
 		}
 		// Apply the version edit to the current state.
-		if ve.CreatorID.IsSet() {
-			c.mu.creatorID = ve.CreatorID
-		}
-		for _, fileNum := range ve.DeletedObjects {
-			delete(c.mu.objects, fileNum)
-		}
-		for _, meta := range ve.NewObjects {
-			c.mu.objects[meta.FileNum] = meta
+		if err := ve.Apply(&c.mu.creatorID, c.mu.objects); err != nil {
+			return errors.Wrapf(err, "pebble: error when loading remote object catalog file %q",
+				errors.Safe(filename))
 		}
 	}
 	return nil
 }
 
-// writeToCatalogFileLocked writes a versionEdit to the catalog file.
+// writeToCatalogFileLocked writes a VersionEdit to the catalog file.
 // Creates a new file if this is the first write.
-func (c *Catalog) writeToCatalogFileLocked(ve *versionEdit) error {
+func (c *Catalog) writeToCatalogFileLocked(ve *VersionEdit) error {
 	c.mu.rotationHelper.AddRecord(int64(len(ve.NewObjects) + len(ve.DeletedObjects)))
 	snapshotSize := int64(len(c.mu.objects))
 
@@ -337,8 +335,8 @@ func (c *Catalog) createNewCatalogFileLocked() (outErr error) {
 	}
 	recWriter := record.NewWriter(file)
 	err = func() error {
-		// Create a versionEdit that gets us from an empty catalog to the current state.
-		var ve versionEdit
+		// Create a VersionEdit that gets us from an empty catalog to the current state.
+		var ve VersionEdit
 		ve.CreatorID = c.mu.creatorID
 		ve.NewObjects = make([]RemoteObjectMetadata, 0, len(c.mu.objects))
 		for _, meta := range c.mu.objects {
@@ -375,7 +373,7 @@ func (c *Catalog) createNewCatalogFileLocked() (outErr error) {
 	return nil
 }
 
-func writeRecord(ve *versionEdit, file vfs.File, recWriter *record.Writer) error {
+func writeRecord(ve *VersionEdit, file vfs.File, recWriter *record.Writer) error {
 	w, err := recWriter.Next()
 	if err != nil {
 		return err

@@ -5,10 +5,20 @@
 package base // import "github.com/cockroachdb/pebble/internal/base"
 
 import (
+	"cmp"
 	"encoding/binary"
 	"fmt"
 	"strconv"
 	"strings"
+)
+
+const (
+	// SeqNumZero is the zero sequence number, set by compactions if they can
+	// guarantee there are no keys underneath an internal key.
+	SeqNumZero = uint64(0)
+	// SeqNumStart is the first sequence number assigned to a key. Sequence
+	// numbers 1-9 are reserved for potential future use.
+	SeqNumStart = uint64(10)
 )
 
 // InternalKeyKind enumerates the kind of key: a deletion tombstone, a set
@@ -290,13 +300,8 @@ func InternalCompare(userCmp Compare, a, b InternalKey) int {
 	if x := userCmp(a.UserKey, b.UserKey); x != 0 {
 		return x
 	}
-	if a.Trailer > b.Trailer {
-		return -1
-	}
-	if a.Trailer < b.Trailer {
-		return 1
-	}
-	return 0
+	// Reverse order for trailer comparison.
+	return cmp.Compare(b.Trailer, a.Trailer)
 }
 
 // Encode encodes the receiver into the buffer. The buffer must be large enough

@@ -5,10 +5,11 @@
 package objstorageprovider
 
 import (
+	"cmp"
 	"context"
 	"io"
 	"os"
-	"sort"
+	"slices"
 	"sync"
 
 	"github.com/cockroachdb/errors"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider/objiotracing"
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider/remoteobjcat"
+	"github.com/cockroachdb/pebble/objstorage/objstorageprovider/sharedcache"
 	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/vfs"
 )
@@ -96,10 +98,10 @@ type Settings struct {
 	Remote struct {
 		StorageFactory remote.StorageFactory
 
-		// If CreateOnShared is true, sstables are created on remote storage using
+		// If CreateOnShared is non-zero, sstables are created on remote storage using
 		// the CreateOnSharedLocator (when the PreferSharedStorage create option is
 		// true).
-		CreateOnShared        bool
+		CreateOnShared        remote.CreateOnSharedStrategy
 		CreateOnSharedLocator remote.Locator
 
 		// CacheSizeBytes is the size of the on-disk block cache for objects
@@ -143,7 +145,13 @@ func DefaultSettings(fs vfs.FS, dirName string) Settings {
 
 // Open creates the provider.
 func Open(settings Settings) (objstorage.Provider, error) {
-	return open(settings)
+	// Note: we can't just `return open(settings)` because in an error case we
+	// would return (*provider)(nil) which is not objstorage.Provider(nil).
+	p, err := open(settings)
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
 func open(settings Settings) (p *provider, _ error) {
@@ -242,13 +250,13 @@ func (p *provider) Create(
 	fileNum base.DiskFileNum,
 	opts objstorage.CreateOptions,
 ) (w objstorage.Writable, meta objstorage.ObjectMetadata, err error) {
-	if opts.PreferSharedStorage && p.st.Remote.CreateOnShared {
+	if opts.PreferSharedStorage && p.st.Remote.CreateOnShared != remote.CreateOnSharedNone {
 		w, meta, err = p.sharedCreate(ctx, fileType, fileNum, p.st.Remote.CreateOnSharedLocator, opts)
 	} else {
 		w, meta, err = p.vfsCreate(ctx, fileType, fileNum)
 	}
 	if err != nil {
-		err = errors.Wrapf(err, "creating object %s", errors.Safe(fileNum))
+		err = errors.Wrapf(err, "creating object %s", fileNum)
 		return nil, objstorage.ObjectMetadata{}, err
 	}
 	p.addMetadata(meta)
@@ -285,7 +293,7 @@ func (p *provider) Remove(fileType base.FileType, fileNum base.DiskFileNum) erro
 		// We want to be able to retry a Remove, so we keep the object in our list.
 		// TODO(radu): we should mark the object as "zombie" and not allow any other
 		// operations.
-		return errors.Wrapf(err, "removing object %s", errors.Safe(fileNum))
+		return errors.Wrapf(err, "removing object %s", fileNum)
 	}
 
 	p.removeMetadata(fileNum)
@@ -331,7 +339,7 @@ func (p *provider) LinkOrCopyFromLocal(
 	dstFileNum base.DiskFileNum,
 	opts objstorage.CreateOptions,
 ) (objstorage.ObjectMetadata, error) {
-	shared := opts.PreferSharedStorage && p.st.Remote.CreateOnShared
+	shared := opts.PreferSharedStorage && p.st.Remote.CreateOnShared != remote.CreateOnSharedNone
 	if !shared && srcFS == p.st.FS {
 		// Wrap the normal filesystem with one which wraps newly created files with
 		// vfs.NewSyncingFile.
@@ -397,13 +405,13 @@ func (p *provider) Lookup(
 		return objstorage.ObjectMetadata{}, errors.Wrapf(
 			os.ErrNotExist,
 			"file %s (type %d) unknown to the objstorage provider",
-			errors.Safe(fileNum), errors.Safe(fileType),
+			fileNum, errors.Safe(fileType),
 		)
 	}
 	if meta.FileType != fileType {
 		return objstorage.ObjectMetadata{}, errors.AssertionFailedf(
 			"file %s type mismatch (known type %d, expected type %d)",
-			errors.Safe(fileNum), errors.Safe(meta.FileType), errors.Safe(fileType),
+			fileNum, errors.Safe(meta.FileType), errors.Safe(fileType),
 		)
 	}
 	return meta, nil
@@ -433,10 +441,18 @@ func (p *provider) List() []objstorage.ObjectMetadata {
 	for _, meta := range p.mu.knownObjects {
 		res = append(res, meta)
 	}
-	sort.Slice(res, func(i, j int) bool {
-		return res[i].DiskFileNum.FileNum() < res[j].DiskFileNum.FileNum()
+	slices.SortFunc(res, func(a, b objstorage.ObjectMetadata) int {
+		return cmp.Compare(a.DiskFileNum, b.DiskFileNum)
 	})
 	return res
+}
+
+// Metrics is part of the objstorage.Provider interface.
+func (p *provider) Metrics() sharedcache.Metrics {
+	if p.remote.cache != nil {
+		return p.remote.cache.Metrics()
+	}
+	return sharedcache.Metrics{}
 }
 
 func (p *provider) addMetadata(meta objstorage.ObjectMetadata) {

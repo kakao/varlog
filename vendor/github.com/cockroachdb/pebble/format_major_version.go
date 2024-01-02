@@ -28,10 +28,13 @@ import (
 // FormatVersion that the default corresponds to may change with time.
 type FormatMajorVersion uint64
 
+// SafeValue implements redact.SafeValue.
+func (v FormatMajorVersion) SafeValue() {}
+
 // String implements fmt.Stringer.
 func (v FormatMajorVersion) String() string {
-	// NB: This must not change. It's used as the value for the the
-	// on-disk version marker file.
+	// NB: This must not change. It's used as the value for the on-disk
+	// version marker file.
 	//
 	// Specifically, this value must always parse as a base 10 integer
 	// that fits in a uint64. We format it as zero-padded, 3-digit
@@ -151,20 +154,20 @@ const (
 	// compactions for files marked for compaction are complete.
 	FormatPrePebblev1MarkedCompacted
 
-	// ExperimentalFormatDeleteSizedAndObsolete is a format major version that adds support
+	// FormatDeleteSizedAndObsolete is a format major version that adds support
 	// for deletion tombstones that encode the size of the value they're
 	// expected to delete. This format major version is required before the
 	// associated key kind may be committed through batch applications or
 	// ingests. It also adds support for keys that are marked obsolete (see
 	// sstable/format.go for details).
-	ExperimentalFormatDeleteSizedAndObsolete
+	FormatDeleteSizedAndObsolete
 
-	// ExperimentalFormatVirtualSSTables is a format major version that adds support for
+	// FormatVirtualSSTables is a format major version that adds support for
 	// virtual sstables that can reference a sub-range of keys in an underlying
 	// physical sstable. This information is persisted through new,
 	// backward-incompatible fields in the Manifest, and therefore requires
 	// a format major version.
-	ExperimentalFormatVirtualSSTables
+	FormatVirtualSSTables
 
 	// internalFormatNewest holds the newest format major version, including
 	// experimental ones excluded from the exported FormatNewest constant until
@@ -172,8 +175,7 @@ const (
 	internalFormatNewest FormatMajorVersion = iota - 1
 
 	// FormatNewest always contains the most recent format major version.
-	// TODO(jackson): restore FormatNewest to internalFormatNewest.
-	FormatNewest FormatMajorVersion = FormatPrePebblev1MarkedCompacted
+	FormatNewest FormatMajorVersion = internalFormatNewest
 )
 
 // MaxTableFormat returns the maximum sstable.TableFormat that can be used at
@@ -191,7 +193,7 @@ func (v FormatMajorVersion) MaxTableFormat() sstable.TableFormat {
 		return sstable.TableFormatPebblev2
 	case FormatSSTableValueBlocks, FormatFlushableIngest, FormatPrePebblev1MarkedCompacted:
 		return sstable.TableFormatPebblev3
-	case ExperimentalFormatDeleteSizedAndObsolete, ExperimentalFormatVirtualSSTables:
+	case FormatDeleteSizedAndObsolete, FormatVirtualSSTables:
 		return sstable.TableFormatPebblev4
 	default:
 		panic(fmt.Sprintf("pebble: unsupported format major version: %s", v))
@@ -210,7 +212,7 @@ func (v FormatMajorVersion) MinTableFormat() sstable.TableFormat {
 	case FormatMinTableFormatPebblev1, FormatPrePebblev1Marked,
 		FormatUnusedPrePebblev1MarkedCompacted, FormatSSTableValueBlocks,
 		FormatFlushableIngest, FormatPrePebblev1MarkedCompacted,
-		ExperimentalFormatDeleteSizedAndObsolete, ExperimentalFormatVirtualSSTables:
+		FormatDeleteSizedAndObsolete, FormatVirtualSSTables:
 		return sstable.TableFormatPebblev1
 	default:
 		panic(fmt.Sprintf("pebble: unsupported format major version: %s", v))
@@ -242,7 +244,7 @@ var formatMajorVersionMigrations = map[FormatMajorVersion]func(*DB) error{
 		// guaranteed to exist, because we unconditionally locate it
 		// during Open.
 		manifestFileNum := d.mu.versions.manifestFileNum
-		filename := base.MakeFilename(fileTypeManifest, manifestFileNum.DiskFileNum())
+		filename := base.MakeFilename(fileTypeManifest, manifestFileNum)
 		if err := d.mu.versions.manifestMarker.Move(filename); err != nil {
 			return errors.Wrap(err, "moving manifest marker")
 		}
@@ -343,11 +345,11 @@ var formatMajorVersionMigrations = map[FormatMajorVersion]func(*DB) error{
 		}
 		return d.finalizeFormatVersUpgrade(FormatPrePebblev1MarkedCompacted)
 	},
-	ExperimentalFormatDeleteSizedAndObsolete: func(d *DB) error {
-		return d.finalizeFormatVersUpgrade(ExperimentalFormatDeleteSizedAndObsolete)
+	FormatDeleteSizedAndObsolete: func(d *DB) error {
+		return d.finalizeFormatVersUpgrade(FormatDeleteSizedAndObsolete)
 	},
-	ExperimentalFormatVirtualSSTables: func(d *DB) error {
-		return d.finalizeFormatVersUpgrade(ExperimentalFormatVirtualSSTables)
+	FormatVirtualSSTables: func(d *DB) error {
+		return d.finalizeFormatVersUpgrade(FormatVirtualSSTables)
 	},
 }
 

@@ -216,7 +216,8 @@ func TestStorage_WriteBatch(t *testing.T) {
 		_, err = stg.Read(AtLLSN(2))
 		assert.Error(t, err)
 
-		scanner := stg.NewScanner(WithLLSN(1, 3))
+		scanner, err := stg.NewScanner(WithLLSN(1, 3))
+		require.NoError(t, err)
 		assert.True(t, scanner.Valid())
 		le, err := scanner.Value()
 		assert.NoError(t, err)
@@ -251,9 +252,10 @@ func TestStorage_EmptyWriteBatch(t *testing.T) {
 		assert.NoError(t, wb.Apply())
 		assert.NoError(t, wb.Close())
 
-		scanner := stg.NewScanner(WithLLSN(types.InvalidLLSN, types.MaxLLSN))
+		scanner, err := stg.NewScanner(WithLLSN(types.InvalidLLSN, types.MaxLLSN))
+		require.NoError(t, err)
 		assert.False(t, scanner.Valid())
-		_, err := scanner.Value()
+		_, err = scanner.Value()
 		assert.ErrorIs(t, err, io.EOF)
 		assert.NoError(t, scanner.Close())
 	})
@@ -346,7 +348,8 @@ func TestStorage_InconsistentWriteCommit(t *testing.T) {
 		assert.NoError(t, cb.Apply())
 		assert.NoError(t, cb.Close())
 
-		scanner := stg.NewScanner(WithGLSN(11, 13))
+		scanner, err := stg.NewScanner(WithGLSN(11, 13))
+		require.NoError(t, err)
 		assert.True(t, scanner.Valid())
 		_, err = scanner.Value()
 		assert.Error(t, err)
@@ -417,7 +420,8 @@ func TestStorage_WriteCommit(t *testing.T) {
 		}, le)
 
 		// scan
-		scanner := stg.NewScanner(WithGLSN(11, 13))
+		scanner, err := stg.NewScanner(WithGLSN(11, 13))
+		require.NoError(t, err)
 		assert.True(t, scanner.Valid())
 		le, err = scanner.Value()
 		assert.NoError(t, err)
@@ -622,7 +626,8 @@ func TestStorageReadLogEntryBoundaries(t *testing.T) {
 		{
 			name: "NoLogEntry",
 			testf: func(t *testing.T, stg *Storage) {
-				first, last := stg.readLogEntryBoundaries()
+				first, last, err := stg.readLogEntryBoundaries()
+				require.NoError(t, err)
 				require.Nil(t, first)
 				require.Nil(t, last)
 			},
@@ -641,7 +646,8 @@ func TestStorageReadLogEntryBoundaries(t *testing.T) {
 				require.NoError(t, cb.Set(1, 1))
 				require.NoError(t, cb.Apply())
 
-				first, last := stg.readLogEntryBoundaries()
+				first, last, err := stg.readLogEntryBoundaries()
+				require.NoError(t, err)
 				require.Nil(t, first)
 				require.Nil(t, last)
 			},
@@ -666,7 +672,8 @@ func TestStorageReadLogEntryBoundaries(t *testing.T) {
 				require.NoError(t, wb.Close())
 
 				want := &varlogpb.LogSequenceNumber{LLSN: 1, GLSN: 1}
-				first, last := stg.readLogEntryBoundaries()
+				first, last, err := stg.readLogEntryBoundaries()
+				require.NoError(t, err)
 				require.Equal(t, want, first)
 				require.Equal(t, want, last)
 			},
@@ -692,7 +699,8 @@ func TestStorageReadLogEntryBoundaries(t *testing.T) {
 				require.NoError(t, wb.Apply())
 				require.NoError(t, wb.Close())
 
-				first, last := stg.readLogEntryBoundaries()
+				first, last, err := stg.readLogEntryBoundaries()
+				require.NoError(t, err)
 				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, first)
 				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 2, LLSN: 2}, last)
 			},
@@ -721,7 +729,8 @@ func TestStorageReadLogEntryBoundaries(t *testing.T) {
 				require.NoError(t, wb.Apply())
 				require.NoError(t, wb.Close())
 
-				first, last := stg.readLogEntryBoundaries()
+				first, last, err := stg.readLogEntryBoundaries()
+				require.NoError(t, err)
 				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 2, LLSN: 2}, first)
 				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 3, LLSN: 3}, last)
 			},
@@ -750,7 +759,8 @@ func TestStorageReadLogEntryBoundaries(t *testing.T) {
 				require.NoError(t, wb.Apply())
 				require.NoError(t, wb.Close())
 
-				first, last := stg.readLogEntryBoundaries()
+				first, last, err := stg.readLogEntryBoundaries()
+				require.NoError(t, err)
 				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 2, LLSN: 2}, first)
 				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 3, LLSN: 3}, last)
 			},
@@ -779,7 +789,8 @@ func TestStorageReadLogEntryBoundaries(t *testing.T) {
 				require.NoError(t, wb.Apply())
 				require.NoError(t, wb.Close())
 
-				first, last := stg.readLogEntryBoundaries()
+				first, last, err := stg.readLogEntryBoundaries()
+				require.NoError(t, err)
 				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, first)
 				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 2, LLSN: 2}, last)
 			},
@@ -808,7 +819,8 @@ func TestStorageReadLogEntryBoundaries(t *testing.T) {
 				require.NoError(t, wb.Apply())
 				require.NoError(t, wb.Close())
 
-				first, last := stg.readLogEntryBoundaries()
+				first, last, err := stg.readLogEntryBoundaries()
+				require.NoError(t, err)
 				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 1, LLSN: 1}, first)
 				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 2, LLSN: 2}, last)
 			},
@@ -837,7 +849,8 @@ func TestStorageReadLogEntryBoundaries(t *testing.T) {
 				require.NoError(t, wb.Close())
 
 				want := &varlogpb.LogSequenceNumber{LLSN: 2, GLSN: 2}
-				first, last := stg.readLogEntryBoundaries()
+				first, last, err := stg.readLogEntryBoundaries()
+				require.NoError(t, err)
 				require.Equal(t, want, first)
 				require.Equal(t, want, last)
 			},
@@ -867,7 +880,8 @@ func TestStorageReadLogEntryBoundaries(t *testing.T) {
 				require.NoError(t, wb.Apply())
 				require.NoError(t, wb.Close())
 
-				first, last := stg.readLogEntryBoundaries()
+				first, last, err := stg.readLogEntryBoundaries()
+				require.NoError(t, err)
 				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 2, LLSN: 2}, first)
 				require.Equal(t, &varlogpb.LogSequenceNumber{GLSN: 3, LLSN: 3}, last)
 			},
@@ -894,7 +908,8 @@ func TestStorageReadLogEntryBoundaries(t *testing.T) {
 				require.NoError(t, wb.Apply())
 				require.NoError(t, wb.Close())
 
-				first, last := stg.readLogEntryBoundaries()
+				first, last, err := stg.readLogEntryBoundaries()
+				require.NoError(t, err)
 				require.Nil(t, first)
 				require.Nil(t, last)
 			},
@@ -921,7 +936,8 @@ func TestStorageReadLogEntryBoundaries(t *testing.T) {
 				require.NoError(t, wb.Apply())
 				require.NoError(t, wb.Close())
 
-				first, last := stg.readLogEntryBoundaries()
+				first, last, err := stg.readLogEntryBoundaries()
+				require.NoError(t, err)
 				require.Nil(t, first)
 				require.Nil(t, last)
 			},
@@ -1101,20 +1117,22 @@ func TestStorage_Trim(t *testing.T) {
 				err := stg.Trim(types.MinGLSN)
 				assert.NoError(t, err)
 
-				it := stg.dataDB.NewIter(&pebble.IterOptions{
+				it, err := stg.dataDB.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{dataKeyPrefix},
 					UpperBound: []byte{dataKeySentinelPrefix},
 				})
+				require.NoError(t, err)
 				assert.True(t, it.First())
 				assert.Equal(t, types.LLSN(2), decodeDataKey(it.Key()))
 				assert.True(t, it.Next())
 				assert.Equal(t, types.LLSN(3), decodeDataKey(it.Key()))
 				assert.NoError(t, it.Close())
 
-				it = stg.commitDB.NewIter(&pebble.IterOptions{
+				it, err = stg.commitDB.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{commitKeyPrefix},
 					UpperBound: []byte{commitKeySentinelPrefix},
 				})
+				require.NoError(t, err)
 				assert.True(t, it.First())
 				assert.Equal(t, types.GLSN(2), decodeCommitKey(it.Key()))
 				assert.True(t, it.Next())
@@ -1133,17 +1151,19 @@ func TestStorage_Trim(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NoError(t, err)
 
-				it := stg.dataDB.NewIter(&pebble.IterOptions{
+				it, err := stg.dataDB.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{dataKeyPrefix},
 					UpperBound: []byte{dataKeySentinelPrefix},
 				})
+				require.NoError(t, err)
 				assert.False(t, it.First())
 				assert.NoError(t, it.Close())
 
-				it = stg.commitDB.NewIter(&pebble.IterOptions{
+				it, err = stg.commitDB.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{commitKeyPrefix},
 					UpperBound: []byte{commitKeySentinelPrefix},
 				})
+				require.NoError(t, err)
 				assert.False(t, it.First())
 				assert.NoError(t, it.Close())
 
@@ -1158,17 +1178,19 @@ func TestStorage_Trim(t *testing.T) {
 				err := stg.Trim(types.MaxGLSN)
 				assert.NoError(t, err)
 
-				it := stg.dataDB.NewIter(&pebble.IterOptions{
+				it, err := stg.dataDB.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{dataKeyPrefix},
 					UpperBound: []byte{dataKeySentinelPrefix},
 				})
+				require.NoError(t, err)
 				assert.False(t, it.First())
 				assert.NoError(t, it.Close())
 
-				it = stg.commitDB.NewIter(&pebble.IterOptions{
+				it, err = stg.commitDB.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{commitKeyPrefix},
 					UpperBound: []byte{commitKeySentinelPrefix},
 				})
+				require.NoError(t, err)
 				assert.False(t, it.First())
 				assert.NoError(t, it.Close())
 

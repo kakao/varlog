@@ -6,6 +6,7 @@ package manifest
 
 import (
 	"bytes"
+	stdcmp "cmp"
 	"fmt"
 	"sort"
 	"strconv"
@@ -49,6 +50,9 @@ type TableStats struct {
 	// The number of point and range deletion entries in the table.
 	NumDeletions uint64
 	// NumRangeKeySets is the total number of range key sets in the table.
+	//
+	// NB: If there's a chance that the sstable contains any range key sets,
+	// then NumRangeKeySets must be > 0.
 	NumRangeKeySets uint64
 	// Estimate of the total disk space that may be dropped by this table's
 	// point deletions by compacting them.
@@ -169,22 +173,13 @@ type FileMetadata struct {
 	// FileNum is the file number.
 	//
 	// INVARIANT: when !FileMetadata.Virtual, FileNum == FileBacking.DiskFileNum.
-	//
-	// TODO(bananabrick): Consider creating separate types for
-	// FileMetadata.FileNum and FileBacking.FileNum. FileNum is used both as
-	// an indentifier for the FileMetadata in Pebble, and also as a handle to
-	// perform reads and writes. We should ensure through types that
-	// FileMetadata.FileNum isn't used to perform reads, and that
-	// FileBacking.FileNum isn't used as an identifier for the FileMetadata.
 	FileNum base.FileNum
 	// Size is the size of the file, in bytes. Size is an approximate value for
 	// virtual sstables.
 	//
-	// INVARIANT: when !FileMetadata.Virtual, Size == FileBacking.Size.
-	//
-	// TODO(bananabrick): Size is currently used in metrics, and for many key
-	// Pebble level heuristics. Make sure that the heuristics will still work
-	// appropriately with an approximate value of size.
+	// INVARIANTS:
+	// - When !FileMetadata.Virtual, Size == FileBacking.Size.
+	// - Size should be non-zero. Size 0 virtual sstables must not be created.
 	Size uint64
 	// File creation time in seconds since the epoch (1970-01-01 00:00:00
 	// UTC). For ingested sstables, this corresponds to the time the file was
@@ -309,6 +304,7 @@ type PhysicalFileMeta struct {
 //     The underlying file's size is stored in FileBacking.Size, though it could
 //     also be estimated or could correspond to just the referenced portion of
 //     a file (eg. if the file originated on another node).
+//   - Size must be > 0.
 //   - SmallestSeqNum and LargestSeqNum are loose bounds for virtual sstables.
 //     This means that all keys in the virtual sstable must have seqnums within
 //     [SmallestSeqNum, LargestSeqNum], however there's no guarantee that there's
@@ -871,30 +867,19 @@ func (m *FileMetadata) TableInfo() TableInfo {
 	}
 }
 
-func cmpUint64(a, b uint64) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return +1
-	default:
-		return 0
-	}
-}
-
 func (m *FileMetadata) cmpSeqNum(b *FileMetadata) int {
 	// NB: This is the same ordering that RocksDB uses for L0 files.
 
 	// Sort first by largest sequence number.
-	if m.LargestSeqNum != b.LargestSeqNum {
-		return cmpUint64(m.LargestSeqNum, b.LargestSeqNum)
+	if v := stdcmp.Compare(m.LargestSeqNum, b.LargestSeqNum); v != 0 {
+		return v
 	}
 	// Then by smallest sequence number.
-	if m.SmallestSeqNum != b.SmallestSeqNum {
-		return cmpUint64(m.SmallestSeqNum, b.SmallestSeqNum)
+	if v := stdcmp.Compare(m.SmallestSeqNum, b.SmallestSeqNum); v != 0 {
+		return v
 	}
 	// Break ties by file number.
-	return cmpUint64(uint64(m.FileNum), uint64(b.FileNum))
+	return stdcmp.Compare(m.FileNum, b.FileNum)
 }
 
 func (m *FileMetadata) lessSeqNum(b *FileMetadata) bool {
@@ -1026,6 +1011,9 @@ func NewVersion(
 			v.Levels[l].tree.cmp = btreeCmpSeqNum
 		} else {
 			v.Levels[l].tree.cmp = btreeCmpSmallestKey(cmp)
+		}
+		for _, f := range files[l] {
+			v.Levels[l].totalSize += f.Size
 		}
 	}
 	if err := v.InitL0Sublevels(cmp, formatKey, flushSplitBytes); err != nil {
@@ -1206,12 +1194,7 @@ func (v *Version) Unref() {
 		l := v.list
 		l.mu.Lock()
 		l.Remove(v)
-		obsolete := v.unrefFiles()
-		fileBacking := make([]*FileBacking, len(obsolete))
-		for i, f := range obsolete {
-			fileBacking[i] = f.FileBacking
-		}
-		v.Deleted(fileBacking)
+		v.Deleted(v.unrefFiles())
 		l.mu.Unlock()
 	}
 }
@@ -1223,17 +1206,12 @@ func (v *Version) Unref() {
 func (v *Version) UnrefLocked() {
 	if v.refs.Add(-1) == 0 {
 		v.list.Remove(v)
-		obsolete := v.unrefFiles()
-		fileBacking := make([]*FileBacking, len(obsolete))
-		for i, f := range obsolete {
-			fileBacking[i] = f.FileBacking
-		}
-		v.Deleted(fileBacking)
+		v.Deleted(v.unrefFiles())
 	}
 }
 
-func (v *Version) unrefFiles() []*FileMetadata {
-	var obsolete []*FileMetadata
+func (v *Version) unrefFiles() []*FileBacking {
+	var obsolete []*FileBacking
 	for _, lm := range v.Levels {
 		obsolete = append(obsolete, lm.release()...)
 	}

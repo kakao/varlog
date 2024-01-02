@@ -6,6 +6,7 @@ package manifest
 
 import (
 	"bytes"
+	stdcmp "cmp"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -80,14 +81,7 @@ func btreeCmpSpecificOrder(files []*FileMetadata) btreeCmp {
 		if !aok || !bok {
 			panic("btreeCmpSliceOrder called with unknown files")
 		}
-		switch {
-		case ai < bi:
-			return -1
-		case ai > bi:
-			return +1
-		default:
-			return 0
-		}
+		return stdcmp.Compare(ai, bi)
 	}
 }
 
@@ -195,7 +189,7 @@ func (n *node) incRef() {
 // new nodes pass contentsToo=false to preserve existing reference counts during
 // operations that should yield a net-zero change to descendant refcounts.
 // When a node is released, its contained files are dereferenced.
-func (n *node) decRef(contentsToo bool, obsolete *[]*FileMetadata) {
+func (n *node) decRef(contentsToo bool, obsolete *[]*FileBacking) {
 	if n.ref.Add(-1) > 0 {
 		// Other references remain. Can't free.
 		return
@@ -215,7 +209,13 @@ func (n *node) decRef(contentsToo bool, obsolete *[]*FileMetadata) {
 				if obsolete == nil {
 					panic(fmt.Sprintf("file metadata %s dereferenced to zero during tree mutation", f.FileNum))
 				}
-				*obsolete = append(*obsolete, f)
+				// Reference counting is performed on the FileBacking. In the case
+				// of a virtual sstable, this reference counting is performed on
+				// a FileBacking which is shared by every single virtual sstable
+				// with the same backing sstable. If the reference count hits 0,
+				// then we know that the FileBacking won't be required by any
+				// sstable in Pebble, and that the backing sstable can be deleted.
+				*obsolete = append(*obsolete, f.FileBacking)
 			}
 		}
 		if !n.leaf {
@@ -761,8 +761,8 @@ type btree struct {
 
 // Release dereferences and clears the root node of the btree, removing all
 // items from the btree. In doing so, it decrements contained file counts.
-// It returns a slice of newly obsolete files, if any.
-func (t *btree) Release() (obsolete []*FileMetadata) {
+// It returns a slice of newly obsolete backing files, if any.
+func (t *btree) Release() (obsolete []*FileBacking) {
 	if t.root != nil {
 		t.root.decRef(true /* contentsToo */, &obsolete)
 		t.root = nil
@@ -1132,15 +1132,11 @@ func cmpIter(a, b iterator) int {
 		if af.n != bf.n {
 			panic("nonmatching nodes during btree iterator comparison")
 		}
-		switch {
-		case af.pos < bf.pos:
-			return -1
-		case af.pos > bf.pos:
-			return +1
-		default:
-			// Continue up both iterators' stacks (equivalently, down the
-			// B-Tree away from the root).
+		if v := stdcmp.Compare(af.pos, bf.pos); v != 0 {
+			return v
 		}
+		// Otherwise continue up both iterators' stacks (equivalently, down the
+		// B-Tree away from the root).
 	}
 
 	if aok && bok {
@@ -1149,24 +1145,20 @@ func cmpIter(a, b iterator) int {
 	if an != bn {
 		panic("nonmatching nodes during btree iterator comparison")
 	}
+	if v := stdcmp.Compare(apos, bpos); v != 0 {
+		return v
+	}
 	switch {
-	case apos < bpos:
+	case aok:
+		// a is positioned at a leaf child at this position and b is at an
+		// end sentinel state.
 		return -1
-	case apos > bpos:
+	case bok:
+		// b is positioned at a leaf child at this position and a is at an
+		// end sentinel state.
 		return +1
 	default:
-		switch {
-		case aok:
-			// a is positioned at a leaf child at this position and b is at an
-			// end sentinel state.
-			return -1
-		case bok:
-			// b is positioned at a leaf child at this position and a is at an
-			// end sentinel state.
-			return +1
-		default:
-			return 0
-		}
+		return 0
 	}
 }
 

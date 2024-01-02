@@ -22,13 +22,7 @@ import (
 type VirtualReader struct {
 	vState     virtualState
 	reader     *Reader
-	Properties struct {
-		// RawKeySize, RawValueSize are set upon construction of a
-		// VirtualReader. The values of the fields is extrapolated. See
-		// MakeVirtualReader for implementation details.
-		RawKeySize   uint64
-		RawValueSize uint64
-	}
+	Properties CommonProperties
 }
 
 // Lightweight virtual sstable state which can be passed to sstable iterators.
@@ -37,6 +31,10 @@ type virtualState struct {
 	upper   InternalKey
 	fileNum base.FileNum
 	Compare Compare
+}
+
+func ceilDiv(a, b uint64) uint64 {
+	return (a + b - 1) / b
 }
 
 // MakeVirtualReader is used to contruct a reader which can read from virtual
@@ -57,19 +55,34 @@ func MakeVirtualReader(reader *Reader, meta manifest.VirtualFileMeta) VirtualRea
 		reader: reader,
 	}
 
-	v.Properties.RawKeySize =
-		(reader.Properties.RawKeySize * meta.Size) / meta.FileBacking.Size
-	v.Properties.RawValueSize =
-		(reader.Properties.RawValueSize * meta.Size) / meta.FileBacking.Size
+	v.Properties.RawKeySize = ceilDiv(reader.Properties.RawKeySize*meta.Size, meta.FileBacking.Size)
+	v.Properties.RawValueSize = ceilDiv(reader.Properties.RawValueSize*meta.Size, meta.FileBacking.Size)
+	v.Properties.NumEntries = ceilDiv(reader.Properties.NumEntries*meta.Size, meta.FileBacking.Size)
+	v.Properties.NumDeletions = ceilDiv(reader.Properties.NumDeletions*meta.Size, meta.FileBacking.Size)
+	v.Properties.NumRangeDeletions = ceilDiv(reader.Properties.NumRangeDeletions*meta.Size, meta.FileBacking.Size)
+	v.Properties.NumRangeKeyDels = ceilDiv(reader.Properties.NumRangeKeyDels*meta.Size, meta.FileBacking.Size)
 
+	// Note that we rely on NumRangeKeySets for correctness. If the sstable may
+	// contain range keys, then NumRangeKeySets must be > 0. ceilDiv works because
+	// meta.Size will not be 0 for virtual sstables.
+	v.Properties.NumRangeKeySets = ceilDiv(reader.Properties.NumRangeKeySets*meta.Size, meta.FileBacking.Size)
+	v.Properties.ValueBlocksSize = ceilDiv(reader.Properties.ValueBlocksSize*meta.Size, meta.FileBacking.Size)
+	v.Properties.NumSizedDeletions = ceilDiv(reader.Properties.NumSizedDeletions*meta.Size, meta.FileBacking.Size)
+	v.Properties.RawPointTombstoneKeySize = ceilDiv(reader.Properties.RawPointTombstoneKeySize*meta.Size, meta.FileBacking.Size)
+	v.Properties.RawPointTombstoneValueSize = ceilDiv(reader.Properties.RawPointTombstoneValueSize*meta.Size, meta.FileBacking.Size)
 	return v
 }
 
 // NewCompactionIter is the compaction iterator function for virtual readers.
 func (v *VirtualReader) NewCompactionIter(
-	bytesIterated *uint64, rp ReaderProvider, bufferPool *BufferPool,
+	bytesIterated *uint64,
+	categoryAndQoS CategoryAndQoS,
+	statsCollector *CategoryStatsCollector,
+	rp ReaderProvider,
+	bufferPool *BufferPool,
 ) (Iterator, error) {
-	return v.reader.newCompactionIter(bytesIterated, rp, &v.vState, bufferPool)
+	return v.reader.newCompactionIter(
+		bytesIterated, categoryAndQoS, statsCollector, rp, &v.vState, bufferPool)
 }
 
 // NewIterWithBlockPropertyFiltersAndContextEtc wraps
@@ -82,11 +95,19 @@ func (v *VirtualReader) NewIterWithBlockPropertyFiltersAndContextEtc(
 	filterer *BlockPropertiesFilterer,
 	hideObsoletePoints, useFilterBlock bool,
 	stats *base.InternalIteratorStats,
+	categoryAndQoS CategoryAndQoS,
+	statsCollector *CategoryStatsCollector,
 	rp ReaderProvider,
 ) (Iterator, error) {
 	return v.reader.newIterWithBlockPropertyFiltersAndContext(
-		ctx, lower, upper, filterer, hideObsoletePoints, useFilterBlock, stats, rp, &v.vState,
-	)
+		ctx, lower, upper, filterer, hideObsoletePoints, useFilterBlock, stats,
+		categoryAndQoS, statsCollector, rp, &v.vState)
+}
+
+// ValidateBlockChecksumsOnBacking will call ValidateBlockChecksumsOnBacking on the underlying reader.
+// Note that block checksum validation is NOT restricted to virtual sstable bounds.
+func (v *VirtualReader) ValidateBlockChecksumsOnBacking() error {
+	return v.reader.ValidateBlockChecksums()
 }
 
 // NewRawRangeDelIter wraps Reader.NewRawRangeDelIter.
@@ -180,4 +201,9 @@ func (v *virtualState) constrainBounds(
 func (v *VirtualReader) EstimateDiskUsage(start, end []byte) (uint64, error) {
 	_, f, l := v.vState.constrainBounds(start, end, true /* endInclusive */)
 	return v.reader.EstimateDiskUsage(f, l)
+}
+
+// CommonProperties implements the CommonReader interface.
+func (v *VirtualReader) CommonProperties() *CommonProperties {
+	return &v.Properties
 }
