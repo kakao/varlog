@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/goleak"
+	"go.uber.org/mock/gomock"
 
 	"github.com/kakao/varlog/internal/admin/mrmanager"
 	"github.com/kakao/varlog/internal/admin/snmanager"

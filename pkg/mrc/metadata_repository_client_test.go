@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/golang/mock/gomock"
-	_ "github.com/golang/mock/mockgen/model"
 	assert "github.com/smartystreets/assertions"
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/goleak"
+	"go.uber.org/mock/gomock"
+	_ "go.uber.org/mock/mockgen/model"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"

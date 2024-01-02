@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	pbtypes "github.com/gogo/protobuf/types"
-	"github.com/golang/mock/gomock"
 	. "github.com/smartystreets/goconvey/convey"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/pkg/types"
