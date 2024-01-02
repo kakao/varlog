@@ -3,6 +3,7 @@ package benchmark
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"sync"
@@ -10,7 +11,7 @@ import (
 	"time"
 
 	"go.uber.org/multierr"
-	"golang.org/x/exp/slog"
+
 	"golang.org/x/sync/errgroup"
 )
 
@@ -28,9 +29,9 @@ func New(opts ...Option) (bm *Benchmark, err error) {
 		return nil, err
 	}
 
-	logger := slog.New(slog.HandlerOptions{
-		Level: slog.InfoLevel.Level(),
-	}.NewTextHandler(os.Stdout))
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
 	slog.SetDefault(logger)
 
 	bm = &Benchmark{

@@ -4,11 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"go.uber.org/multierr"
-	"go.uber.org/zap"
-	"golang.org/x/exp/slog"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kakao/varlog/pkg/types"
@@ -271,7 +270,7 @@ func (loader *Loader) subscribeLoop(ctx context.Context, c varlog.Log) error {
 				close(stop)
 				return
 			}
-			loader.logger.Debug("subscribed", zap.String("log", logEntry.String()))
+			loader.logger.Debug("subscribed", slog.String("log", logEntry.String()))
 			sm.logs++
 			sm.bytes += int64(len(logEntry.Data))
 			if loader.metrics.ReportSubscribeMetrics(sm) {
