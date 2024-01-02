@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.19.0](https://github.com/kakao/varlog/compare/v0.18.1...v0.19.0) (2024-01-02)
+
+
+### Features
+
+* **metarepos:** unseal reportCollector with LastCommittedVer - 1 ([d29c29a](https://github.com/kakao/varlog/commit/d29c29a044fb72ff7c1267620d0fa58bf9ab5741))
+* pkg/util/units.FromByteSizeString respects SI and IEC standards ([cf0e749](https://github.com/kakao/varlog/commit/cf0e749bbf01079ae03a5f87b4842c7d49f114a9)), closes [#661](https://github.com/kakao/varlog/issues/661)
+* pkg/util/units.FromByteSizeString respects SI and IEC standards ([#662](https://github.com/kakao/varlog/issues/662)) ([7e6a2f5](https://github.com/kakao/varlog/commit/7e6a2f586a519993ca7e199f2367cf5c2988c215)), closes [#661](https://github.com/kakao/varlog/issues/661)
+* **storage:** handle inconsistency between data and commit in ReadRecoveryPoints ([8832c06](https://github.com/kakao/varlog/commit/8832c06a0a8c42aebaf482e80f59524abff4b98a))
+* **storage:** handle inconsistency between data and commit in ReadRecoveryPoints ([#545](https://github.com/kakao/varlog/issues/545)) ([208c113](https://github.com/kakao/varlog/commit/208c11377bcf30a6f808d718ce2b591bc14b9fbf))
+
 ## [0.18.1](https://github.com/kakao/varlog/compare/v0.18.0...v0.18.1) (2023-10-17)
 
 
