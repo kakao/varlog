@@ -1,6 +1,9 @@
 package units
 
 import (
+	"fmt"
+	"math"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -8,25 +11,60 @@ import (
 )
 
 func TestFromByteSizeString(t *testing.T) {
-	var size int64
-	var err error
+	const SI = ""
+	const IEC = "i"
 
-	size, err = FromByteSizeString("1G")
-	require.NoError(t, err)
-	require.EqualValues(t, 1<<30, size)
+	tcs := []struct {
+		input string
+		want  int64
+	}{
+		{input: "", want: -1},
+		{input: "0", want: 0},
+		{input: "1", want: 1},
+		{input: "1B", want: 1},
+		{input: "-1", want: -1},
+		{input: "1Gi", want: -1},
+	}
 
-	size, err = FromByteSizeString("0G")
-	require.NoError(t, err)
-	require.EqualValues(t, 0, size)
+	for i, symbol := range []string{"K", "M", "G", "T", "P"} {
+		for _, standard := range []string{SI, IEC} {
+			var base float64
+			if standard == SI {
+				base = 1000
+			} else {
+				base = 1024
+			}
+			want := int64(math.Pow(base, float64(i+1)))
 
-	_, err = FromByteSizeString("-1G")
-	require.Error(t, err)
+			for _, symbol := range []string{symbol, strings.ToLower(symbol)} {
+				for _, standard := range []string{standard, strings.ToLower(standard)} {
+					for _, b := range []string{"b", "B"} {
+						input := fmt.Sprintf("1%s%s%s", symbol, standard, b)
+						tcs = append(tcs, struct {
+							input string
+							want  int64
+						}{
+							input: input,
+							want:  want,
+						})
+					}
+				}
+			}
+		}
+	}
 
-	_, err = FromByteSizeString("1G", 0, 1<<10)
-	require.Error(t, err)
-
-	_, err = FromByteSizeString("1KB", 1<<20)
-	require.Error(t, err)
+	for _, tc := range tcs {
+		tc := tc
+		t.Run(tc.input, func(t *testing.T) {
+			got, err := FromByteSizeString(tc.input)
+			if tc.want < 0 {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
 }
 
 func TestToByteSizeString(t *testing.T) {
