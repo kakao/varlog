@@ -142,7 +142,6 @@ func TestVarlogFailoverSNBackupInitialFault(t *testing.T) {
 
 	defer func() {
 		clus.Close(t)
-		testutil.GC()
 	}()
 
 	topicID := clus.TopicIDs()[0]
