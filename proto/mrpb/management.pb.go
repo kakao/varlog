@@ -31,6 +31,12 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
+// AddPeerRequest is a request message for AddPeer RPC.
+//
+// TODO: TODO: Define a new message representing a new peer, such as "Peer" or
+// "PeerInfo" and use it rather than primitive-type fields.
+// See:
+// - https://protobuf.dev/programming-guides/api/#dont-include-primitive-types
 type AddPeerRequest struct {
 	ClusterID github_com_kakao_varlog_pkg_types.ClusterID `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
 	NodeID    github_com_kakao_varlog_pkg_types.NodeID    `protobuf:"varint,2,opt,name=node_id,json=nodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.NodeID" json:"node_id,omitempty"`
@@ -91,6 +97,7 @@ func (m *AddPeerRequest) GetUrl() string {
 	return ""
 }
 
+// RemovePeerRequest is a request message for RemovePeer RPC.
 type RemovePeerRequest struct {
 	ClusterID github_com_kakao_varlog_pkg_types.ClusterID `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
 	NodeID    github_com_kakao_varlog_pkg_types.NodeID    `protobuf:"varint,2,opt,name=node_id,json=nodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.NodeID" json:"node_id,omitempty"`
@@ -143,6 +150,7 @@ func (m *RemovePeerRequest) GetNodeID() github_com_kakao_varlog_pkg_types.NodeID
 	return 0
 }
 
+// GetClusterInfoRequest is a request message for GetClusterInfo RPC.
 type GetClusterInfoRequest struct {
 	ClusterID github_com_kakao_varlog_pkg_types.ClusterID `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"cluster_id,omitempty"`
 }
@@ -187,6 +195,7 @@ func (m *GetClusterInfoRequest) GetClusterID() github_com_kakao_varlog_pkg_types
 	return 0
 }
 
+// ClusterInfo is a metadata representing the Raft cluster.
 type ClusterInfo struct {
 	ClusterID         github_com_kakao_varlog_pkg_types.ClusterID                      `protobuf:"varint,1,opt,name=cluster_id,json=clusterId,proto3,casttype=github.com/kakao/varlog/pkg/types.ClusterID" json:"clusterId"`
 	NodeID            github_com_kakao_varlog_pkg_types.NodeID                         `protobuf:"varint,2,opt,name=node_id,json=nodeId,proto3,casttype=github.com/kakao/varlog/pkg/types.NodeID" json:"nodeId"`
@@ -334,6 +343,7 @@ func (m *ClusterInfo_Member) GetLearner() bool {
 	return false
 }
 
+// GetClusterInfoResponse is a response message for GetClusterInfo RPC.
 type GetClusterInfoResponse struct {
 	ClusterInfo *ClusterInfo `protobuf:"bytes,1,opt,name=cluster_info,json=clusterInfo,proto3" json:"cluster_info,omitempty"`
 }
@@ -448,8 +458,32 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type ManagementClient interface {
+	// AddPeer is a remote procedure to add a new node to the Raft cluster. If the
+	// node is already a member or learner, it fails and returns the gRPC status
+	// code "AlreadyExists". Users can cancel this RPC, but it doesn't guarantee
+	// that adding a new peer is not handled.
+	//
+	// TODO: Check if the cluster ID is the same as the current node's. If they
+	// are not the same, return a proper gRPC status code.
 	AddPeer(ctx context.Context, in *AddPeerRequest, opts ...grpc.CallOption) (*types.Empty, error)
+	// RemovePeer is a remote procedure to remove a node from the Raft cluster. If
+	// the node is neither a member nor a learner of the cluster, it fails and
+	// returns the gRPC status code "NotFound". Users can cancel this RPC, but it
+	// doesn't guarantee that the node will not be removed.
+	//
+	// TODO: Check if the cluster ID is the same as the current node's. If they
+	// are not the same, return a proper gRPC status code.
 	RemovePeer(ctx context.Context, in *RemovePeerRequest, opts ...grpc.CallOption) (*types.Empty, error)
+	// GetClusterInfo is a remote procedure used to retrieve information about the
+	// Raft cluster, specifically the ClusterInfo. If the current node is not a
+	// member of the cluster, it will fail and return the gRPC status code
+	// "codes.Unavailable".
+	//
+	// TODO: Check if the cluster ID is the same as the current node's. If they
+	// are not the same, return a proper gRPC status code.
+	//
+	// TODO: Define ClusterInfo, which should contain the Raft cluster metadata.
+	// Some fields will be removed due to unmatched semantics.
 	GetClusterInfo(ctx context.Context, in *GetClusterInfoRequest, opts ...grpc.CallOption) (*GetClusterInfoResponse, error)
 }
 
@@ -490,8 +524,32 @@ func (c *managementClient) GetClusterInfo(ctx context.Context, in *GetClusterInf
 
 // ManagementServer is the server API for Management service.
 type ManagementServer interface {
+	// AddPeer is a remote procedure to add a new node to the Raft cluster. If the
+	// node is already a member or learner, it fails and returns the gRPC status
+	// code "AlreadyExists". Users can cancel this RPC, but it doesn't guarantee
+	// that adding a new peer is not handled.
+	//
+	// TODO: Check if the cluster ID is the same as the current node's. If they
+	// are not the same, return a proper gRPC status code.
 	AddPeer(context.Context, *AddPeerRequest) (*types.Empty, error)
+	// RemovePeer is a remote procedure to remove a node from the Raft cluster. If
+	// the node is neither a member nor a learner of the cluster, it fails and
+	// returns the gRPC status code "NotFound". Users can cancel this RPC, but it
+	// doesn't guarantee that the node will not be removed.
+	//
+	// TODO: Check if the cluster ID is the same as the current node's. If they
+	// are not the same, return a proper gRPC status code.
 	RemovePeer(context.Context, *RemovePeerRequest) (*types.Empty, error)
+	// GetClusterInfo is a remote procedure used to retrieve information about the
+	// Raft cluster, specifically the ClusterInfo. If the current node is not a
+	// member of the cluster, it will fail and return the gRPC status code
+	// "codes.Unavailable".
+	//
+	// TODO: Check if the cluster ID is the same as the current node's. If they
+	// are not the same, return a proper gRPC status code.
+	//
+	// TODO: Define ClusterInfo, which should contain the Raft cluster metadata.
+	// Some fields will be removed due to unmatched semantics.
 	GetClusterInfo(context.Context, *GetClusterInfoRequest) (*GetClusterInfoResponse, error)
 }
 
