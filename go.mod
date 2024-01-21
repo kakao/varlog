@@ -27,7 +27,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.21.0
 	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/goleak v1.3.0
-	go.uber.org/mock v0.3.0
+	go.uber.org/mock v0.4.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.26.0
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df
