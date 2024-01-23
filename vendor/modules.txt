@@ -355,7 +355,7 @@ go.etcd.io/etcd/wal/walpb
 # go.opentelemetry.io/contrib/instrumentation/host v0.46.1
 ## explicit; go 1.20
 go.opentelemetry.io/contrib/instrumentation/host
-# go.opentelemetry.io/contrib/instrumentation/runtime v0.46.1
+# go.opentelemetry.io/contrib/instrumentation/runtime v0.47.0
 ## explicit; go 1.20
 go.opentelemetry.io/contrib/instrumentation/runtime
 # go.opentelemetry.io/otel v1.22.0
