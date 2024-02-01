@@ -336,7 +336,7 @@ func TestVarlogTest(t *testing.T) {
 		maxBatchSize          = 5
 	)
 
-	var remainedLogs = numLogs
+	remainedLogs := numLogs
 
 	rng := rand.New(rand.NewSource(time.Now().UnixMilli()))
 
@@ -739,6 +739,134 @@ func TestVarlogTest(t *testing.T) {
 	vlg.Close()
 	wg.Wait()
 	require.Error(t, sub3.Close())
+}
+
+func TestVarlogTest_PeekLogStream(t *testing.T) {
+	const (
+		clusterID         = types.ClusterID(1)
+		replicationFactor = 3
+
+		numLogStreams = 2
+		filledLSIdx   = 0
+		emptyLSIdx    = 1
+
+		numLogs = 10
+	)
+
+	ctx := context.Background()
+
+	tcs := []struct {
+		testf func(t *testing.T, adm varlog.Admin, vlg varlog.Log, lsds []*varlogpb.LogStreamDescriptor)
+		name  string
+	}{
+		{
+			name: "NewLogStream",
+			testf: func(t *testing.T, _ varlog.Admin, vlg varlog.Log, lsds []*varlogpb.LogStreamDescriptor) {
+				lsd := lsds[emptyLSIdx]
+				first, last, err := vlg.PeekLogStream(ctx, lsd.TopicID, lsd.LogStreamID)
+				require.NoError(t, err)
+				require.True(t, first.GLSN.Invalid())
+				require.True(t, last.GLSN.Invalid())
+			},
+		},
+		{
+			name: "FilledLogStream",
+			testf: func(t *testing.T, _ varlog.Admin, vlg varlog.Log, lsds []*varlogpb.LogStreamDescriptor) {
+				lsd := lsds[filledLSIdx]
+				first, last, err := vlg.PeekLogStream(ctx, lsd.TopicID, lsd.LogStreamID)
+				require.NoError(t, err)
+				require.Equal(t, types.MinGLSN, first.GLSN)
+				require.Equal(t, types.GLSN(numLogs), last.GLSN)
+			},
+		},
+		{
+			name: "TrimmedLogStream",
+			testf: func(t *testing.T, adm varlog.Admin, vlg varlog.Log, lsds []*varlogpb.LogStreamDescriptor) {
+				const trimGLSN = types.GLSN(5)
+
+				res, err := adm.Trim(ctx, lsds[0].TopicID, trimGLSN)
+				require.NoError(t, err)
+				require.Len(t, res, numLogStreams)
+				for _, m := range res {
+					require.NotEmpty(t, m)
+					for _, err := range m {
+						require.NoError(t, err)
+					}
+				}
+
+				lsd := lsds[filledLSIdx]
+				first, last, err := vlg.PeekLogStream(ctx, lsd.TopicID, lsd.LogStreamID)
+				require.NoError(t, err)
+				require.Equal(t, trimGLSN+1, first.GLSN)
+				require.Equal(t, types.GLSN(numLogs), last.GLSN)
+			},
+		},
+		{
+			name: "FullyTrimmedLogStream",
+			testf: func(t *testing.T, adm varlog.Admin, vlg varlog.Log, lsds []*varlogpb.LogStreamDescriptor) {
+				const trimGLSN = types.GLSN(numLogs)
+
+				res, err := adm.Trim(ctx, lsds[0].TopicID, trimGLSN)
+				require.NoError(t, err)
+				require.Len(t, res, numLogStreams)
+				for _, m := range res {
+					require.NotEmpty(t, m)
+					for _, err := range m {
+						require.NoError(t, err)
+					}
+				}
+
+				lsd := lsds[filledLSIdx]
+				first, last, err := vlg.PeekLogStream(ctx, lsd.TopicID, lsd.LogStreamID)
+				require.NoError(t, err)
+				require.True(t, first.GLSN.Invalid())
+				require.True(t, last.GLSN.Invalid())
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			vt, err := varlogtest.New(
+				varlogtest.WithClusterID(clusterID),
+				varlogtest.WithReplicationFactor(replicationFactor),
+			)
+			require.NoError(t, err)
+
+			adm := vt.NewAdminClient()
+			vlg := vt.NewLogClient()
+			defer func() {
+				require.NoError(t, vlg.Close())
+				require.NoError(t, adm.Close())
+			}()
+
+			td, err := adm.AddTopic(context.Background())
+			assert.NoError(t, err)
+
+			for i := 0; i < replicationFactor; i++ {
+				snid := types.StorageNodeID(i + 1)
+				addr := fmt.Sprintf("sn-%d", i+1)
+				_, err := adm.AddStorageNode(context.Background(), snid, addr)
+				assert.NoError(t, err)
+			}
+
+			var lsds []*varlogpb.LogStreamDescriptor
+			for i := 0; i < numLogStreams; i++ {
+				lsd, err := adm.AddLogStream(context.Background(), td.TopicID, nil)
+				assert.NoError(t, err)
+				lsds = append(lsds, lsd)
+			}
+
+			lsd := lsds[filledLSIdx]
+			for i := 0; i < numLogs; i++ {
+				res := vlg.AppendTo(ctx, lsd.TopicID, lsd.LogStreamID, [][]byte{nil})
+				require.NoError(t, res.Err)
+				assert.Equal(t, types.GLSN(i+1), res.Metadata[0].GLSN)
+			}
+
+			tc.testf(t, adm, vlg, lsds)
+		})
+	}
 }
 
 func TestVarlogTest_Trim(t *testing.T) {

@@ -144,12 +144,13 @@ func (vt *VarlogTest) peek(topicID types.TopicID, logStreamID types.LogStreamID)
 	if idx < len(vt.localLogEntries[logStreamID]) && vt.localLogEntries[logStreamID][idx].GLSN == trimGLSN {
 		idx++
 	}
-
-	head.GLSN = vt.localLogEntries[logStreamID][idx].GLSN
-	head.LLSN = vt.localLogEntries[logStreamID][idx].LLSN
-	lastIdx := len(vt.localLogEntries[logStreamID]) - 1
-	tail.GLSN = vt.localLogEntries[logStreamID][lastIdx].GLSN
-	tail.LLSN = vt.localLogEntries[logStreamID][lastIdx].LLSN
+	if idx < len(vt.localLogEntries[logStreamID]) {
+		head.GLSN = vt.localLogEntries[logStreamID][idx].GLSN
+		head.LLSN = vt.localLogEntries[logStreamID][idx].LLSN
+		lastIdx := len(vt.localLogEntries[logStreamID]) - 1
+		tail.GLSN = vt.localLogEntries[logStreamID][lastIdx].GLSN
+		tail.LLSN = vt.localLogEntries[logStreamID][lastIdx].LLSN
+	}
 	return head, tail
 }
 
