@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.19.1](https://github.com/kakao/varlog/compare/v0.19.0...v0.19.1) (2024-02-01)
+
+
+### Bug Fixes
+
+* **varlogtest:** panic on PeekLogStream after removing all logs ([203fc33](https://github.com/kakao/varlog/commit/203fc33a18f1974bf0700990f6418a1733a63d74))
+* **varlogtest:** panic on PeekLogStream after removing all logs ([#686](https://github.com/kakao/varlog/issues/686)) ([2b2cdfb](https://github.com/kakao/varlog/commit/2b2cdfb384a7b19a8a06d551c78b440c6370a523))
+
 ## [0.19.0](https://github.com/kakao/varlog/compare/v0.18.1...v0.19.0) (2024-01-02)
 
 
