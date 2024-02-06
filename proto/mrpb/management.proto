@@ -14,6 +14,12 @@ option (gogoproto.goproto_unkeyed_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
+// AddPeerRequest is a request message for AddPeer RPC.
+//
+// TODO: TODO: Define a new message representing a new peer, such as "Peer" or
+// "PeerInfo" and use it rather than primitive-type fields.
+// See:
+// - https://protobuf.dev/programming-guides/api/#dont-include-primitive-types
 message AddPeerRequest {
   int32 cluster_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
@@ -28,6 +34,7 @@ message AddPeerRequest {
   string url = 3;
 }
 
+// RemovePeerRequest is a request message for RemovePeer RPC.
 message RemovePeerRequest {
   int32 cluster_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
@@ -40,6 +47,7 @@ message RemovePeerRequest {
   ];
 }
 
+// GetClusterInfoRequest is a request message for GetClusterInfo RPC.
 message GetClusterInfoRequest {
   int32 cluster_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
@@ -47,6 +55,7 @@ message GetClusterInfoRequest {
   ];
 }
 
+// ClusterInfo is a metadata representing the Raft cluster.
 message ClusterInfo {
   message Member {
     string peer = 1;
@@ -80,12 +89,38 @@ message ClusterInfo {
   uint64 applied_index = 6 [(gogoproto.jsontag) = "appliedIndex"];
 }
 
+// GetClusterInfoResponse is a response message for GetClusterInfo RPC.
 message GetClusterInfoResponse {
   ClusterInfo cluster_info = 1;
 }
 
+// Management service manages the Raft cluster of the Metadata Repository.
 service Management {
+  // AddPeer is a remote procedure to add a new node to the Raft cluster. If the
+  // node is already a member or learner, it fails and returns the gRPC status
+  // code "AlreadyExists". Users can cancel this RPC, but it doesn't guarantee
+  // that adding a new peer is not handled.
+  //
+  // TODO: Check if the cluster ID is the same as the current node's. If they
+  // are not the same, return a proper gRPC status code.
   rpc AddPeer(AddPeerRequest) returns (google.protobuf.Empty) {}
+  // RemovePeer is a remote procedure to remove a node from the Raft cluster. If
+  // the node is neither a member nor a learner of the cluster, it fails and
+  // returns the gRPC status code "NotFound". Users can cancel this RPC, but it
+  // doesn't guarantee that the node will not be removed.
+  //
+  // TODO: Check if the cluster ID is the same as the current node's. If they
+  // are not the same, return a proper gRPC status code.
   rpc RemovePeer(RemovePeerRequest) returns (google.protobuf.Empty) {}
+  // GetClusterInfo is a remote procedure used to retrieve information about the
+  // Raft cluster, specifically the ClusterInfo. If the current node is not a
+  // member of the cluster, it will fail and return the gRPC status code
+  // "codes.Unavailable".
+  //
+  // TODO: Check if the cluster ID is the same as the current node's. If they
+  // are not the same, return a proper gRPC status code.
+  //
+  // TODO: Define ClusterInfo, which should contain the Raft cluster metadata.
+  // Some fields will be removed due to unmatched semantics.
   rpc GetClusterInfo(GetClusterInfoRequest) returns (GetClusterInfoResponse) {}
 }
