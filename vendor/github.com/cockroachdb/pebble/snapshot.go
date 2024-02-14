@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/internal/invariants"
 	"github.com/cockroachdb/pebble/rangekey"
-	"github.com/cockroachdb/pebble/sstable"
 )
 
 // ErrSnapshotExcised is returned from WaitForFileOnlySnapshot if an excise
@@ -68,9 +67,7 @@ func (s *Snapshot) NewIterWithContext(ctx context.Context, o *IterOptions) (*Ite
 	if s.db == nil {
 		panic(ErrClosed)
 	}
-	return s.db.newIter(ctx, nil /* batch */, newIterOpts{
-		snapshot: snapshotIterOpts{seqNum: s.seqNum},
-	}, o), nil
+	return s.db.newIter(ctx, nil /* batch */, snapshotIterOpts{seqNum: s.seqNum}, o), nil
 }
 
 // ScanInternal scans all internal keys within the specified bounds, truncating
@@ -81,7 +78,6 @@ func (s *Snapshot) NewIterWithContext(ctx context.Context, o *IterOptions) (*Ite
 // point keys deleted by range dels and keys masked by range keys.
 func (s *Snapshot) ScanInternal(
 	ctx context.Context,
-	categoryAndQoS sstable.CategoryAndQoS,
 	lower, upper []byte,
 	visitPointKey func(key *InternalKey, value LazyValue, iterInfo IteratorLevel) error,
 	visitRangeDel func(start, end []byte, seqNum uint64) error,
@@ -92,7 +88,6 @@ func (s *Snapshot) ScanInternal(
 		panic(ErrClosed)
 	}
 	scanInternalOpts := &scanInternalOptions{
-		CategoryAndQoS:   categoryAndQoS,
 		visitPointKey:    visitPointKey,
 		visitRangeDel:    visitRangeDel,
 		visitRangeKey:    visitRangeKey,
@@ -105,7 +100,7 @@ func (s *Snapshot) ScanInternal(
 		},
 	}
 
-	iter := s.db.newInternalIter(ctx, snapshotIterOpts{seqNum: s.seqNum}, scanInternalOpts)
+	iter := s.db.newInternalIter(snapshotIterOpts{seqNum: s.seqNum}, scanInternalOpts)
 	defer iter.close()
 
 	return scanInternalImpl(ctx, lower, upper, iter, scanInternalOpts)
@@ -476,14 +471,14 @@ func (es *EventuallyFileOnlySnapshot) NewIterWithContext(
 	defer es.mu.Unlock()
 	if es.mu.vers != nil {
 		sOpts := snapshotIterOpts{seqNum: es.seqNum, vers: es.mu.vers}
-		return es.db.newIter(ctx, nil /* batch */, newIterOpts{snapshot: sOpts}, o), nil
+		return es.db.newIter(ctx, nil /* batch */, sOpts, o), nil
 	}
 
 	if es.excised.Load() {
 		return nil, ErrSnapshotExcised
 	}
 	sOpts := snapshotIterOpts{seqNum: es.seqNum}
-	iter := es.db.newIter(ctx, nil /* batch */, newIterOpts{snapshot: sOpts}, o)
+	iter := es.db.newIter(ctx, nil /* batch */, sOpts, o)
 
 	// If excised is true, then keys relevant to the snapshot might not be
 	// present in the readState being used by the iterator. Error out.
@@ -502,7 +497,6 @@ func (es *EventuallyFileOnlySnapshot) NewIterWithContext(
 // point keys deleted by range dels and keys masked by range keys.
 func (es *EventuallyFileOnlySnapshot) ScanInternal(
 	ctx context.Context,
-	categoryAndQoS sstable.CategoryAndQoS,
 	lower, upper []byte,
 	visitPointKey func(key *InternalKey, value LazyValue, iterInfo IteratorLevel) error,
 	visitRangeDel func(start, end []byte, seqNum uint64) error,
@@ -529,7 +523,6 @@ func (es *EventuallyFileOnlySnapshot) ScanInternal(
 	}
 	es.mu.Unlock()
 	opts := &scanInternalOptions{
-		CategoryAndQoS: categoryAndQoS,
 		IterOptions: IterOptions{
 			KeyTypes:   IterKeyTypePointsAndRanges,
 			LowerBound: lower,
@@ -541,7 +534,7 @@ func (es *EventuallyFileOnlySnapshot) ScanInternal(
 		visitSharedFile:  visitSharedFile,
 		skipSharedLevels: visitSharedFile != nil,
 	}
-	iter := es.db.newInternalIter(ctx, sOpts, opts)
+	iter := es.db.newInternalIter(sOpts, opts)
 	defer iter.close()
 
 	// If excised is true, then keys relevant to the snapshot might not be

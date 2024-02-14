@@ -241,7 +241,6 @@ var _ base.InternalIterator = (*levelIter)(nil)
 // newLevelIter returns a levelIter. It is permissible to pass a nil split
 // parameter if the caller is never going to call SeekPrefixGE.
 func newLevelIter(
-	ctx context.Context,
 	opts IterOptions,
 	comparer *Comparer,
 	newIters tableNewIters,
@@ -250,7 +249,8 @@ func newLevelIter(
 	internalOpts internalIterOpts,
 ) *levelIter {
 	l := &levelIter{}
-	l.init(ctx, opts, comparer, newIters, files, level, internalOpts)
+	l.init(context.Background(), opts, comparer, newIters, files, level,
+		internalOpts)
 	return l
 }
 
@@ -275,7 +275,6 @@ func (l *levelIter) init(
 		l.tableOpts.PointKeyFilters = l.filtersBuf[:0:1]
 	}
 	l.tableOpts.UseL6Filters = opts.UseL6Filters
-	l.tableOpts.CategoryAndQoS = opts.CategoryAndQoS
 	l.tableOpts.level = l.level
 	l.tableOpts.snapshotForHideObsoletePoints = opts.snapshotForHideObsoletePoints
 	l.comparer = comparer
@@ -1231,15 +1230,6 @@ func (l *levelIter) SetBounds(lower, upper []byte) {
 	}
 
 	l.iter.SetBounds(l.tableOpts.LowerBound, l.tableOpts.UpperBound)
-}
-
-func (l *levelIter) SetContext(ctx context.Context) {
-	l.ctx = ctx
-	if l.iter != nil {
-		// TODO(sumeer): this is losing the ctx = objiotracing.WithLevel(ctx,
-		// manifest.LevelToInt(opts.level)) that happens in table_cache.go.
-		l.iter.SetContext(ctx)
-	}
 }
 
 func (l *levelIter) String() string {

@@ -5,7 +5,6 @@
 package sstable
 
 import (
-	"context"
 	"encoding/binary"
 	"unsafe"
 
@@ -1540,8 +1539,6 @@ func (i *blockIter) SetBounds(lower, upper []byte) {
 	// This should never be called as bounds are handled by sstable.Iterator.
 	panic("pebble: SetBounds unimplemented")
 }
-
-func (i *blockIter) SetContext(_ context.Context) {}
 
 func (i *blockIter) valid() bool {
 	return i.offset >= 0 && i.offset < i.restarts

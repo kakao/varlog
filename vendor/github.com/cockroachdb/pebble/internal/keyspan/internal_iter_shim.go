@@ -4,11 +4,7 @@
 
 package keyspan
 
-import (
-	"context"
-
-	"github.com/cockroachdb/pebble/internal/base"
-)
+import "github.com/cockroachdb/pebble/internal/base"
 
 // InternalIteratorShim is a temporary iterator type used as a shim between
 // keyspan.MergingIter and base.InternalIterator. It's used temporarily for
@@ -115,9 +111,6 @@ func (i *InternalIteratorShim) Close() error {
 // SetBounds implements (base.InternalIterator).SetBounds.
 func (i *InternalIteratorShim) SetBounds(lower, upper []byte) {
 }
-
-// SetContext implements (base.InternalIterator).SetContext.
-func (i *InternalIteratorShim) SetContext(_ context.Context) {}
 
 // String implements fmt.Stringer.
 func (i *InternalIteratorShim) String() string {

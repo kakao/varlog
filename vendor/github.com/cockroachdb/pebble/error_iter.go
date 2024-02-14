@@ -5,8 +5,6 @@
 package pebble
 
 import (
-	"context"
-
 	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/internal/keyspan"
 )
@@ -69,8 +67,6 @@ func (c *errorIter) String() string {
 }
 
 func (c *errorIter) SetBounds(lower, upper []byte) {}
-
-func (c *errorIter) SetContext(_ context.Context) {}
 
 type errorKeyspanIter struct {
 	err error

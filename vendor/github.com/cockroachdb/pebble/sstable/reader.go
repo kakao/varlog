@@ -6,12 +6,11 @@ package sstable
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"encoding/binary"
 	"io"
 	"os"
-	"slices"
+	"sort"
 	"time"
 
 	"github.com/cespare/xxhash/v2"
@@ -186,14 +185,10 @@ type CommonReader interface {
 		filterer *BlockPropertiesFilterer,
 		hideObsoletePoints, useFilterBlock bool,
 		stats *base.InternalIteratorStats,
-		categoryAndQoS CategoryAndQoS,
-		statsCollector *CategoryStatsCollector,
 		rp ReaderProvider,
 	) (Iterator, error)
 	NewCompactionIter(
 		bytesIterated *uint64,
-		categoryAndQoS CategoryAndQoS,
-		statsCollector *CategoryStatsCollector,
 		rp ReaderProvider,
 		bufferPool *BufferPool,
 	) (Iterator, error)
@@ -263,13 +258,12 @@ func (r *Reader) NewIterWithBlockPropertyFilters(
 	filterer *BlockPropertiesFilterer,
 	useFilterBlock bool,
 	stats *base.InternalIteratorStats,
-	categoryAndQoS CategoryAndQoS,
-	statsCollector *CategoryStatsCollector,
 	rp ReaderProvider,
 ) (Iterator, error) {
 	return r.newIterWithBlockPropertyFiltersAndContext(
-		context.Background(), lower, upper, filterer, false, useFilterBlock, stats,
-		categoryAndQoS, statsCollector, rp, nil)
+		context.Background(),
+		lower, upper, filterer, false, useFilterBlock, stats, rp, nil,
+	)
 }
 
 // NewIterWithBlockPropertyFiltersAndContextEtc is similar to
@@ -285,13 +279,11 @@ func (r *Reader) NewIterWithBlockPropertyFiltersAndContextEtc(
 	filterer *BlockPropertiesFilterer,
 	hideObsoletePoints, useFilterBlock bool,
 	stats *base.InternalIteratorStats,
-	categoryAndQoS CategoryAndQoS,
-	statsCollector *CategoryStatsCollector,
 	rp ReaderProvider,
 ) (Iterator, error) {
 	return r.newIterWithBlockPropertyFiltersAndContext(
-		ctx, lower, upper, filterer, hideObsoletePoints, useFilterBlock, stats, categoryAndQoS,
-		statsCollector, rp, nil)
+		ctx, lower, upper, filterer, hideObsoletePoints, useFilterBlock, stats, rp, nil,
+	)
 }
 
 // TryAddBlockPropertyFilterForHideObsoletePoints is expected to be called
@@ -317,8 +309,6 @@ func (r *Reader) newIterWithBlockPropertyFiltersAndContext(
 	hideObsoletePoints bool,
 	useFilterBlock bool,
 	stats *base.InternalIteratorStats,
-	categoryAndQoS CategoryAndQoS,
-	statsCollector *CategoryStatsCollector,
 	rp ReaderProvider,
 	v *virtualState,
 ) (Iterator, error) {
@@ -327,8 +317,7 @@ func (r *Reader) newIterWithBlockPropertyFiltersAndContext(
 	// until the final iterator closes.
 	if r.Properties.IndexType == twoLevelIndex {
 		i := twoLevelIterPool.Get().(*twoLevelIterator)
-		err := i.init(ctx, r, v, lower, upper, filterer, useFilterBlock, hideObsoletePoints, stats,
-			categoryAndQoS, statsCollector, rp, nil /* bufferPool */)
+		err := i.init(ctx, r, v, lower, upper, filterer, useFilterBlock, hideObsoletePoints, stats, rp, nil /* bufferPool */)
 		if err != nil {
 			return nil, err
 		}
@@ -336,8 +325,7 @@ func (r *Reader) newIterWithBlockPropertyFiltersAndContext(
 	}
 
 	i := singleLevelIterPool.Get().(*singleLevelIterator)
-	err := i.init(ctx, r, v, lower, upper, filterer, useFilterBlock, hideObsoletePoints, stats,
-		categoryAndQoS, statsCollector, rp, nil /* bufferPool */)
+	err := i.init(ctx, r, v, lower, upper, filterer, useFilterBlock, hideObsoletePoints, stats, rp, nil /* bufferPool */)
 	if err != nil {
 		return nil, err
 	}
@@ -351,37 +339,28 @@ func (r *Reader) newIterWithBlockPropertyFiltersAndContext(
 func (r *Reader) NewIter(lower, upper []byte) (Iterator, error) {
 	return r.NewIterWithBlockPropertyFilters(
 		lower, upper, nil, true /* useFilterBlock */, nil, /* stats */
-		CategoryAndQoS{}, nil /*statsCollector */, TrivialReaderProvider{Reader: r})
+		TrivialReaderProvider{Reader: r})
 }
 
 // NewCompactionIter returns an iterator similar to NewIter but it also increments
 // the number of bytes iterated. If an error occurs, NewCompactionIter cleans up
 // after itself and returns a nil iterator.
 func (r *Reader) NewCompactionIter(
-	bytesIterated *uint64,
-	categoryAndQoS CategoryAndQoS,
-	statsCollector *CategoryStatsCollector,
-	rp ReaderProvider,
-	bufferPool *BufferPool,
+	bytesIterated *uint64, rp ReaderProvider, bufferPool *BufferPool,
 ) (Iterator, error) {
-	return r.newCompactionIter(bytesIterated, categoryAndQoS, statsCollector, rp, nil, bufferPool)
+	return r.newCompactionIter(bytesIterated, rp, nil, bufferPool)
 }
 
 func (r *Reader) newCompactionIter(
-	bytesIterated *uint64,
-	categoryAndQoS CategoryAndQoS,
-	statsCollector *CategoryStatsCollector,
-	rp ReaderProvider,
-	v *virtualState,
-	bufferPool *BufferPool,
+	bytesIterated *uint64, rp ReaderProvider, v *virtualState, bufferPool *BufferPool,
 ) (Iterator, error) {
 	if r.Properties.IndexType == twoLevelIndex {
 		i := twoLevelIterPool.Get().(*twoLevelIterator)
 		err := i.init(
 			context.Background(),
 			r, v, nil /* lower */, nil /* upper */, nil,
-			false /* useFilter */, false, /* hideObsoletePoints */
-			nil /* stats */, categoryAndQoS, statsCollector, rp, bufferPool,
+			false /* useFilter */, v != nil && v.isForeign, /* hideObsoletePoints */
+			nil /* stats */, rp, bufferPool,
 		)
 		if err != nil {
 			return nil, err
@@ -395,8 +374,8 @@ func (r *Reader) newCompactionIter(
 	i := singleLevelIterPool.Get().(*singleLevelIterator)
 	err := i.init(
 		context.Background(), r, v, nil /* lower */, nil, /* upper */
-		nil, false /* useFilter */, false, /* hideObsoletePoints */
-		nil /* stats */, categoryAndQoS, statsCollector, rp, bufferPool,
+		nil, false /* useFilter */, v != nil && v.isForeign, /* hideObsoletePoints */
+		nil /* stats */, rp, bufferPool,
 	)
 	if err != nil {
 		return nil, err
@@ -418,7 +397,7 @@ func (r *Reader) NewRawRangeDelIter() (keyspan.FragmentIterator, error) {
 	if r.rangeDelBH.Length == 0 {
 		return nil, nil
 	}
-	h, err := r.readRangeDel(nil /* stats */, nil /* iterStats */)
+	h, err := r.readRangeDel(nil /* stats */)
 	if err != nil {
 		return nil, err
 	}
@@ -439,7 +418,7 @@ func (r *Reader) NewRawRangeKeyIter() (keyspan.FragmentIterator, error) {
 	if r.rangeKeyBH.Length == 0 {
 		return nil, nil
 	}
-	h, err := r.readRangeKey(nil /* stats */, nil /* iterStats */)
+	h, err := r.readRangeKey(nil /* stats */)
 	if err != nil {
 		return nil, err
 	}
@@ -462,31 +441,27 @@ func (i *rangeKeyFragmentBlockIter) Close() error {
 }
 
 func (r *Reader) readIndex(
-	ctx context.Context, stats *base.InternalIteratorStats, iterStats *iterStatsAccumulator,
+	ctx context.Context, stats *base.InternalIteratorStats,
 ) (bufferHandle, error) {
 	ctx = objiotracing.WithBlockType(ctx, objiotracing.MetadataBlock)
-	return r.readBlock(ctx, r.indexBH, nil, nil, stats, iterStats, nil /* buffer pool */)
+	return r.readBlock(ctx, r.indexBH, nil, nil, stats, nil /* buffer pool */)
 }
 
 func (r *Reader) readFilter(
-	ctx context.Context, stats *base.InternalIteratorStats, iterStats *iterStatsAccumulator,
+	ctx context.Context, stats *base.InternalIteratorStats,
 ) (bufferHandle, error) {
 	ctx = objiotracing.WithBlockType(ctx, objiotracing.FilterBlock)
-	return r.readBlock(ctx, r.filterBH, nil /* transform */, nil /* readHandle */, stats, iterStats, nil /* buffer pool */)
+	return r.readBlock(ctx, r.filterBH, nil /* transform */, nil /* readHandle */, stats, nil /* buffer pool */)
 }
 
-func (r *Reader) readRangeDel(
-	stats *base.InternalIteratorStats, iterStats *iterStatsAccumulator,
-) (bufferHandle, error) {
+func (r *Reader) readRangeDel(stats *base.InternalIteratorStats) (bufferHandle, error) {
 	ctx := objiotracing.WithBlockType(context.Background(), objiotracing.MetadataBlock)
-	return r.readBlock(ctx, r.rangeDelBH, r.rangeDelTransform, nil /* readHandle */, stats, iterStats, nil /* buffer pool */)
+	return r.readBlock(ctx, r.rangeDelBH, r.rangeDelTransform, nil /* readHandle */, stats, nil /* buffer pool */)
 }
 
-func (r *Reader) readRangeKey(
-	stats *base.InternalIteratorStats, iterStats *iterStatsAccumulator,
-) (bufferHandle, error) {
+func (r *Reader) readRangeKey(stats *base.InternalIteratorStats) (bufferHandle, error) {
 	ctx := objiotracing.WithBlockType(context.Background(), objiotracing.MetadataBlock)
-	return r.readBlock(ctx, r.rangeKeyBH, nil /* transform */, nil /* readHandle */, stats, iterStats, nil /* buffer pool */)
+	return r.readBlock(ctx, r.rangeKeyBH, nil /* transform */, nil /* readHandle */, stats, nil /* buffer pool */)
 }
 
 func checkChecksum(
@@ -547,7 +522,6 @@ func (r *Reader) readBlock(
 	transform blockTransform,
 	readHandle objstorage.ReadHandle,
 	stats *base.InternalIteratorStats,
-	iterStats *iterStatsAccumulator,
 	bufferPool *BufferPool,
 ) (handle bufferHandle, _ error) {
 	if h := r.opts.Cache.Get(r.cacheID, r.fileNum, bh.Offset); h.Get() != nil {
@@ -558,9 +532,6 @@ func (r *Reader) readBlock(
 		if stats != nil {
 			stats.BlockBytes += bh.Length
 			stats.BlockBytesInCache += bh.Length
-		}
-		if iterStats != nil {
-			iterStats.reportStats(bh.Length, bh.Length)
 		}
 		// This block is already in the cache; return a handle to existing vlaue
 		// in the cache.
@@ -660,9 +631,6 @@ func (r *Reader) readBlock(
 	if stats != nil {
 		stats.BlockBytes += bh.Length
 	}
-	if iterStats != nil {
-		iterStats.reportStats(bh.Length, 0)
-	}
 	if decompressed.buf.Valid() {
 		return bufferHandle{b: decompressed.buf}, nil
 	}
@@ -728,8 +696,7 @@ func (r *Reader) readMetaindex(metaindexBH BlockHandle) error {
 	defer r.metaBufferPool.Release()
 
 	b, err := r.readBlock(
-		context.Background(), metaindexBH, nil /* transform */, nil /* readHandle */, nil, /* stats */
-		nil /* iterStats */, &r.metaBufferPool)
+		context.Background(), metaindexBH, nil /* transform */, nil /* readHandle */, nil /* stats */, &r.metaBufferPool)
 	if err != nil {
 		return err
 	}
@@ -772,8 +739,7 @@ func (r *Reader) readMetaindex(metaindexBH BlockHandle) error {
 
 	if bh, ok := meta[metaPropertiesName]; ok {
 		b, err = r.readBlock(
-			context.Background(), bh, nil /* transform */, nil /* readHandle */, nil, /* stats */
-			nil /* iterStats */, nil /* buffer pool */)
+			context.Background(), bh, nil /* transform */, nil /* readHandle */, nil /* stats */, nil /* buffer pool */)
 		if err != nil {
 			return err
 		}
@@ -846,7 +812,7 @@ func (r *Reader) Layout() (*Layout, error) {
 		Format:     r.tableFormat,
 	}
 
-	indexH, err := r.readIndex(context.Background(), nil, nil)
+	indexH, err := r.readIndex(context.Background(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -879,7 +845,7 @@ func (r *Reader) Layout() (*Layout, error) {
 			l.Index = append(l.Index, indexBH.BlockHandle)
 
 			subIndex, err := r.readBlock(context.Background(), indexBH.BlockHandle,
-				nil /* transform */, nil /* readHandle */, nil /* stats */, nil /* iterStats */, nil /* buffer pool */)
+				nil /* transform */, nil /* readHandle */, nil /* stats */, nil /* buffer pool */)
 			if err != nil {
 				return nil, err
 			}
@@ -902,7 +868,7 @@ func (r *Reader) Layout() (*Layout, error) {
 		}
 	}
 	if r.valueBIH.h.Length != 0 {
-		vbiH, err := r.readBlock(context.Background(), r.valueBIH.h, nil, nil, nil, nil, nil /* buffer pool */)
+		vbiH, err := r.readBlock(context.Background(), r.valueBIH.h, nil, nil, nil, nil /* buffer pool */)
 		if err != nil {
 			return nil, err
 		}
@@ -957,8 +923,8 @@ func (r *Reader) ValidateBlockChecksums() error {
 
 	// Sorting by offset ensures we are performing a sequential scan of the
 	// file.
-	slices.SortFunc(blocks, func(a, b BlockHandle) int {
-		return cmp.Compare(a.Offset, b.Offset)
+	sort.Slice(blocks, func(i, j int) bool {
+		return blocks[i].Offset < blocks[j].Offset
 	})
 
 	// Check all blocks sequentially. Make use of read-ahead, given we are
@@ -973,7 +939,7 @@ func (r *Reader) ValidateBlockChecksums() error {
 		}
 
 		// Read the block, which validates the checksum.
-		h, err := r.readBlock(context.Background(), bh, nil, rh, nil, nil /* iterStats */, nil /* buffer pool */)
+		h, err := r.readBlock(context.Background(), bh, nil, rh, nil, nil /* buffer pool */)
 		if err != nil {
 			return err
 		}
@@ -1008,7 +974,7 @@ func (r *Reader) EstimateDiskUsage(start, end []byte) (uint64, error) {
 		return 0, r.err
 	}
 
-	indexH, err := r.readIndex(context.Background(), nil, nil)
+	indexH, err := r.readIndex(context.Background(), nil)
 	if err != nil {
 		return 0, err
 	}
@@ -1041,7 +1007,7 @@ func (r *Reader) EstimateDiskUsage(start, end []byte) (uint64, error) {
 			return 0, errCorruptIndexEntry
 		}
 		startIdxBlock, err := r.readBlock(context.Background(), startIdxBH.BlockHandle,
-			nil /* transform */, nil /* readHandle */, nil /* stats */, nil /* iterStats */, nil /* buffer pool */)
+			nil /* transform */, nil /* readHandle */, nil /* stats */, nil /* buffer pool */)
 		if err != nil {
 			return 0, err
 		}
@@ -1062,7 +1028,7 @@ func (r *Reader) EstimateDiskUsage(start, end []byte) (uint64, error) {
 				return 0, errCorruptIndexEntry
 			}
 			endIdxBlock, err := r.readBlock(context.Background(),
-				endIdxBH.BlockHandle, nil /* transform */, nil /* readHandle */, nil /* stats */, nil /* iterStats */, nil /* buffer pool */)
+				endIdxBH.BlockHandle, nil /* transform */, nil /* readHandle */, nil /* stats */, nil /* buffer pool */)
 			if err != nil {
 				return 0, err
 			}
