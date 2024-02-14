@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.2](https://github.com/kakao/varlog/compare/v0.19.1...v0.19.2) (2024-02-14)
+
+
+### Bug Fixes
+
+* **client:** remove subscribe's initial delay ([e77c763](https://github.com/kakao/varlog/commit/e77c76381801a1b85f61f5a9dd437e90cf14dfa4))
+
 ## [0.19.1](https://github.com/kakao/varlog/compare/v0.19.0...v0.19.1) (2024-02-01)
 
 
