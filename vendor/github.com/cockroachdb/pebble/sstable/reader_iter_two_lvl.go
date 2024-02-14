@@ -60,8 +60,7 @@ func (i *twoLevelIterator) loadIndex(dir int8) loadBlockResult {
 		// blockIntersects
 	}
 	ctx := objiotracing.WithBlockType(i.ctx, objiotracing.MetadataBlock)
-	indexBlock, err := i.reader.readBlock(
-		ctx, bhp.BlockHandle, nil /* transform */, nil /* readHandle */, i.stats, &i.iterStats, i.bufferPool)
+	indexBlock, err := i.reader.readBlock(ctx, bhp.BlockHandle, nil /* transform */, nil /* readHandle */, i.stats, i.bufferPool)
 	if err != nil {
 		i.err = err
 		return loadBlockFailed
@@ -146,16 +145,13 @@ func (i *twoLevelIterator) init(
 	filterer *BlockPropertiesFilterer,
 	useFilter, hideObsoletePoints bool,
 	stats *base.InternalIteratorStats,
-	categoryAndQoS CategoryAndQoS,
-	statsCollector *CategoryStatsCollector,
 	rp ReaderProvider,
 	bufferPool *BufferPool,
 ) error {
 	if r.err != nil {
 		return r.err
 	}
-	i.iterStats.init(categoryAndQoS, statsCollector)
-	topLevelIndexH, err := r.readIndex(ctx, stats, &i.iterStats)
+	topLevelIndexH, err := r.readIndex(ctx, stats)
 	if err != nil {
 		return err
 	}
@@ -185,6 +181,7 @@ func (i *twoLevelIterator) init(
 	if r.tableFormat >= TableFormatPebblev3 {
 		if r.Properties.NumValueBlocks > 0 {
 			i.vbReader = &valueBlockReader{
+				ctx:    ctx,
 				bpOpen: i,
 				rp:     rp,
 				vbih:   r.valueBIH,
@@ -424,7 +421,7 @@ func (i *twoLevelIterator) SeekPrefixGE(
 		}
 		i.lastBloomFilterMatched = false
 		var dataH bufferHandle
-		dataH, i.err = i.reader.readFilter(i.ctx, i.stats, &i.iterStats)
+		dataH, i.err = i.reader.readFilter(i.ctx, i.stats)
 		if i.err != nil {
 			i.data.invalidate()
 			return nil, base.LazyValue{}
@@ -813,6 +810,11 @@ func (i *twoLevelIterator) NextPrefix(succKey []byte) (*InternalKey, base.LazyVa
 	if key, val := i.singleLevelIterator.NextPrefix(succKey); key != nil {
 		return key, val
 	}
+	// key == nil
+	if i.err != nil {
+		return nil, base.LazyValue{}
+	}
+
 	// Did not find prefix in the existing second-level index block. This is the
 	// slow-path where we seek the iterator.
 	var ikey *InternalKey
@@ -939,7 +941,6 @@ func (i *twoLevelIterator) skipBackward() (*InternalKey, base.LazyValue) {
 // Close implements internalIterator.Close, as documented in the pebble
 // package.
 func (i *twoLevelIterator) Close() error {
-	i.iterStats.close()
 	var err error
 	if i.closeHook != nil {
 		err = firstError(err, i.closeHook(i))

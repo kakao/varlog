@@ -5,7 +5,6 @@
 package keyspan
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/cockroachdb/errors"
@@ -1108,11 +1107,6 @@ func (i *InterleavingIter) SetBounds(lower, upper []byte) {
 	i.lower, i.upper = lower, upper
 	i.pointIter.SetBounds(lower, upper)
 	i.Invalidate()
-}
-
-// SetContext implements (base.InternalIterator).SetContext.
-func (i *InterleavingIter) SetContext(ctx context.Context) {
-	i.pointIter.SetContext(ctx)
 }
 
 // Invalidate invalidates the interleaving iterator's current position, clearing

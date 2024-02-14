@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/pebble/internal/base"
 	"github.com/cockroachdb/pebble/internal/keyspan"
 	"github.com/cockroachdb/pebble/internal/manifest"
 )
@@ -47,7 +46,7 @@ type flushableEntry struct {
 	delayedFlushForcedAt time.Time
 	// logNum corresponds to the WAL that contains the records present in the
 	// receiver.
-	logNum base.DiskFileNum
+	logNum FileNum
 	// logSize is the size in bytes of the associated WAL. Protected by DB.mu.
 	logSize uint64
 	// The current logSeqNum at the time the memtable was created. This is
@@ -171,8 +170,7 @@ func (s *ingestedFlushable) newIter(o *IterOptions) internalIterator {
 	// aren't truly levels in the lsm. Right now, the encoding only supports
 	// L0 sublevels, and the rest of the levels in the lsm.
 	return newLevelIter(
-		context.Background(), opts, s.comparer, s.newIters, s.slice.Iter(), manifest.Level(0),
-		internalIterOpts{},
+		opts, s.comparer, s.newIters, s.slice.Iter(), manifest.Level(0), internalIterOpts{},
 	)
 }
 
@@ -203,9 +201,6 @@ func (s *ingestedFlushable) constructRangeDelIter(
 // newRangeDelIter is part of the flushable interface.
 // TODO(bananabrick): Using a level iter instead of a keyspan level iter to
 // surface range deletes is more efficient.
-//
-// TODO(sumeer): *IterOptions are being ignored, so the index block load for
-// the point iterator in constructRangeDeIter is not tracked.
 func (s *ingestedFlushable) newRangeDelIter(_ *IterOptions) keyspan.FragmentIterator {
 	return keyspan.NewLevelIter(
 		keyspan.SpanIterOptions{}, s.comparer.Compare,
