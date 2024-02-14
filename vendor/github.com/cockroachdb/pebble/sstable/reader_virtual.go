@@ -27,10 +27,11 @@ type VirtualReader struct {
 
 // Lightweight virtual sstable state which can be passed to sstable iterators.
 type virtualState struct {
-	lower   InternalKey
-	upper   InternalKey
-	fileNum base.FileNum
-	Compare Compare
+	lower     InternalKey
+	upper     InternalKey
+	fileNum   base.FileNum
+	Compare   Compare
+	isForeign bool
 }
 
 func ceilDiv(a, b uint64) uint64 {
@@ -39,16 +40,19 @@ func ceilDiv(a, b uint64) uint64 {
 
 // MakeVirtualReader is used to contruct a reader which can read from virtual
 // sstables.
-func MakeVirtualReader(reader *Reader, meta manifest.VirtualFileMeta) VirtualReader {
+func MakeVirtualReader(
+	reader *Reader, meta manifest.VirtualFileMeta, isForeign bool,
+) VirtualReader {
 	if reader.fileNum != meta.FileBacking.DiskFileNum {
 		panic("pebble: invalid call to MakeVirtualReader")
 	}
 
 	vState := virtualState{
-		lower:   meta.Smallest,
-		upper:   meta.Largest,
-		fileNum: meta.FileNum,
-		Compare: reader.Compare,
+		lower:     meta.Smallest,
+		upper:     meta.Largest,
+		fileNum:   meta.FileNum,
+		Compare:   reader.Compare,
+		isForeign: isForeign,
 	}
 	v := VirtualReader{
 		vState: vState,
@@ -75,14 +79,9 @@ func MakeVirtualReader(reader *Reader, meta manifest.VirtualFileMeta) VirtualRea
 
 // NewCompactionIter is the compaction iterator function for virtual readers.
 func (v *VirtualReader) NewCompactionIter(
-	bytesIterated *uint64,
-	categoryAndQoS CategoryAndQoS,
-	statsCollector *CategoryStatsCollector,
-	rp ReaderProvider,
-	bufferPool *BufferPool,
+	bytesIterated *uint64, rp ReaderProvider, bufferPool *BufferPool,
 ) (Iterator, error) {
-	return v.reader.newCompactionIter(
-		bytesIterated, categoryAndQoS, statsCollector, rp, &v.vState, bufferPool)
+	return v.reader.newCompactionIter(bytesIterated, rp, &v.vState, bufferPool)
 }
 
 // NewIterWithBlockPropertyFiltersAndContextEtc wraps
@@ -95,13 +94,11 @@ func (v *VirtualReader) NewIterWithBlockPropertyFiltersAndContextEtc(
 	filterer *BlockPropertiesFilterer,
 	hideObsoletePoints, useFilterBlock bool,
 	stats *base.InternalIteratorStats,
-	categoryAndQoS CategoryAndQoS,
-	statsCollector *CategoryStatsCollector,
 	rp ReaderProvider,
 ) (Iterator, error) {
 	return v.reader.newIterWithBlockPropertyFiltersAndContext(
-		ctx, lower, upper, filterer, hideObsoletePoints, useFilterBlock, stats,
-		categoryAndQoS, statsCollector, rp, &v.vState)
+		ctx, lower, upper, filterer, hideObsoletePoints, useFilterBlock, stats, rp, &v.vState,
+	)
 }
 
 // ValidateBlockChecksumsOnBacking will call ValidateBlockChecksumsOnBacking on the underlying reader.

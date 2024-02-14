@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/pebble/internal/manifest"
 	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/cockroachdb/pebble/objstorage/remote"
-	"github.com/cockroachdb/pebble/sstable"
 )
 
 const (
@@ -355,10 +354,6 @@ func (p *pointCollapsingIterator) SetBounds(lower, upper []byte) {
 	p.iter.SetBounds(lower, upper)
 }
 
-func (p *pointCollapsingIterator) SetContext(ctx context.Context) {
-	p.iter.SetContext(ctx)
-}
-
 // String implements the InternalIterator interface.
 func (p *pointCollapsingIterator) String() string {
 	return p.iter.String()
@@ -405,7 +400,6 @@ type IteratorLevel struct {
 // *must* return the range delete as well as the range key unset/delete that did
 // the shadowing.
 type scanInternalIterator struct {
-	ctx             context.Context
 	db              *DB
 	opts            scanInternalOptions
 	comparer        *base.Comparer
@@ -668,7 +662,17 @@ func scanInternalImpl(
 		case InternalKeyKindRangeKeyDelete, InternalKeyKindRangeKeyUnset, InternalKeyKindRangeKeySet:
 			if opts.visitRangeKey != nil {
 				span := iter.unsafeSpan()
-				if err := opts.visitRangeKey(span.Start, span.End, span.Keys); err != nil {
+				// NB: The caller isn't interested in the sequence numbers of these
+				// range keys. Rather, the caller wants them to be in trailer order
+				// _after_ zeroing of sequence numbers. Copy span.Keys, sort it, and then
+				// call visitRangeKey.
+				keysCopy := make([]keyspan.Key, len(span.Keys))
+				for i := range span.Keys {
+					keysCopy[i] = span.Keys[i]
+					keysCopy[i].Trailer = base.MakeTrailer(0, span.Keys[i].Kind())
+				}
+				keyspan.SortKeysByTrailer(&keysCopy)
+				if err := opts.visitRangeKey(span.Start, span.End, keysCopy); err != nil {
 					return err
 				}
 			}
@@ -700,9 +704,7 @@ func scanInternalImpl(
 }
 
 // constructPointIter constructs a merging iterator and sets i.iter to it.
-func (i *scanInternalIterator) constructPointIter(
-	categoryAndQoS sstable.CategoryAndQoS, memtables flushableList, buf *iterAlloc,
-) {
+func (i *scanInternalIterator) constructPointIter(memtables flushableList, buf *iterAlloc) {
 	// Merging levels and levels from iterAlloc.
 	mlevels := buf.mlevels[:0]
 	levels := buf.levels[:0]
@@ -767,18 +769,17 @@ func (i *scanInternalIterator) constructPointIter(
 	levels = levels[:numLevelIters]
 	rangeDelLevels = rangeDelLevels[:numLevelIters]
 	i.opts.IterOptions.snapshotForHideObsoletePoints = i.seqNum
-	i.opts.IterOptions.CategoryAndQoS = categoryAndQoS
 	addLevelIterForFiles := func(files manifest.LevelIterator, level manifest.Level) {
 		li := &levels[levelsIndex]
 		rli := &rangeDelLevels[levelsIndex]
 
 		li.init(
-			i.ctx, i.opts.IterOptions, i.comparer, i.newIters, files, level,
+			context.Background(), i.opts.IterOptions, i.comparer, i.newIters, files, level,
 			internalIterOpts{})
 		li.initBoundaryContext(&mlevels[mlevelsIndex].levelIterBoundaryContext)
 		mlevels[mlevelsIndex].iter = li
 		rli.Init(keyspan.SpanIterOptions{RangeKeyFilters: i.opts.RangeKeyFilters},
-			i.comparer.Compare, tableNewRangeDelIter(i.ctx, i.newIters), files, level,
+			i.comparer.Compare, tableNewRangeDelIter(context.Background(), i.newIters), files, level,
 			manifest.KeyTypePoint)
 		rangeDelIters = append(rangeDelIters, rli)
 
@@ -842,7 +843,7 @@ func (i *scanInternalIterator) constructRangeKeyIter() {
 	// RangeKeyUnsets and RangeKeyDels.
 	i.rangeKey.rangeKeyIter = i.rangeKey.iterConfig.Init(
 		i.comparer, i.seqNum, i.opts.LowerBound, i.opts.UpperBound,
-		nil /* hasPrefix */, nil /* prefix */, false, /* onlySets */
+		nil /* hasPrefix */, nil /* prefix */, true, /* internalKeys */
 		&i.rangeKey.rangeKeyBuffers.internal)
 
 	// Next are the flushables: memtables and large batches.
