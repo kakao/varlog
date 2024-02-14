@@ -288,6 +288,8 @@ func (p *transmitter) transmit(ctx context.Context) {
 	p.timer = time.NewTimer(p.timeout)
 	defer p.timer.Stop()
 
+	_ = p.refreshSubscriber(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
