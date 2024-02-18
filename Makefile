@@ -133,7 +133,7 @@ fmt:
 	@$(foreach path,$(PKGS),gofmt -w -s ./$(path);)
 
 lint:
-	docker run --rm -v $$(pwd):/app -w /app golangci/golangci-lint:v1.54-alpine golangci-lint run
+	docker run --rm -v $$(pwd):/app -w /app golangci/golangci-lint:v1.56.2-alpine golangci-lint run
 
 vet:
 	@echo govet

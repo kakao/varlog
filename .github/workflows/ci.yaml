@@ -1,63 +1,51 @@
 name: ci
-
 on:
   push:
     branches:
       - main
   pull_request:
-
 env:
-  GO_VERSION: "1.21"
+  GO_VERSION: "1.22"
   PYTHON_VERSION: 3.9
   GRPC_HEALTH_PROBE_VERSION: v0.4.13
-
 jobs:
   gomod:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Install Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-
       - name: Install tools
         run: |
           make tools
-
       - name: Check go mod
         run: |
           make mod-tidy-check
           make mod-vendor-check
-
       - name: Check proto
         run: |
           make proto-check
-
       - name: Check generate
         run: |
           make generate-check
-
   lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Install Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v4.0.0
         with:
-          version: v1.54
+          version: v1.56
           skip-cache: true
           skip-pkg-cache: true
-
   build:
     needs: lint
     runs-on: ubuntu-latest
@@ -70,7 +58,6 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
       - name: Build
         run: make build
-
   test:
     needs: lint
     runs-on: ubuntu-latest
@@ -97,7 +84,6 @@ jobs:
           files: ./coverage.out,./coverage.xml
           fail_ci_if_error: true
           verbose: true
-
   e2e_test:
     needs: lint
     runs-on: ubuntu-latest
