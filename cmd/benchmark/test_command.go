@@ -17,54 +17,65 @@ var (
 		Name:     "target",
 		Required: true,
 		Usage:    "The target of the benchmark load formatted by \"topic1:logstream1,topic2:logstream2,...<topic_id:logstream_id>\"",
+		Category: "Benchmark:",
 	}
 	flagMRAddrs = &cli.StringSliceFlag{
 		Name:     "address",
 		Required: true,
+		Category: "Benchmark:",
 	}
 	flagMsgSize = &cli.UintSliceFlag{
-		Name:    "message-size",
-		Aliases: []string{"msg-size"},
-		Value:   cli.NewUintSlice(benchmark.DefaultMessageSize),
-		Usage:   "Message sizes for each load target",
+		Name:     "message-size",
+		Category: "Append:",
+		Aliases:  []string{"msg-size"},
+		Value:    cli.NewUintSlice(benchmark.DefaultMessageSize),
+		Usage:    "Message sizes for each load target",
 	}
 	flagBatchSize = &cli.UintSliceFlag{
-		Name:  "batch-size",
-		Value: cli.NewUintSlice(benchmark.DefaultBatchSize),
-		Usage: "Batch sizes for each load target",
+		Name:     "batch-size",
+		Category: "Append:",
+		Value:    cli.NewUintSlice(benchmark.DefaultBatchSize),
+		Usage:    "Batch sizes for each load target",
 	}
 	flagAppenders = &cli.UintSliceFlag{
-		Name:    "appenders",
-		Aliases: []string{"appenders-count"},
-		Value:   cli.NewUintSlice(benchmark.DefaultConcurrency),
-		Usage:   "The number of appenders for each load target",
+		Name:     "appenders",
+		Category: "Append:",
+		Aliases:  []string{"appenders-count"},
+		Value:    cli.NewUintSlice(benchmark.DefaultConcurrency),
+		Usage:    "The number of appenders for each load target",
 	}
 	flagSubscribers = &cli.UintSliceFlag{
-		Name:    "subscribers",
-		Aliases: []string{"subscribers-count"},
-		Value:   cli.NewUintSlice(benchmark.DefaultConcurrency),
-		Usage:   "The number of subscribers for each load target",
+		Name:     "subscribers",
+		Category: "Subscribe:",
+		Aliases:  []string{"subscribers-count"},
+		Value:    cli.NewUintSlice(benchmark.DefaultConcurrency),
+		Usage:    "The number of subscribers for each load target",
 	}
 	flagDuration = &cli.DurationFlag{
-		Name:  "duration",
-		Value: benchmark.DefaultDuration,
+		Name:     "duration",
+		Value:    benchmark.DefaultDuration,
+		Category: "Benchmark:",
 	}
 	flagReportInterval = &cli.DurationFlag{
-		Name:  "report-interval",
-		Value: benchmark.DefaultReportInterval,
+		Name:     "report-interval",
+		Value:    benchmark.DefaultReportInterval,
+		Category: "Benchmark:",
 	}
 	flagPrintJSON = &cli.BoolFlag{
-		Name:  "print-json",
-		Usage: "Print json output if it is set",
+		Name:     "print-json",
+		Usage:    "Print json output if it is set",
+		Category: "Benchmark:",
 	}
 	flagPipelineSize = &cli.IntFlag{
-		Name:  "pipeline-size",
-		Usage: "Pipeline size, no pipelined requests if zero. Not support per-target pipeline size yet.",
-		Value: 0,
+		Name:     "pipeline-size",
+		Usage:    "Pipeline size, no pipelined requests if zero. Not support per-target pipeline size yet.",
+		Value:    0,
+		Category: "Benchmark:",
 	}
 	flagSingleConnPerTarget = &cli.BoolFlag{
-		Name:  "single-conn-per-target",
-		Usage: "Use single connection shared by appenders in a target. Each target uses different connection.",
+		Name:     "single-conn-per-target",
+		Usage:    "Use single connection shared by appenders in a target. Each target uses different connection.",
+		Category: "Benchmark:",
 	}
 )
 

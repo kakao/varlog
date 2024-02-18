@@ -1,10 +1,13 @@
 package benchmark
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
+	"sync"
 	"time"
 
 	"go.uber.org/multierr"
@@ -26,13 +29,9 @@ type loaderConfig struct {
 
 type Loader struct {
 	loaderConfig
-	batch [][]byte
-	apps  []varlog.Log
-	subs  []varlog.Log
-	begin struct {
-		lsn varlogpb.LogSequenceNumber
-		ch  chan varlogpb.LogSequenceNumber
-	}
+	batch  [][]byte
+	apps   []varlog.Log
+	subs   []varlog.Log
 	logger *slog.Logger
 }
 
@@ -40,7 +39,6 @@ func NewLoader(cfg loaderConfig) (loader *Loader, err error) {
 	loader = &Loader{
 		loaderConfig: cfg,
 	}
-	loader.begin.ch = make(chan varlogpb.LogSequenceNumber, cfg.AppendersCount)
 	loader.logger = slog.With(slog.Any("topic", loader.TopicID))
 
 	defer func() {
@@ -109,12 +107,6 @@ func (loader *Loader) Run(ctx context.Context) (err error) {
 		})
 	}
 
-	err = loader.setBeginLSN(ctx)
-	if err != nil {
-		err = fmt.Errorf("begin lsn: %w", err)
-		return err
-	}
-
 	for i := 0; i < len(loader.subs); i++ {
 		c := loader.subs[i]
 		g.Go(func() error {
@@ -137,15 +129,6 @@ func (loader *Loader) Close() error {
 }
 
 func (loader *Loader) makeAppendFunc(ctx context.Context, c varlog.Log, am *AppendMetrics) (appendFunc func() error, closeFunc func(), err error) {
-	begin := true
-	notifyBegin := func(meta varlogpb.LogEntryMeta) {
-		loader.begin.ch <- varlogpb.LogSequenceNumber{
-			LLSN: meta.LLSN,
-			GLSN: meta.GLSN,
-		}
-		begin = false
-	}
-
 	debugLog := func(meta []varlogpb.LogEntryMeta) {
 		cnt := len(meta)
 		loader.logger.Debug("append",
@@ -179,9 +162,6 @@ func (loader *Loader) makeAppendFunc(ctx context.Context, c varlog.Log, am *Appe
 			}
 			dur := time.Since(ts)
 			recordMetrics(dur)
-			if begin {
-				notifyBegin(res.Metadata[0])
-			}
 			debugLog(res.Metadata)
 			return nil
 		}
@@ -197,9 +177,6 @@ func (loader *Loader) makeAppendFunc(ctx context.Context, c varlog.Log, am *Appe
 			}
 			dur := time.Since(ts)
 			recordMetrics(dur)
-			if begin {
-				notifyBegin(res.Metadata[0])
-			}
 			debugLog(res.Metadata)
 			return nil
 		}
@@ -227,9 +204,6 @@ func (loader *Loader) makeAppendFunc(ctx context.Context, c varlog.Log, am *Appe
 			}
 			dur := time.Since(ts)
 			recordMetrics(dur)
-			if begin {
-				notifyBegin(lem[0])
-			}
 			debugLog(lem)
 		})
 		return err
@@ -260,11 +234,16 @@ func (loader *Loader) appendLoop(ctx context.Context, c varlog.Log) error {
 }
 
 func (loader *Loader) subscribeLoop(ctx context.Context, c varlog.Log) error {
+	first, last, err := loader.getLogRange(ctx, c, loader.TopicID, loader.LogStreamID)
+	if err != nil {
+		return fmt.Errorf("subscribe: %w", err)
+	}
+
 	var sm SubscribeMetrics
 	if loader.LogStreamID.Invalid() {
 		var subErr error
 		stop := make(chan struct{})
-		closer, err := c.Subscribe(ctx, loader.TopicID, loader.begin.lsn.GLSN, types.MaxGLSN, func(logEntry varlogpb.LogEntry, err error) {
+		closer, err := c.Subscribe(ctx, loader.TopicID, first.GLSN, last.GLSN, func(logEntry varlogpb.LogEntry, err error) {
 			if err != nil {
 				subErr = err
 				close(stop)
@@ -295,7 +274,7 @@ func (loader *Loader) subscribeLoop(ctx context.Context, c varlog.Log) error {
 		}
 	}
 
-	subscriber := c.SubscribeTo(ctx, loader.TopicID, loader.LogStreamID, loader.begin.lsn.LLSN, types.MaxLLSN)
+	subscriber := c.SubscribeTo(ctx, loader.TopicID, loader.LogStreamID, first.LLSN, last.LLSN)
 	defer func() {
 		_ = subscriber.Close()
 	}()
@@ -320,24 +299,35 @@ func (loader *Loader) subscribeLoop(ctx context.Context, c varlog.Log) error {
 	}
 }
 
-func (loader *Loader) setBeginLSN(ctx context.Context) error {
-	beginLSN := varlogpb.LogSequenceNumber{
-		LLSN: types.MaxLLSN,
-		GLSN: types.MaxGLSN,
+func (loader *Loader) getLogRange(ctx context.Context, c varlog.Log, tpid types.TopicID, lsid types.LogStreamID) (first, last varlogpb.LogSequenceNumber, err error) {
+	if !lsid.Invalid() {
+		return c.PeekLogStream(ctx, tpid, lsid)
 	}
-	for i := uint(0); i < loader.AppendersCount; i++ {
-		select {
-		case <-loader.stopC:
-			return nil
-		case lsn := <-loader.begin.ch:
-			if lsn.GLSN < beginLSN.GLSN {
-				beginLSN = lsn
+
+	lsids := c.AppendableLogStreams(tpid)
+	var mu sync.Mutex
+	fs := make([]varlogpb.LogSequenceNumber, 0, len(lsids))
+	ls := make([]varlogpb.LogSequenceNumber, 0, len(lsids))
+	eg, ctx := errgroup.WithContext(ctx)
+	for lsid := range lsids {
+		lsid := lsid
+		eg.Go(func() error {
+			f, l, err := c.PeekLogStream(ctx, tpid, lsid)
+			if err != nil {
+				return err
 			}
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+			mu.Lock()
+			fs = append(fs, f)
+			ls = append(ls, l)
+			mu.Unlock()
+			return nil
+		})
 	}
-	loader.begin.lsn = beginLSN
-	loader.logger.Debug("begin lsn", slog.Any("lsn", beginLSN))
-	return nil
+	first = slices.MinFunc(fs, func(a, b varlogpb.LogSequenceNumber) int {
+		return cmp.Compare(a.GLSN, b.GLSN)
+	})
+	last = slices.MaxFunc(ls, func(a, b varlogpb.LogSequenceNumber) int {
+		return cmp.Compare(a.GLSN, b.GLSN)
+	})
+	return first, last, nil
 }
