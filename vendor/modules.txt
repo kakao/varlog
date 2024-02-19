@@ -109,6 +109,9 @@ github.com/dustin/go-humanize
 ## explicit; go 1.13
 github.com/emicklei/go-restful/v3
 github.com/emicklei/go-restful/v3/log
+# github.com/felixge/fgprof v0.9.3
+## explicit; go 1.14
+github.com/felixge/fgprof
 # github.com/getsentry/sentry-go v0.18.0
 ## explicit; go 1.19
 github.com/getsentry/sentry-go
@@ -174,6 +177,9 @@ github.com/google/gnostic-models/openapiv3
 ## explicit; go 1.12
 github.com/google/gofuzz
 github.com/google/gofuzz/bytesource
+# github.com/google/pprof v0.0.0-20211214055906-6f57359322fd
+## explicit; go 1.14
+github.com/google/pprof/profile
 # github.com/google/uuid v1.4.0
 ## explicit
 github.com/google/uuid
@@ -240,6 +246,9 @@ github.com/munnerz/goautoneg
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
+# github.com/pkg/profile v1.7.0
+## explicit; go 1.13
+github.com/pkg/profile
 # github.com/pmezard/go-difflib v1.0.0
 ## explicit
 github.com/pmezard/go-difflib/difflib

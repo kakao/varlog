@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"go.uber.org/multierr"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kakao/varlog/pkg/types"
@@ -54,7 +55,7 @@ func NewLoader(cfg loaderConfig) (loader *Loader, err error) {
 			if scli != nil {
 				return scli, nil
 			}
-			cli, err := varlog.Open(context.TODO(), loader.cid, loader.mraddrs)
+			cli, err := varlog.Open(context.TODO(), loader.cid, loader.mraddrs, varlog.WithLogger(zap.L()))
 			if err != nil {
 				return nil, err
 			}
@@ -274,7 +275,7 @@ func (loader *Loader) subscribeInternal(ctx context.Context, c varlog.Log, begin
 			close(errC)
 			return
 		}
-		loader.logger.Debug("subscribed", slog.String("log", logEntry.String()))
+		// loader.logger.Debug("subscribed", slog.String("log", logEntry.String()))
 		sm.logs++
 		sm.bytes += int64(len(logEntry.Data))
 		if loader.metrics.ReportSubscribeMetrics(*sm) {

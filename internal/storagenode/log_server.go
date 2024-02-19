@@ -231,7 +231,6 @@ Loop:
 			dbgSizeLogs += int64(len(le.Data))
 		}
 	}
-	sr.Stop()
 	dbgElapsedTime := time.Since(dbgStartTime)
 	ls.sn.logger.Info("[DBG] Subscribe Throughput",
 		zap.Any("topicID", req.TopicID),
@@ -242,6 +241,7 @@ Loop:
 		zap.Float64("throughput_MB/s", float64(dbgSizeLogs)/1024.0/1024.0/dbgElapsedTime.Seconds()),
 		zap.Float64("throughput_msg/s", float64(dbgNumLogs)/dbgElapsedTime.Seconds()),
 	)
+	sr.Stop()
 
 	// FIXME: error propagation via gRPC is awkward.
 	if err == nil && sr.Err() == nil {

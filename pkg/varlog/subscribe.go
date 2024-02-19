@@ -58,10 +58,11 @@ func (v *logImpl) subscribe(ctx context.Context, topicID types.TopicID, begin, e
 		wanted:            begin,
 		end:               end,
 		transmitQ:         &transmitQueue{pq: &PriorityQueue{}},
-		transmitCV:        transmitCV,
-		timeout:           subscribeOpts.timeout,
-		runner:            runner.New("transmitter", tlogger),
-		logger:            tlogger,
+		// transmitQ:  &transmitQueue{pq: newPriorityQueue(1024)},
+		transmitCV: transmitCV,
+		timeout:    subscribeOpts.timeout,
+		runner:     runner.New("transmitter", tlogger),
+		logger:     tlogger,
 	}
 
 	dis := &dispatcher{
@@ -88,6 +89,12 @@ type PriorityQueueItem interface {
 }
 
 type PriorityQueue []PriorityQueueItem
+
+func newPriorityQueue(size int) *PriorityQueue {
+	s := make(PriorityQueue, 0, size)
+	pq := PriorityQueue(s)
+	return &pq
+}
 
 func (pq PriorityQueue) Len() int { return len(pq) }
 
@@ -212,7 +219,26 @@ func (s *subscriber) stop() {
 }
 
 func (s *subscriber) subscribe(ctx context.Context) {
+	dbgStartTime := time.Now()
+	var dbgNumLogs int64
+	var dbgSizeLogs int64
+
 	defer func() {
+		dbgElapsedTime := time.Since(dbgStartTime)
+		_ = dbgElapsedTime
+		/*
+			slog.Info("[DBG] subscriber Throughput",
+				slog.Any("topicID", s.topicID),
+				slog.Any("logStreamID", s.logStreamID),
+				slog.Any("storageNodeID", s.storageNodeID),
+				slog.Int64("numLogs", dbgNumLogs),
+				slog.Int64("sizeLogs", dbgSizeLogs),
+				slog.Duration("elapsedTime", dbgElapsedTime),
+				slog.Float64("throughput_MB/s", float64(dbgSizeLogs)/1024.0/1024.0/dbgElapsedTime.Seconds()),
+				slog.Float64("throughput_msg/s", float64(dbgNumLogs)/dbgElapsedTime.Seconds()),
+			)
+		*/
+
 		// s.logCL.Close()
 		s.closed.Store(true)
 	}()
@@ -230,6 +256,8 @@ func (s *subscriber) subscribe(ctx context.Context) {
 
 			if ok {
 				r.result = res
+				dbgNumLogs++
+				dbgSizeLogs += int64(len(res.LogEntry.Data))
 			} else {
 				r.result = client.InvalidSubscribeResult
 			}
@@ -414,8 +442,30 @@ func (p *transmitter) handleResult(r transmitResult) error {
 }
 
 func (p *transmitter) transmitLoop(ctx context.Context) bool {
-	needRefresh := false
+	dbgStartTime := time.Now()
+	var dbgNumLogs int64
+	var dbgSizeLogs int64
+	defer func() {
+		if dbgNumLogs == 0 {
+			return
+		}
 
+		dbgElapsedTime := time.Since(dbgStartTime)
+		_ = dbgElapsedTime
+		/*
+
+			slog.Info("[DBG] transmitter Throughput",
+				slog.Any("topicID", p.topicID),
+				slog.Int64("numLogs", dbgNumLogs),
+				slog.Int64("sizeLogs", dbgSizeLogs),
+				slog.Duration("elapsedTime", dbgElapsedTime),
+				slog.Float64("throughput_MB/s", float64(dbgSizeLogs)/1024.0/1024.0/dbgElapsedTime.Seconds()),
+				slog.Float64("throughput_msg/s", float64(dbgNumLogs)/dbgElapsedTime.Seconds()),
+			)
+		*/
+	}()
+
+	needRefresh := false
 	for {
 		res, ok := p.transmitQ.Front()
 		if !ok {
@@ -424,7 +474,12 @@ func (p *transmitter) transmitLoop(ctx context.Context) bool {
 
 		if res.result.GLSN <= p.wanted {
 			res, _ := p.transmitQ.Pop()
+			l := len(res.result.LogEntry.Data)
 			err := p.handleResult(res)
+			if err == nil {
+				dbgNumLogs++
+				dbgSizeLogs += int64(l)
+			}
 			if p.wanted == p.end ||
 				errors.Is(err, verrors.ErrTrimmed) {
 				return false

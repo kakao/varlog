@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/pkg/profile"
 	"github.com/urfave/cli/v2"
 )
 
 func main() {
+	profiler := profile.Start()
+	defer profiler.Stop()
 	os.Exit(run())
 }
 

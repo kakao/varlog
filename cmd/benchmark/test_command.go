@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/urfave/cli/v2"
+	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/benchmark"
 	"github.com/kakao/varlog/internal/flags"
@@ -157,6 +158,15 @@ func runCommandTest(c *cli.Context) error {
 	} else {
 		enc = benchmark.StringEncoder{}
 	}
+
+	logger, err := zap.NewProduction()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = logger.Sync()
+	}()
+	zap.ReplaceGlobals(logger)
 
 	opts := []benchmark.Option{
 		benchmark.WithClusterID(clusterID),
