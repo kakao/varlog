@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"io"
+	"time"
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"go.uber.org/multierr"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -204,6 +206,9 @@ func (ls *logServer) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_Sub
 		return verrors.ToStatusErrorWithCode(err, code)
 	}
 
+	dbgStartTime := time.Now()
+	var dbgNumLogs int64
+	var dbgSizeLogs int64
 	rsp := &snpb.SubscribeResponse{}
 Loop:
 	for {
@@ -222,9 +227,22 @@ Loop:
 			if err != nil {
 				break Loop
 			}
+			dbgNumLogs++
+			dbgSizeLogs += int64(len(le.Data))
 		}
 	}
 	sr.Stop()
+	dbgElapsedTime := time.Since(dbgStartTime)
+	ls.sn.logger.Info("[DBG] Subscribe Throughput",
+		zap.Any("topicID", req.TopicID),
+		zap.Any("logStreamID", req.LogStreamID),
+		zap.Int64("numLogs", dbgNumLogs),
+		zap.Int64("sizeLogs", dbgSizeLogs),
+		zap.Duration("elapsedTime", dbgElapsedTime),
+		zap.Float64("throughput_MB/s", float64(dbgSizeLogs)/1024.0/1024.0/dbgElapsedTime.Seconds()),
+		zap.Float64("throughput_msg/s", float64(dbgNumLogs)/dbgElapsedTime.Seconds()),
+	)
+
 	// FIXME: error propagation via gRPC is awkward.
 	if err == nil && sr.Err() == nil {
 		return nil
