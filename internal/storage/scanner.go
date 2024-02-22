@@ -1,8 +1,10 @@
 package storage
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sync"
 
 	"github.com/cockroachdb/pebble"
@@ -14,6 +16,7 @@ import (
 var scannerPool = sync.Pool{
 	New: func() interface{} {
 		s := &Scanner{}
+		s.lazy.dkUpper = make([]byte, dataKeyLength)
 		s.cks.lower = make([]byte, commitKeyLength)
 		s.cks.upper = make([]byte, commitKeyLength)
 		s.dks.lower = make([]byte, dataKeyLength)
@@ -23,9 +26,12 @@ var scannerPool = sync.Pool{
 }
 
 type Scanner struct {
-	scanConfig
-	stg *Storage
-	it  *pebble.Iterator
+	stg  *Storage
+	it   *pebble.Iterator
+	lazy struct {
+		dataIt  *pebble.Iterator
+		dkUpper []byte
+	}
 	cks struct {
 		lower []byte
 		upper []byte
@@ -34,6 +40,8 @@ type Scanner struct {
 		lower []byte
 		upper []byte
 	}
+
+	scanConfig
 }
 
 func newScanner() *Scanner {
@@ -56,12 +64,24 @@ func (s *Scanner) Value() (le varlogpb.LogEntry, err error) {
 }
 
 func (s *Scanner) Next() bool {
+	if s.lazy.dataIt != nil {
+		_ = s.lazy.dataIt.Next()
+	}
 	return s.it.Next()
 }
 
 func (s *Scanner) Close() (err error) {
 	if s.it != nil {
 		err = s.it.Close()
+	}
+	if s.lazy.dataIt != nil {
+		if e := s.lazy.dataIt.Close(); e != nil {
+			if err != nil {
+				err = errors.Join(err, e)
+			} else {
+				err = e
+			}
+		}
 	}
 	s.release()
 	return err
@@ -70,21 +90,43 @@ func (s *Scanner) Close() (err error) {
 func (s *Scanner) valueByGLSN() (le varlogpb.LogEntry, err error) {
 	ck := s.it.Key()
 	dk := s.it.Value()
-	data, closer, err := s.stg.dataDB.Get(dk)
-	if err != nil {
-		if err == pebble.ErrNotFound {
-			return le, fmt.Errorf("%s: %w", s.stg.path, ErrInconsistentWriteCommitState)
+	llsn := decodeDataKey(dk)
+	if s.lazy.dataIt == nil {
+		err = s.initLazyIterator(dk, llsn)
+		if err != nil {
+			return le, err
 		}
-		return le, err
 	}
+	if slices.Compare(dk, s.lazy.dataIt.Key()) != 0 {
+		return le, fmt.Errorf("%s: %w", s.stg.path, ErrInconsistentWriteCommitState)
+	}
+
 	le.GLSN = decodeCommitKey(ck)
-	le.LLSN = decodeDataKey(dk)
+	le.LLSN = llsn
+	data := s.lazy.dataIt.Value()
 	if len(data) > 0 {
 		le.Data = make([]byte, len(data))
 		copy(le.Data, data)
 	}
-	_ = closer.Close()
 	return le, nil
+}
+
+func (s *Scanner) initLazyIterator(beginKey []byte, beginLLSN types.LLSN) (err error) {
+	endLLSN := beginLLSN + types.LLSN(s.end.GLSN-s.begin.GLSN)
+	s.lazy.dkUpper = encodeDataKeyInternal(endLLSN, s.lazy.dkUpper)
+	itOpt := &pebble.IterOptions{
+		LowerBound: beginKey,
+		UpperBound: s.lazy.dkUpper,
+	}
+
+	s.lazy.dataIt, err = s.stg.dataDB.NewIter(itOpt)
+	if err != nil {
+		return err
+	}
+	if !s.lazy.dataIt.First() {
+		return fmt.Errorf("%s: %w", s.stg.path, ErrInconsistentWriteCommitState)
+	}
+	return nil
 }
 
 func (s *Scanner) valueByLLSN() (le varlogpb.LogEntry, err error) {
@@ -97,9 +139,10 @@ func (s *Scanner) valueByLLSN() (le varlogpb.LogEntry, err error) {
 }
 
 func (s *Scanner) release() {
-	s.scanConfig = scanConfig{}
 	s.stg = nil
 	s.it = nil
+	s.lazy.dataIt = nil
+	s.scanConfig = scanConfig{}
 	scannerPool.Put(s)
 }
 
