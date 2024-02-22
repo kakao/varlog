@@ -5,8 +5,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 func BenchmarkStorage_WriteBatch(b *testing.B) {
@@ -52,5 +54,70 @@ func BenchmarkStorage_WriteBatch(b *testing.B) {
 				}
 			})
 		}
+	}
+}
+
+func BenchmarkStorage_ScanWithGLSN(b *testing.B) {
+	numLogsList := []int{
+		1, 10, 100, 1000,
+	}
+
+	for _, numLogs := range numLogsList {
+		b.Run(fmt.Sprintf("numLogs=%d", numLogs), func(b *testing.B) {
+			stg := TestNewStorage(b,
+				WithoutSync(),
+				WithDataDBOptions(
+					WithL0CompactionThreshold(2),
+					WithL0StopWritesThreshold(1000),
+					WithLBaseMaxBytes(64<<20),
+					WithMaxOpenFiles(16384),
+					WithMemTableSize(64<<20),
+					WithMemTableStopWritesThreshold(4),
+					WithMaxConcurrentCompaction(3),
+				),
+				WithCommitDBOptions(
+					WithL0CompactionThreshold(2),
+					WithL0StopWritesThreshold(1000),
+					WithLBaseMaxBytes(64<<20),
+					WithMaxOpenFiles(16384),
+					WithMemTableSize(8<<20),
+					WithMemTableStopWritesThreshold(4),
+					WithMaxConcurrentCompaction(3),
+				),
+			)
+			b.Cleanup(func() {
+				assert.NoError(b, stg.Close())
+			})
+
+			for i := range numLogs {
+				llsn := types.LLSN(i + 1)
+				glsn := types.GLSN(i + 1)
+				data := []byte(fmt.Sprintf("log entry %d", i+1))
+				TestAppendLogEntryWithoutCommitContext(b, stg, llsn, glsn, data)
+			}
+			TestSetCommitContext(b, stg, CommitContext{
+				Version:            1,
+				HighWatermark:      types.GLSN(numLogs),
+				CommittedGLSNBegin: types.MinGLSN,
+				CommittedGLSNEnd:   types.GLSN(numLogs + 1),
+				CommittedLLSNBegin: types.MinLLSN,
+			})
+
+			b.ResetTimer()
+
+			var logEntry varlogpb.LogEntry
+			for range b.N {
+				scanner, err := stg.NewScanner(WithGLSN(types.MinGLSN, types.GLSN(numLogs+1)))
+				require.NoError(b, err)
+				for scanner.Valid() {
+					logEntry, err = scanner.Value()
+					require.NoError(b, err)
+					scanner.Next()
+				}
+				err = scanner.Close()
+				require.NoError(b, err)
+			}
+			_ = logEntry
+		})
 	}
 }
