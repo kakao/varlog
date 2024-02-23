@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/gops/agent"
 	"github.com/urfave/cli/v2"
 
 	"github.com/kakao/varlog/internal/benchmark"
@@ -44,6 +45,12 @@ var (
 		Name:     "single-conn-per-target",
 		Category: "Common: ",
 		Usage:    "Use single connection shared by appenders in a target. Each target uses different connection.",
+	}
+	flagGopsAddr = &cli.StringFlag{
+		Name:     "gops-addr",
+		Category: "Common: ",
+		Value:    ":0",
+		Usage:    "The address of gops agent",
 	}
 
 	flagAppenders = &cli.UintSliceFlag{
@@ -94,17 +101,21 @@ func newCommandTest() *cli.Command {
 		Usage: "run benchmark test",
 		Flags: []cli.Flag{
 			flagClusterID,
+
 			flagTarget,
 			flagMRAddrs,
-			flagMsgSize,
-			flagBatchSize,
-			flagAppenders,
-			flagSubscribers,
 			flagDuration,
 			flagReportInterval,
 			flagPrintJSON,
-			flagPipelineSize,
 			flagSingleConnPerTarget,
+			flagGopsAddr,
+
+			flagAppenders,
+			flagMsgSize,
+			flagBatchSize,
+			flagPipelineSize,
+
+			flagSubscribers,
 			flagSubscribeSize,
 		},
 		Action: runCommandTest,
@@ -115,6 +126,13 @@ func runCommandTest(c *cli.Context) error {
 	if c.NArg() > 0 {
 		return fmt.Errorf("unexpected args: %v", c.Args().Slice())
 	}
+
+	if err := agent.Listen(agent.Options{
+		Addr: c.String(flagGopsAddr.Name),
+	}); err != nil {
+		return err
+	}
+	defer agent.Close()
 
 	clusterID, err := types.ParseClusterID(c.String(flagClusterID.Name))
 	if err != nil {
