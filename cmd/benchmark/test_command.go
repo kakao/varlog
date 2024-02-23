@@ -13,58 +13,78 @@ import (
 
 var (
 	flagClusterID = flags.ClusterID
-	flagTarget    = &cli.StringSliceFlag{
+
+	flagTarget = &cli.StringSliceFlag{
 		Name:     "target",
+		Category: "Common: ",
 		Required: true,
 		Usage:    "The target of the benchmark load formatted by \"topic1:logstream1,topic2:logstream2,...<topic_id:logstream_id>\"",
 	}
 	flagMRAddrs = &cli.StringSliceFlag{
 		Name:     "address",
+		Category: "Common: ",
 		Required: true,
 	}
-	flagMsgSize = &cli.UintSliceFlag{
-		Name:    "message-size",
-		Aliases: []string{"msg-size"},
-		Value:   cli.NewUintSlice(benchmark.DefaultMessageSize),
-		Usage:   "Message sizes for each load target",
-	}
-	flagBatchSize = &cli.UintSliceFlag{
-		Name:  "batch-size",
-		Value: cli.NewUintSlice(benchmark.DefaultBatchSize),
-		Usage: "Batch sizes for each load target",
-	}
-	flagAppenders = &cli.UintSliceFlag{
-		Name:    "appenders",
-		Aliases: []string{"appenders-count"},
-		Value:   cli.NewUintSlice(benchmark.DefaultConcurrency),
-		Usage:   "The number of appenders for each load target",
-	}
-	flagSubscribers = &cli.UintSliceFlag{
-		Name:    "subscribers",
-		Aliases: []string{"subscribers-count"},
-		Value:   cli.NewUintSlice(benchmark.DefaultConcurrency),
-		Usage:   "The number of subscribers for each load target",
-	}
 	flagDuration = &cli.DurationFlag{
-		Name:  "duration",
-		Value: benchmark.DefaultDuration,
+		Name:     "duration",
+		Category: "Common: ",
+		Value:    benchmark.DefaultDuration,
 	}
 	flagReportInterval = &cli.DurationFlag{
-		Name:  "report-interval",
-		Value: benchmark.DefaultReportInterval,
+		Name:     "report-interval",
+		Category: "Common: ",
+		Value:    benchmark.DefaultReportInterval,
 	}
 	flagPrintJSON = &cli.BoolFlag{
-		Name:  "print-json",
-		Usage: "Print json output if it is set",
-	}
-	flagPipelineSize = &cli.IntFlag{
-		Name:  "pipeline-size",
-		Usage: "Pipeline size, no pipelined requests if zero. Not support per-target pipeline size yet.",
-		Value: 0,
+		Name:     "print-json",
+		Category: "Common: ",
+		Usage:    "Print json output if it is set",
 	}
 	flagSingleConnPerTarget = &cli.BoolFlag{
-		Name:  "single-conn-per-target",
-		Usage: "Use single connection shared by appenders in a target. Each target uses different connection.",
+		Name:     "single-conn-per-target",
+		Category: "Common: ",
+		Usage:    "Use single connection shared by appenders in a target. Each target uses different connection.",
+	}
+
+	flagAppenders = &cli.UintSliceFlag{
+		Name:     "appenders",
+		Category: "Append: ",
+		Aliases:  []string{"appenders-count"},
+		Value:    cli.NewUintSlice(benchmark.DefaultConcurrency),
+		Usage:    "The number of appenders for each load target",
+	}
+	flagMsgSize = &cli.UintSliceFlag{
+		Name:     "message-size",
+		Category: "Append: ",
+		Aliases:  []string{"msg-size"},
+		Value:    cli.NewUintSlice(benchmark.DefaultMessageSize),
+		Usage:    "Message sizes for each load target",
+	}
+	flagBatchSize = &cli.UintSliceFlag{
+		Name:     "batch-size",
+		Category: "Append: ",
+		Value:    cli.NewUintSlice(benchmark.DefaultBatchSize),
+		Usage:    "Batch sizes for each load target",
+	}
+	flagPipelineSize = &cli.IntFlag{
+		Name:     "pipeline-size",
+		Category: "Append: ",
+		Usage:    "Pipeline size, no pipelined requests if zero. Not support per-target pipeline size yet.",
+		Value:    0,
+	}
+
+	flagSubscribers = &cli.UintSliceFlag{
+		Name:     "subscribers",
+		Category: "Subscribe: ",
+		Aliases:  []string{"subscribers-count"},
+		Value:    cli.NewUintSlice(benchmark.DefaultConcurrency),
+		Usage:    "The number of subscribers for each load target",
+	}
+	flagSubscribeSize = &cli.IntFlag{
+		Name:     "subscribe-size",
+		Category: "Subscribe: ",
+		Usage:    "The number of messages to subscribe at once",
+		Value:    1000,
 	}
 )
 
@@ -85,6 +105,7 @@ func newCommandTest() *cli.Command {
 			flagPrintJSON,
 			flagPipelineSize,
 			flagSingleConnPerTarget,
+			flagSubscribeSize,
 		},
 		Action: runCommandTest,
 	}
@@ -118,6 +139,7 @@ func runCommandTest(c *cli.Context) error {
 			}
 		}
 		target.PipelineSize = c.Int(flagPipelineSize.Name)
+		target.SubscribeSize = c.Int(flagSubscribeSize.Name)
 		targets[idx] = target
 	}
 

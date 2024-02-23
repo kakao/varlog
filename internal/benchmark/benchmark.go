@@ -69,7 +69,9 @@ func New(opts ...Option) (bm *Benchmark, err error) {
 
 // Run starts Loaders and metric reporter. It blocks until the loaders are finished.
 func (bm *Benchmark) Run() error {
-	g, ctx := errgroup.WithContext(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	g, ctx := errgroup.WithContext(ctx)
 
 	benchmarkTimer := time.NewTimer(bm.duration)
 
@@ -87,6 +89,7 @@ func (bm *Benchmark) Run() error {
 			close(bm.stopC)
 			wg.Done()
 			fmt.Println(MustEncode(bm.reportEncoder, bm.metrics.Flush()))
+			cancel()
 		}()
 		for {
 			select {
@@ -105,7 +108,6 @@ func (bm *Benchmark) Run() error {
 				fmt.Println(MustEncode(bm.reportEncoder, bm.metrics.Flush()))
 			}
 		}
-
 	}()
 
 	for _, tw := range bm.loaders {
