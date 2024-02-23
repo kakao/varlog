@@ -5,9 +5,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/kakao/varlog/internal/storagenode/client"
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 func BenchmarkTransmitQueue(b *testing.B) {
@@ -42,15 +40,8 @@ func BenchmarkTransmitQueue(b *testing.B) {
 				for range b.N {
 					tq := tc.generate(size)
 					for range size {
-						tr := transmitResult{
-							result: client.SubscribeResult{
-								LogEntry: varlogpb.LogEntry{
-									LogEntryMeta: varlogpb.LogEntryMeta{
-										GLSN: types.GLSN(rand.Int31()),
-									},
-								},
-							},
-						}
+						tr := &transmitResult{}
+						tr.result.GLSN = types.GLSN(rand.Int31())
 						tq.Push(tr)
 					}
 				}
