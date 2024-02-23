@@ -248,11 +248,8 @@ func (loader *Loader) subscribeLoop(ctx context.Context, c varlog.Log) error {
 }
 
 func (loader *Loader) subscribeLoopInternal(ctx context.Context, c varlog.Log, first, last varlogpb.LogSequenceNumber) error {
-	subscribeSize := types.GLSN(loader.SubscribeSize)
-
-	loader.logger.Info("subscribe", slog.Any("first", first), slog.Any("last", last), slog.Int("subscribeSize", loader.SubscribeSize))
-
 	var sm SubscribeMetrics
+	subscribeSize := types.GLSN(loader.SubscribeSize)
 	begin := first.GLSN
 	end := min(begin+subscribeSize, last.GLSN+1)
 	for begin < end {
