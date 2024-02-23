@@ -15,6 +15,7 @@ type Target struct {
 	AppendersCount   uint
 	SubscribersCount uint
 	PipelineSize     int
+	SubscribeSize    int
 }
 
 func (tgt Target) Valid() error {
