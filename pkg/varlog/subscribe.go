@@ -175,7 +175,7 @@ type subscriber struct {
 	closed   atomic.Bool
 	complete atomic.Bool
 
-	lastSubscribeAt atomic.Value
+	lastSubscribeAt atomic.Int64
 
 	logger *zap.Logger
 }
@@ -199,7 +199,7 @@ func newSubscriber(ctx context.Context, topicID types.TopicID, logStreamID types
 		done:            make(chan struct{}),
 		logger:          logger.Named("subscriber").With(zap.Int32("lsid", int32(logStreamID))),
 	}
-	s.lastSubscribeAt.Store(time.Now())
+	s.lastSubscribeAt.Store(time.Now().UnixNano())
 	s.closed.Store(false)
 	s.complete.Store(false)
 	return s, nil
@@ -237,7 +237,7 @@ func (s *subscriber) subscribe(ctx context.Context) {
 			needExit := r.result.Error != nil
 
 			if res.GLSN != types.InvalidGLSN {
-				s.lastSubscribeAt.Store(time.Now())
+				s.lastSubscribeAt.Store(time.Now().UnixNano())
 			} else if res.Error == io.EOF || errors.Is(res.Error, verrors.ErrTrimmed) {
 				s.complete.Store(true)
 			}
@@ -256,7 +256,8 @@ func (s *subscriber) subscribe(ctx context.Context) {
 }
 
 func (s *subscriber) getLastSubscribeAt() time.Time {
-	return s.lastSubscribeAt.Load().(time.Time)
+	nsec := s.lastSubscribeAt.Load()
+	return time.Unix(0, nsec)
 }
 
 type transmitter struct {
