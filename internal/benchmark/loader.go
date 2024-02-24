@@ -239,6 +239,8 @@ func (loader *Loader) subscribeLoop(ctx context.Context, c varlog.Log) error {
 	if err != nil {
 		return fmt.Errorf("subscribe: %w", err)
 	}
+	first.LLSN = (first.LLSN + last.LLSN) / 2
+	first.GLSN = (first.GLSN + last.GLSN) / 2
 	loader.logger.Info("subscribe range", slog.Any("first", first), slog.Any("last", last))
 
 	if loader.LogStreamID.Invalid() {
