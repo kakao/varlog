@@ -97,8 +97,10 @@ func (c *LogClient) Subscribe(ctx context.Context, tpid types.TopicID, lsid type
 		defer func() {
 			close(out)
 		}()
+		var rsp snpb.SubscribeResponse
 		for {
-			rsp, rpcErr := stream.Recv()
+			rsp.Reset()
+			rpcErr := stream.RecvMsg(&rsp)
 			err := verrors.FromStatusError(rpcErr)
 			result := SubscribeResult{Error: err}
 			if err == nil {

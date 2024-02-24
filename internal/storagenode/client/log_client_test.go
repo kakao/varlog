@@ -104,6 +104,29 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode, t
 	).DoAndReturn(func(_ context.Context, req *snpb.SubscribeRequest, opts ...grpc.CallOption) (snpb.LogIO_SubscribeClient, error) {
 		nextGLSN := req.GetGLSNBegin()
 		stream := mock.NewMockLogIO_SubscribeClient(ctrl)
+		stream.EXPECT().RecvMsg(gomock.Any()).DoAndReturn(
+			func(m any) error {
+				sn.mu.Lock()
+				defer sn.mu.Unlock()
+				var glsns []types.GLSN
+				for glsn := range sn.logEntries {
+					glsns = append(glsns, glsn)
+				}
+				sort.Sort(byGLSN(glsns))
+				for _, glsn := range glsns {
+					if glsn < nextGLSN {
+						continue
+					}
+					nextGLSN = glsn + 1
+					rsp := m.(*snpb.SubscribeResponse)
+					rsp.GLSN = glsn
+					rsp.LLSN = sn.glsnToLLSN[glsn]
+					rsp.Payload = sn.logEntries[glsn]
+					return nil
+				}
+				return io.EOF
+			},
+		).AnyTimes()
 		stream.EXPECT().Recv().DoAndReturn(
 			func() (*snpb.SubscribeResponse, error) {
 				sn.mu.Lock()
