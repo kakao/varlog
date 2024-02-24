@@ -13,6 +13,8 @@ import (
 
 	"go.uber.org/multierr"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/experimental"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
@@ -54,7 +56,9 @@ func NewLoader(cfg loaderConfig) (loader *Loader, err error) {
 			if scli != nil {
 				return scli, nil
 			}
-			cli, err := varlog.Open(context.TODO(), loader.cid, loader.mraddrs)
+			cli, err := varlog.Open(context.TODO(), loader.cid, loader.mraddrs, varlog.WithGRPCDialOptions(
+				experimental.WithRecvBufferPool(grpc.NewSharedBufferPool()),
+			))
 			if err != nil {
 				return nil, err
 			}

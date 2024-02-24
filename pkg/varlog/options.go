@@ -180,6 +180,14 @@ func WithGRPCInitialWindowSize(bytes int32) Option {
 	})
 }
 
+// WithGRPCDialOptions sets the grpc dial options.
+// See `google.golang.org/grpc.DialOption`.
+func WithGRPCDialOptions(grpcDialOptions ...grpc.DialOption) Option {
+	return newOption(func(opts *options) {
+		opts.grpcDialOptions = append(opts.grpcDialOptions, grpcDialOptions...)
+	})
+}
+
 const (
 	defaultRetryCount = 3
 )
