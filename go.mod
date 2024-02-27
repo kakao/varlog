@@ -17,7 +17,7 @@ require (
 	github.com/soheilhy/cmux v0.1.5
 	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli/v2 v2.27.1
-	go.etcd.io/etcd v0.5.0-alpha.5.0.20230414071934-94593e63d45c
+	go.etcd.io/etcd v0.5.0-alpha.5.0.20240131130919-ff2304879e1b
 	go.opentelemetry.io/contrib/instrumentation/host v0.49.0
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.49.0
 	go.opentelemetry.io/otel v1.24.0

@@ -352,8 +352,8 @@ github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9dec
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 github.com/yusufpapurcu/wmi v1.2.3 h1:E1ctvB7uKFMOJw3fdOW32DwGE9I7t++CRUEMKvFoFiw=
 github.com/yusufpapurcu/wmi v1.2.3/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
-go.etcd.io/etcd v0.5.0-alpha.5.0.20230414071934-94593e63d45c h1:xYeZLnj1ySxkOQdrbQXM4AFqljQ7KmiXWejLs9dqhAA=
-go.etcd.io/etcd v0.5.0-alpha.5.0.20230414071934-94593e63d45c/go.mod h1:LqihLF/IXb/G+G+NO6ckb61fypTb6GX99mPSztt+lkU=
+go.etcd.io/etcd v0.5.0-alpha.5.0.20240131130919-ff2304879e1b h1:NeKdMkWVeCdzdg9Rip/aVOgBeoGAjldAZ2pXLskuksU=
+go.etcd.io/etcd v0.5.0-alpha.5.0.20240131130919-ff2304879e1b/go.mod h1:WnaHjGRsd7pp+qO+AuA+fyHoBefpgyaTpSZ3Qw4H1aY=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=
 go.opencensus.io v0.22.0/go.mod h1:+kGneAE2xo2IficOXnaByMWTGM9T73dGwxeWcUqIpI8=
 go.opencensus.io v0.22.2/go.mod h1:yxeiOL68Rb0Xd1ddK5vPZ/oVn4vY4Ynel7k9FzqtOIw=
