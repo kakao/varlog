@@ -11,7 +11,7 @@ import (
 
 	"github.com/pkg/errors"
 	. "github.com/smartystreets/goconvey/convey"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.uber.org/goleak"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
@@ -2504,7 +2504,7 @@ func TestMRProposeRetry(t *testing.T) {
 
 			Convey("Then it should be success", func(ctx C) {
 				So(err, ShouldBeNil)
-				//So(atomic.LoadUint64(&clus.nodes[leader].requestNum), ShouldBeGreaterThan, 1)
+				// So(atomic.LoadUint64(&clus.nodes[leader].requestNum), ShouldBeGreaterThan, 1)
 			})
 		})
 	})
@@ -2921,7 +2921,6 @@ func TestMRTopicLastHighWatermark(t *testing.T) {
 				}
 			}
 		})
-
 	})
 }
 
@@ -3060,7 +3059,6 @@ func TestMRCatchupUnsealedLogstream(t *testing.T) {
 				}), ShouldBeTrue)
 			})
 		})
-
 	})
 }
 

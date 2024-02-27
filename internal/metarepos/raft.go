@@ -12,15 +12,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.etcd.io/etcd/etcdserver/api/rafthttp"
-	"go.etcd.io/etcd/etcdserver/api/snap"
-	stats "go.etcd.io/etcd/etcdserver/api/v2stats"
-	"go.etcd.io/etcd/pkg/fileutil"
-	"go.etcd.io/etcd/pkg/types"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/raftpb"
-	"go.etcd.io/etcd/wal"
-	"go.etcd.io/etcd/wal/walpb"
+	"go.etcd.io/etcd/client/pkg/v3/fileutil"
+	"go.etcd.io/etcd/client/pkg/v3/types"
+	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/raftpb"
+	"go.etcd.io/etcd/server/v3/etcdserver/api/rafthttp"
+	"go.etcd.io/etcd/server/v3/etcdserver/api/snap"
+	stats "go.etcd.io/etcd/server/v3/etcdserver/api/v2stats"
+	"go.etcd.io/etcd/server/v3/wal"
+	"go.etcd.io/etcd/server/v3/wal/walpb"
 	"go.uber.org/zap"
 
 	vtypes "github.com/kakao/varlog/pkg/types"
@@ -101,7 +101,8 @@ func newRaftNode(cfg raftConfig,
 	proposeC chan []byte,
 	confChangeC chan raftpb.ConfChange,
 	tmStub *telemetryStub,
-	logger *zap.Logger) *raftNode {
+	logger *zap.Logger,
+) *raftNode {
 	commitC := make(chan *raftCommittedEntry)
 	snapshotC := make(chan struct{})
 
@@ -130,8 +131,9 @@ func (rc *raftNode) saveSnap(snap raftpb.Snapshot) error {
 	// wal at previously-saved snapshot indexes.
 	_, err := rc.withTelemetry(context.TODO(), "save_snap", func(ctx context.Context) (interface{}, error) {
 		walSnap := walpb.Snapshot{
-			Index: snap.Metadata.Index,
-			Term:  snap.Metadata.Term,
+			Index:     snap.Metadata.Index,
+			Term:      snap.Metadata.Term,
+			ConfState: &snap.Metadata.ConfState,
 		}
 
 		if err := rc.wal.SaveSnapshot(walSnap); err != nil {
@@ -243,7 +245,7 @@ func (rc *raftNode) publishEntries(ctx context.Context, ents []raftpb.Entry) boo
 		}
 
 		if shutdown {
-			//TODO:: shutdown mr
+			// TODO:: shutdown mr
 			return false
 		}
 
@@ -344,7 +346,7 @@ func (rc *raftNode) replayWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 	}
 	rc.raftStorage.SetHardState(st) //nolint:errcheck,revive // TODO:: Handle an error returned.
 
-	//TODO:: WAL replay to state machine
+	// TODO:: WAL replay to state machine
 
 	// append to storage so raft starts at the right place in log
 	rc.raftStorage.Append(ents) //nolint:errcheck,revive // TODO:: Handle an error returned.
@@ -359,7 +361,7 @@ func (rc *raftNode) replayWAL(snapshot *raftpb.Snapshot) *wal.WAL {
 		zap.Uint64("lastIndex", rc.lastIndex),
 	)
 
-	//TODO:: check necessary whether send signal replay WAL complete
+	// TODO:: check necessary whether send signal replay WAL complete
 	return w
 }
 
@@ -428,7 +430,7 @@ func (rc *raftNode) start() {
 		Raft:        rc,
 		Snapshotter: rc.snapshotter,
 		ServerStats: stats.NewServerStats("", ""),
-		LeaderStats: stats.NewLeaderStats(strconv.FormatUint(uint64(rc.nodeID), 10)),
+		LeaderStats: stats.NewLeaderStats(rc.logger, strconv.FormatUint(uint64(rc.nodeID), 10)),
 		ErrorC:      make(chan error),
 	}
 
@@ -591,7 +593,7 @@ func (rc *raftNode) processMessages(ms []raftpb.Message) []raftpb.Message {
 					zap.Int("size", snapshot.Size()),
 				)
 
-				//TODO:: concurrency limit
+				// TODO:: concurrency limit
 				rc.runner.Run(func(context.Context) { //nolint:errcheck,revive // TODO:: Handle an error returned.
 					rc.transport.SendSnapshot(*sm)
 				})
