@@ -1,6 +1,6 @@
 module github.com/kakao/varlog
 
-go 1.22
+go 1.22.0
 
 require (
 	github.com/cockroachdb/pebble v1.1.0
