@@ -5,6 +5,7 @@
 //
 //	mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/reportcommitter -package reportcommitter -destination client_mock.go . Client
 //
+
 // Package reportcommitter is a generated GoMock package.
 package reportcommitter
 

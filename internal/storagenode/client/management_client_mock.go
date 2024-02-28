@@ -5,6 +5,7 @@
 //
 //	mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/storagenode/client -package client -destination management_client_mock.go . StorageNodeManagementClient
 //
+
 // Package client is a generated GoMock package.
 package client
 

@@ -5,6 +5,7 @@
 //
 //	mockgen -build_flags -mod=vendor -package admpb -destination admin_mock.go . ClusterManagerClient,ClusterManagerServer
 //
+
 // Package admpb is a generated GoMock package.
 package admpb
 

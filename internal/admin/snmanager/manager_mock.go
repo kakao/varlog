@@ -5,6 +5,7 @@
 //
 //	mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/admin/snmanager -package snmanager -destination manager_mock.go . StorageNodeManager
 //
+
 // Package snmanager is a generated GoMock package.
 package snmanager
 
