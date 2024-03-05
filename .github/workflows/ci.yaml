@@ -78,7 +78,7 @@ jobs:
           pip install pytest-cov
           make test_coverage TEST_FLAGS='-race -failfast -count=1 -timeout=20m'
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4.0.2
+        uses: codecov/codecov-action@v4.1.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.out,./coverage.xml
