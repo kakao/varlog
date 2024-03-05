@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.20.0](https://github.com/kakao/varlog/compare/v0.19.2...v0.20.0) (2024-03-05)
+
+
+### Features
+
+* **benchmark:** use gops to diagnose benchmark tool ([9f31816](https://github.com/kakao/varlog/commit/9f318169e229d62f5917b1d34f0b23123dc2a0b0))
+* **benchmark:** use gops to diagnose benchmark tool ([#717](https://github.com/kakao/varlog/issues/717)) ([86a8155](https://github.com/kakao/varlog/commit/86a81553e16446bfb13fc9ecde54bab958249cdb))
+
+
+### Bug Fixes
+
+* **benchmark:** refine the benchmark tool for log subscription ([01bf188](https://github.com/kakao/varlog/commit/01bf188a22918ea3d57f72d61fff36525061d835))
+* **benchmark:** refine the benchmark tool for log subscription ([#716](https://github.com/kakao/varlog/issues/716)) ([eb83d42](https://github.com/kakao/varlog/commit/eb83d428b8b47053fef8e9bff3d3031b416e4e22))
+
+
+### Performance Improvements
+
+* **benchmark:** use grpc.SharedBufferPool for grpc.DialOption ([8014ece](https://github.com/kakao/varlog/commit/8014ecec1bb1eb2f44da1d89af7d646dfa91b3c9))
+* **benchmark:** use grpc.SharedBufferPool for grpc.DialOption ([#718](https://github.com/kakao/varlog/issues/718)) ([fbf0c17](https://github.com/kakao/varlog/commit/fbf0c17c84bef0556c6f3807d721ef55b187517d))
+* **client:** optimize with atomic.Int64 for lastSubscribeAt in pkg/varlog.(subscriber) ([617bd9d](https://github.com/kakao/varlog/commit/617bd9d43429d5994a3d296dd1073d050e6bdda2))
+* **client:** optimize with atomic.Int64 for lastSubscribeAt in pkg/varlog.(subscriber) ([#720](https://github.com/kakao/varlog/issues/720)) ([6d2779e](https://github.com/kakao/varlog/commit/6d2779eeb685215182aacfb5677d264a6dc41484))
+* **client:** prealloc pkg/varlog.(*transmitter).transmitQueue ([58a5c21](https://github.com/kakao/varlog/commit/58a5c215bbf24cd3ef749660ddb9edb1d2ad1cdf))
+* **client:** prealloc pkg/varlog.(*transmitter).transmitQueue ([#721](https://github.com/kakao/varlog/issues/721)) ([26ed1a6](https://github.com/kakao/varlog/commit/26ed1a6efc92809ea860036c061611d796689f66))
+* **client:** reuse snpb.SubscribeResponse in RPC handler ([890508d](https://github.com/kakao/varlog/commit/890508d7e19ba32a1731ca817d467dc18a200128))
+* **client:** reuse snpb.SubscribeResponse in RPC handler ([#719](https://github.com/kakao/varlog/issues/719)) ([e98ac54](https://github.com/kakao/varlog/commit/e98ac54496de0b7876d3a5b33ef328c3d44778b2))
+* **storage:** enhance GLSN Log scanning efficiency ([963d10f](https://github.com/kakao/varlog/commit/963d10f2154f1d6e2c8649ee363cbf1024dbaf81))
+* **storage:** improve scanning with GLSN ([#715](https://github.com/kakao/varlog/issues/715)) ([3caaa0a](https://github.com/kakao/varlog/commit/3caaa0a96df24fe845c66f8c7146c26c6e8b46e5))
+
 ## [0.19.2](https://github.com/kakao/varlog/compare/v0.19.1...v0.19.2) (2024-02-14)
 
 
