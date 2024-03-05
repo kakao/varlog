@@ -5,6 +5,7 @@
 //
 //	mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/admin -package admin -destination replica_selector_mock.go . ReplicaSelector
 //
+
 // Package admin is a generated GoMock package.
 package admin
 

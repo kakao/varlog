@@ -5,6 +5,7 @@
 //
 //	mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/admin/mrmanager -package mrmanager -destination manager_mock.go . ClusterMetadataView,MetadataRepositoryManager
 //
+
 // Package mrmanager is a generated GoMock package.
 package mrmanager
 
