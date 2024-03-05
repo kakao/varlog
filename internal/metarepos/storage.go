@@ -11,8 +11,8 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/status"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
@@ -1250,7 +1250,7 @@ func (ms *MetadataStorage) AppendLogStreamCommitHistory(cr *mrpb.LogStreamCommit
 		return
 	}
 
-	//ms.logger.Info("append commit", zap.String("logstreams", cr.String()))
+	// ms.logger.Info("append commit", zap.String("logstreams", cr.String()))
 
 	_, cur := ms.getStateMachine()
 
@@ -1694,7 +1694,7 @@ func (ms *MetadataStorage) createMetadataCache(job *jobMetadataCache) {
 	defer ms.mtMu.RUnlock()
 
 	for _, sn := range ms.diffStateMachine.Metadata.StorageNodes {
-		//TODO:: UpdateStorageNode
+		// TODO:: UpdateStorageNode
 		if sn.Status.Deleted() {
 			cache.DeleteStorageNode(sn.StorageNodeID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		} else {
@@ -1736,7 +1736,7 @@ func (ms *MetadataStorage) mergeMetadata() {
 	defer ms.mtMu.Unlock()
 
 	for _, sn := range ms.diffStateMachine.Metadata.StorageNodes {
-		//TODO:: UpdateStorageNode
+		// TODO:: UpdateStorageNode
 		if sn.Status.Deleted() {
 			ms.origStateMachine.Metadata.DeleteStorageNode(sn.StorageNodeID) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		} else {

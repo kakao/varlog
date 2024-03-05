@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/gogo/status"
-	"go.etcd.io/etcd/pkg/fileutil"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/client/pkg/v3/fileutil"
+	"go.etcd.io/etcd/raft/v3"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -207,10 +207,10 @@ func (mr *RaftMetadataRepository) Run() {
 
 		mr.healthServer.SetServingStatus("", grpc_health_v1.HealthCheckResponse_SERVING)
 
-		//TODO:: graceful shutdown
+		// TODO:: graceful shutdown
 		if err := mr.server.Serve(lis); err != nil && err != verrors.ErrStopped {
 			mr.logger.Panic("could not serve", zap.Error(err))
-			//r.Close()
+			// r.Close()
 		}
 	}); err != nil {
 		mr.logger.Panic("could not run", zap.Error(err))
@@ -219,7 +219,8 @@ func (mr *RaftMetadataRepository) Run() {
 
 func (mr *RaftMetadataRepository) runDebugServer(ctx context.Context) {
 	httpMux := http.NewServeMux()
-	mr.debugServer = &http.Server{Addr: mr.debugAddr, Handler: httpMux,
+	mr.debugServer = &http.Server{
+		Addr: mr.debugAddr, Handler: httpMux,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 5 * time.Second,
 		IdleTimeout:  30 * time.Second,
@@ -854,7 +855,7 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 
 			committedOffset := types.InvalidGLSN
 
-			//TODO:: apply topic
+			// TODO:: apply topic
 			for idx, topicLSID := range topicLSIDs {
 				beginTopic, endTopic := topicBoundary(topicLSIDs, idx)
 
@@ -967,7 +968,7 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 
 		mr.reportCollector.Commit()
 
-		//TODO:: trigger next commit
+		// TODO:: trigger next commit
 
 		return nil, nil
 	})
@@ -1054,11 +1055,11 @@ func (mr *RaftMetadataRepository) numCommitSince(topicID types.TopicID, lsID typ
 }
 
 func (mr *RaftMetadataRepository) calculateCommit(reports *mrpb.LogStreamUncommitReports) (types.Version, types.Version, types.GLSN, uint64) {
-	var trimVer = types.MaxVersion
-	var knownVer = types.InvalidVersion
-	var beginLLSN = types.InvalidLLSN
-	var endLLSN = types.InvalidLLSN
-	var highWatermark = types.InvalidGLSN
+	trimVer := types.MaxVersion
+	knownVer := types.InvalidVersion
+	beginLLSN := types.InvalidLLSN
+	endLLSN := types.InvalidLLSN
+	highWatermark := types.InvalidGLSN
 
 	if reports == nil {
 		return types.InvalidVersion, types.InvalidVersion, types.InvalidGLSN, 0

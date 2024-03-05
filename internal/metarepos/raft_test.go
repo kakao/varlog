@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
-	"go.etcd.io/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
@@ -19,8 +19,10 @@ import (
 	"github.com/kakao/varlog/vtesting"
 )
 
-type stopFunc func(bool)
-type leaderFunc func() uint64
+type (
+	stopFunc   func(bool)
+	leaderFunc func() uint64
+)
 
 type cluster struct {
 	peers       []string
@@ -68,7 +70,7 @@ func newCluster(n int) *cluster {
 		os.RemoveAll(fmt.Sprintf("raftdata/snap/%d", nodeID)) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		clus.proposeC[i] = make(chan []byte, 1)
 		clus.confChangeC[i] = make(chan raftpb.ConfChange, 1)
-		//logger, _ := zap.NewDevelopment()
+		// logger, _ := zap.NewDevelopment()
 		logger := zap.NewNop()
 
 		options := raftConfig{
