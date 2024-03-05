@@ -48,6 +48,10 @@ func (v *logImpl) subscribe(ctx context.Context, topicID types.TopicID, begin, e
 	sleq := newSubscribedLogEntiresQueue(begin, end, closer, v.logger)
 
 	tlogger := v.logger.Named("transmitter")
+	// The maximum length of transmitQ is end - begin in the worst case.
+	// Therefore, we can approximate half of it.
+	// TODO: Use a better approximation.
+	approxTransmitQSize := int((end - begin) / 2)
 	tsm := &transmitter{
 		topicID:           topicID,
 		subscribers:       make(map[types.LogStreamID]*subscriber),
@@ -57,7 +61,7 @@ func (v *logImpl) subscribe(ctx context.Context, topicID types.TopicID, begin, e
 		sleq:              sleq,
 		wanted:            begin,
 		end:               end,
-		transmitQ:         &transmitQueue{pq: &PriorityQueue{}},
+		transmitQ:         &transmitQueue{pq: newPriorityQueue(approxTransmitQSize)},
 		transmitCV:        transmitCV,
 		timeout:           subscribeOpts.timeout,
 		runner:            runner.New("transmitter", tlogger),
@@ -88,6 +92,12 @@ type PriorityQueueItem interface {
 }
 
 type PriorityQueue []PriorityQueueItem
+
+func newPriorityQueue(size int) *PriorityQueue {
+	items := make([]PriorityQueueItem, 0, size)
+	pq := PriorityQueue(items)
+	return &pq
+}
 
 func (pq PriorityQueue) Len() int { return len(pq) }
 
