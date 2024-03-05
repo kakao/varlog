@@ -5,6 +5,7 @@
 //
 //	mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/pkg/varlog -package varlog -destination metadata_refresher_mock.go . MetadataRefresher
 //
+
 // Package varlog is a generated GoMock package.
 package varlog
 

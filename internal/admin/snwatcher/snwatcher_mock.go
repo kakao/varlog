@@ -5,6 +5,7 @@
 //
 //	mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/admin/snwatcher -package snwatcher -destination snwatcher_mock.go . EventHandler
 //
+
 // Package snwatcher is a generated GoMock package.
 package snwatcher
 

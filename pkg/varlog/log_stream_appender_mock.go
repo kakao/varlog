@@ -5,6 +5,7 @@
 //
 //	mockgen -package varlog -destination log_stream_appender_mock.go . LogStreamAppender
 //
+
 // Package varlog is a generated GoMock package.
 package varlog
 

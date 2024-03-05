@@ -5,6 +5,7 @@
 //
 //	mockgen -package varlog -destination admin_mock.go . Admin
 //
+
 // Package varlog is a generated GoMock package.
 package varlog
 

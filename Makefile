@@ -124,7 +124,7 @@ generate-check:
 tools:
 	$(GO) install golang.org/x/tools/cmd/goimports@latest
 	$(GO) install golang.org/x/lint/golint@latest
-	$(GO) install go.uber.org/mock/mockgen@v0.3.0
+	$(GO) install go.uber.org/mock/mockgen@v0.4.0
 
 fmt:
 	@echo goimports
