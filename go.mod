@@ -7,7 +7,7 @@ require (
 	github.com/docker/go-units v0.5.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/gogo/status v1.1.1
-	github.com/golang/protobuf v1.5.3
+	github.com/golang/protobuf v1.5.4
 	github.com/google/gops v0.3.28
 	github.com/lib/pq v1.10.9
 	github.com/pkg/errors v0.9.1
@@ -39,7 +39,7 @@ require (
 	golang.org/x/sys v0.17.0
 	golang.org/x/tools v0.18.0
 	google.golang.org/grpc v1.62.0
-	google.golang.org/protobuf v1.32.0
+	google.golang.org/protobuf v1.33.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	k8s.io/api v0.29.2
 	k8s.io/apimachinery v0.29.2
