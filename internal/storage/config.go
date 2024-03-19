@@ -147,6 +147,7 @@ type config struct {
 	trimRateByte       int
 	logger             *zap.Logger
 	readOnly           bool
+	cache              *Cache
 }
 
 func newConfig(opts []Option) (config, error) {
@@ -270,6 +271,15 @@ func WithTrimRateByte(trimRateByte int) Option {
 func ReadOnly() Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.readOnly = true
+	})
+}
+
+// WithCache sets the cache for storage. Users can use the same cache across
+// different storage. If the cache is not set, each storage uses its cache,
+// which is 8 MB in size.
+func WithCache(cache *Cache) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.cache = cache
 	})
 }
 
