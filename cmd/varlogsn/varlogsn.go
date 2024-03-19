@@ -113,6 +113,13 @@ func start(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	cacheSize, err := units.FromByteSizeString(c.String(flagStorageCacheSize.Name))
+	if err != nil {
+		return err
+	}
+	storageCache := storage.NewCache(cacheSize)
+	defer storageCache.Unref()
+	storageOpts = append(storageOpts, storage.WithCache(storageCache))
 
 	snOpts := []storagenode.Option{
 		storagenode.WithClusterID(clusterID),

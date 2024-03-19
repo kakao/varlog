@@ -66,11 +66,11 @@ func New(opts ...Option) (*Storage, error) {
 				return nil, fmt.Errorf("forbidden entry: %s", name)
 			}
 		}
-		dataDB, err = s.newDB(filepath.Join(s.path, dataDBDirName), &s.dataDBConfig)
+		dataDB, err = s.newDB(filepath.Join(s.path, dataDBDirName), &s.dataDBConfig, s.cache)
 		if err != nil {
 			return nil, err
 		}
-		commitDB, err = s.newDB(filepath.Join(s.path, commitDBDirName), &s.commitDBConfig)
+		commitDB, err = s.newDB(filepath.Join(s.path, commitDBDirName), &s.commitDBConfig, s.cache)
 		if err != nil {
 			return nil, err
 		}
@@ -82,7 +82,7 @@ func New(opts ...Option) (*Storage, error) {
 				return nil, fmt.Errorf("non-separating database, but %s exists", dbDirName)
 			}
 		}
-		dataDB, err = s.newDB(s.path, &s.dataDBConfig)
+		dataDB, err = s.newDB(s.path, &s.dataDBConfig, s.cache)
 		if err != nil {
 			return nil, err
 		}
@@ -99,8 +99,9 @@ func New(opts ...Option) (*Storage, error) {
 	return stg, nil
 }
 
-func (s *Storage) newDB(path string, cfg *dbConfig) (*pebble.DB, error) {
+func (s *Storage) newDB(path string, cfg *dbConfig, cache *Cache) (*pebble.DB, error) {
 	pebbleOpts := &pebble.Options{
+		Cache:                       cache.get(),
 		DisableWAL:                  !s.wal,
 		L0CompactionFileThreshold:   cfg.l0CompactionFileThreshold,
 		L0CompactionThreshold:       cfg.l0CompactionThreshold,

@@ -22,79 +22,152 @@ func TestMain(m *testing.M) {
 func TestStorage_New(t *testing.T) {
 	tcs := []struct {
 		name  string
-		pref  func(t *testing.T, path string)
-		postf func(t *testing.T, path string)
+		testf func(t *testing.T)
 	}{
 		{
 			name: "NoPath",
-			pref: func(t *testing.T, _ string) {
-				_, err := New(WithLogger(zap.NewNop()))
+			testf: func(t *testing.T) {
+				cache := NewCache(1 << 20)
+				defer cache.Unref()
+
+				_, err := New(
+					WithLogger(zap.NewNop()),
+					WithCache(cache),
+				)
 				require.Error(t, err)
 			},
-			postf: func(*testing.T, string) {},
 		},
 		{
 			name: "NoLogger",
-			pref: func(t *testing.T, path string) {
-				_, err := New(WithPath(path), WithLogger(nil))
+			testf: func(t *testing.T) {
+				path := t.TempDir()
+				cache := NewCache(1 << 20)
+				defer cache.Unref()
+
+				_, err := New(
+					WithPath(path),
+					WithLogger(nil),
+					WithCache(cache),
+				)
 				require.Error(t, err)
 			},
-			postf: func(*testing.T, string) {},
 		},
 		{
 			name: "NoWALWithSync",
-			pref: func(t *testing.T, path string) {
-				_, err := New(WithPath(path), WithoutWAL())
+			testf: func(t *testing.T) {
+				path := t.TempDir()
+				cache := NewCache(1 << 20)
+				defer cache.Unref()
+
+				_, err := New(
+					WithPath(path),
+					WithoutWAL(),
+					WithCache(cache),
+				)
 				require.Error(t, err)
 			},
-			postf: func(*testing.T, string) {},
 		},
 		{
-			name: "SeparateAndNotSeparate",
-			pref: func(t *testing.T, path string) {
-				s, err := New(WithPath(path), SeparateDatabase())
+			name: "NoCache",
+			testf: func(t *testing.T) {
+				path := t.TempDir()
+
+				s, err := New(
+					WithPath(path),
+					WithLogger(zap.NewNop()),
+				)
 				require.NoError(t, err)
 				require.NoError(t, s.Close())
 			},
-			postf: func(t *testing.T, path string) {
-				_, err := New(WithPath(path))
+		},
+		{
+			name: "UseCache",
+			testf: func(t *testing.T) {
+				path := t.TempDir()
+				cache := NewCache(1 << 20)
+				defer cache.Unref()
+
+				s, err := New(
+					WithPath(path),
+					WithLogger(zap.NewNop()),
+					WithCache(cache),
+					SeparateDatabase(),
+				)
+				require.NoError(t, err)
+				require.NoError(t, s.Close())
+			},
+		},
+		{
+			name: "SeparateAndNotSeparate",
+			testf: func(t *testing.T) {
+				path := t.TempDir()
+
+				s, err := New(
+					WithPath(path),
+					SeparateDatabase(),
+				)
+				require.NoError(t, err)
+				require.NoError(t, s.Close())
+
+				_, err = New(
+					WithPath(path),
+				)
 				require.Error(t, err)
 			},
 		},
 		{
 			name: "NotSeparateAndSeparate",
-			pref: func(t *testing.T, path string) {
-				s, err := New(WithPath(path))
+			testf: func(t *testing.T) {
+				path := t.TempDir()
+
+				s, err := New(
+					WithPath(path),
+				)
 				require.NoError(t, err)
 				require.NoError(t, s.Close())
-			},
-			postf: func(t *testing.T, path string) {
-				_, err := New(WithPath(path), SeparateDatabase())
+
+				_, err = New(
+					WithPath(path),
+					SeparateDatabase(),
+				)
 				require.Error(t, err)
 			},
 		},
 		{
 			name: "NewAndCloseSeparateDB",
-			pref: func(t *testing.T, path string) {
-				s, err := New(WithPath(path), SeparateDatabase(), WithVerboseLogging(), WithMetricsLogInterval(time.Second))
+			testf: func(t *testing.T) {
+				path := t.TempDir()
+				opts := []Option{
+					WithPath(path),
+					SeparateDatabase(),
+					WithVerboseLogging(),
+					WithMetricsLogInterval(time.Second),
+				}
+
+				s, err := New(opts...)
 				require.NoError(t, err)
 				require.NoError(t, s.Close())
-			},
-			postf: func(t *testing.T, path string) {
-				s, err := New(WithPath(path), SeparateDatabase(), WithVerboseLogging(), WithMetricsLogInterval(time.Second))
+
+				s, err = New(opts...)
 				require.NoError(t, err)
 				require.NoError(t, s.Close())
 			},
 		},
 		{
-			name: "SeparateDBNewAndCloseNotSeparateDB",
-			pref: func(t *testing.T, path string) {
-				s, err := New(WithPath(path), WithVerboseLogging(), WithMetricsLogInterval(time.Second))
+			name: "NewAndCloseNotSeparateDB",
+			testf: func(t *testing.T) {
+				path := t.TempDir()
+				opts := []Option{
+					WithPath(path),
+					WithVerboseLogging(),
+					WithMetricsLogInterval(time.Second),
+				}
+
+				s, err := New(opts...)
 				require.NoError(t, err)
 				require.NoError(t, s.Close())
-			},
-			postf: func(t *testing.T, path string) {
-				s, err := New(WithPath(path), WithVerboseLogging(), WithMetricsLogInterval(time.Second))
+
+				s, err = New(opts...)
 				require.NoError(t, err)
 				require.NoError(t, s.Close())
 			},
@@ -103,9 +176,7 @@ func TestStorage_New(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			path := t.TempDir()
-			tc.pref(t, path)
-			tc.postf(t, path)
+			tc.testf(t)
 		})
 	}
 }
