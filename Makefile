@@ -5,6 +5,7 @@ GO := go
 GCFLAGS := -gcflags=all='-N -l'
 LDFLAGS := -X 'github.com/kakao/varlog/internal/buildinfo.version=$(shell git describe --abbrev=0 --tags)'
 LDFLAGS := -ldflags "$(LDFLAGS)"
+COVERFLAGS :=
 GOPATH := $(shell $(GO) env GOPATH)
 PKGS := $(shell $(GO) list ./... | \
 	egrep -v "github.com/kakao/varlog/vendor" | \
@@ -25,7 +26,7 @@ all: precommit
 
 # precommit
 .PHONY: precommit
-precommit: mod-tidy mod-vendor proto generate fmt vet lint build test test_py
+precommit: mod-tidy mod-vendor proto generate fmt vet lint build test
 
 
 # build
@@ -41,37 +42,44 @@ BENCHMARK := $(BIN_DIR)/benchmark
 .PHONY: build varlogmr varlogadm varlogsn varlogctl varlogcli mrtool benchmark
 build: varlogmr varlogadm varlogsn varlogctl varlogcli mrtool benchmark
 varlogmr:
-	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(VARLOGMR) $(CURDIR)/cmd/varlogmr
+	$(GO) build $(GCFLAGS) $(LDFLAGS) $(COVERFLAGS) -o $(VARLOGMR) $(CURDIR)/cmd/varlogmr
 varlogadm:
-	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(VARLOGADM) $(CURDIR)/cmd/varlogadm
+	$(GO) build $(GCFLAGS) $(LDFLAGS) $(COVERFLAGS) -o $(VARLOGADM) $(CURDIR)/cmd/varlogadm
 varlogsn:
-	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(VARLOGSN) $(CURDIR)/cmd/varlogsn
+	$(GO) build $(GCFLAGS) $(LDFLAGS) $(COVERFLAGS) -o $(VARLOGSN) $(CURDIR)/cmd/varlogsn
 varlogctl:
-	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(VARLOGCTL) $(CURDIR)/cmd/varlogctl
+	$(GO) build $(GCFLAGS) $(LDFLAGS) $(COVERFLAGS) -o $(VARLOGCTL) $(CURDIR)/cmd/varlogctl
 varlogcli:
-	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(VARLOGCLI) $(CURDIR)/cmd/varlogcli
+	$(GO) build $(GCFLAGS) $(LDFLAGS) $(COVERFLAGS) -o $(VARLOGCLI) $(CURDIR)/cmd/varlogcli
 mrtool:
-	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(MRTOOL) $(CURDIR)/cmd/mrtool
+	$(GO) build $(GCFLAGS) $(LDFLAGS) $(COVERFLAGS) -o $(MRTOOL) $(CURDIR)/cmd/mrtool
 benchmark:
-	$(GO) build $(GCFLAGS) $(LDFLAGS) -o $(BENCHMARK) $(CURDIR)/cmd/benchmark
+	$(GO) build $(GCFLAGS) $(LDFLAGS) $(COVERFLAGS) -o $(BENCHMARK) $(CURDIR)/cmd/benchmark
 
 
 # testing
 TEST_FLAGS := -race -failfast -count=1 -timeout=20m -p=1
+COVDATA_DIR := $(CURDIR)/covdata
 GO_COVERAGE_OUTPUT := coverage.out
 GO_COVERAGE_OUTPUT_TMP := $(GO_COVERAGE_OUTPUT).tmp
 PYTEST := pytest
 PYTHON_COVERAGE_OUTPUT := coverage.xml
-.PHONY: test test_coverage test_ci test_report coverage_report test_py
+.PHONY: test test_coverage generate_coverage_profile test_e2e_local_coverage test_e2e_local test_e2e_k8s
 test:
 	$(GO) test $(TEST_FLAGS) ./...
 	$(PYTEST)
 
 test_coverage:
-	$(GO) test $(TEST_FLAGS) -coverprofile=$(GO_COVERAGE_OUTPUT_TMP) -covermode=atomic ./...
+	mkdir $(COVDATA_DIR)/unit
+	$(GO) test $(TEST_FLAGS) -cover -covermode=atomic ./... -args -test.gocoverdir=$(COVDATA_DIR)/unit
+	$(PYTEST) --cov=./ --cov-report=xml:$(PYTHON_COVERAGE_OUTPUT)
+
+generate_coverage_profile:
+	mkdir $(COVDATA_DIR)/merged
+	$(GO) tool covdata merge -i=$(COVDATA_DIR)/unit,$(COVDATA_DIR)/ee -o $(COVDATA_DIR)/merged
+	$(GO) tool covdata textfmt -i=$(COVDATA_DIR)/merged -o $(GO_COVERAGE_OUTPUT_TMP)
 	cat $(GO_COVERAGE_OUTPUT_TMP) | grep -v "_mock.go" | grep -v ".pb.go" > $(GO_COVERAGE_OUTPUT)
 	$(RM) $(GO_COVERAGE_OUTPUT_TMP)
-	$(PYTEST) --cov=./ --cov-report=xml:$(PYTHON_COVERAGE_OUTPUT)
 
 # If you want to specify a directory for grpc_health_probe, enter following:
 #   make test_e2e_local TEST_ARGS="-args -grpc-health-probe-executable=<path>"
@@ -79,6 +87,11 @@ test_coverage:
 # If you have installed the grpc_health_probe and can look it up by PATH, it is
 # unnecessary to enter TEST_ARGS.
 TEST_ARGS :=
+test_e2e_local_coverage:
+	make build COVERFLAGS="-cover -covermode=atomic"
+	mkdir $(COVDATA_DIR)/ee
+	GOCOVERDIR=$(COVDATA_DIR)/ee $(GO) test $(TEST_FLAGS) ./tests/ee/... -tags=e2e $(TEST_ARGS)
+
 test_e2e_local: build
 	$(GO) test $(TEST_FLAGS) ./tests/ee/... -tags=e2e $(TEST_ARGS)
 
@@ -158,7 +171,7 @@ mod-vendor-check:
 .PHONY: clean clean_mock
 clean:
 	$(GO) clean
-	$(RM) $(GO_COVERAGE_OUTPUT) $(PYTHON_COVERAGE_OUTPUT)
+	$(RM) -rf $(GO_COVERAGE_OUTPUT) $(PYTHON_COVERAGE_OUTPUT) $(COVDATA_DIR)/*
 	$(RM) $(VARLOGMR) $(VARLOGADM) $(VARLOGSN) $(VARLOGCTL) $(VARLOGCLI) $(MRTOOL) $(BENCHMARK)
 
 clean_mock:
