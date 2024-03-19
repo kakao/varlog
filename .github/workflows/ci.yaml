@@ -68,15 +68,28 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+      - name: Install grpc_health_probe
+        run: |
+          wget -qO${PWD}/bin/grpc-health-probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${{ env.GRPC_HEALTH_PROBE_VERSION }}/grpc_health_probe-linux-amd64
+          chmod +x ${PWD}/bin/grpc-health-probe
+          echo "${PWD}/bin" >> $GITHUB_PATH
       - name: Install Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Coverage test
+      - name: Install pytest
         run: |
           pip install pytest
           pip install pytest-cov
+      - name: Run unit tests with coverage profiling
+        run: |
           make test_coverage TEST_FLAGS='-race -failfast -count=1 -timeout=20m'
+      - name: Run end-to-end tests with coverage profiling
+        run: |
+          make test_e2e_local_coverage TEST_FLAGS='-race -failfast -count=1 -timeout=20m'
+      - name: Generate coverage profile
+        run: |
+          make generate_coverage_profile
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4.1.0
         with:
@@ -84,22 +97,3 @@ jobs:
           files: ./coverage.out,./coverage.xml
           fail_ci_if_error: true
           verbose: true
-  e2e_test:
-    needs: lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-      - name: Install grpc_health_probe
-        run: |
-          wget -qO${PWD}/bin/grpc-health-probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${{ env.GRPC_HEALTH_PROBE_VERSION }}/grpc_health_probe-linux-amd64
-          chmod +x ${PWD}/bin/grpc-health-probe
-          echo "${PWD}/bin" >> $GITHUB_PATH
-      - name: Test
-        run: |
-          whereis grpc-health-probe
-          make test_e2e_local TEST_FLAGS='-race -failfast -count=1 -timeout=20m'

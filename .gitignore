@@ -73,3 +73,5 @@ deploy/k8s-experiment/e2e/kustomization.yaml
 coverage.xml
 coverage.out
 .coverage
+covdata/unit/
+covdata/ee/
