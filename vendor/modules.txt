@@ -329,8 +329,8 @@ github.com/yusufpapurcu/wmi
 # go.etcd.io/etcd/api/v3 v3.5.12
 ## explicit; go 1.20
 go.etcd.io/etcd/api/v3/version
-# go.etcd.io/etcd/client/pkg/v3 v3.5.12
-## explicit; go 1.20
+# go.etcd.io/etcd/client/pkg/v3 v3.5.13
+## explicit; go 1.21
 go.etcd.io/etcd/client/pkg/v3/fileutil
 go.etcd.io/etcd/client/pkg/v3/tlsutil
 go.etcd.io/etcd/client/pkg/v3/transport
