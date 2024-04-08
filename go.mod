@@ -22,10 +22,10 @@ require (
 	go.etcd.io/etcd/server/v3 v3.5.13
 	go.opentelemetry.io/contrib/instrumentation/host v0.49.0
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.49.0
-	go.opentelemetry.io/otel v1.24.0
+	go.opentelemetry.io/otel v1.25.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.24.0
 	go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v1.24.0
-	go.opentelemetry.io/otel/metric v1.24.0
+	go.opentelemetry.io/otel/metric v1.25.0
 	go.opentelemetry.io/otel/sdk v1.24.0
 	go.opentelemetry.io/otel/sdk/metric v1.24.0
 	go.uber.org/automaxprocs v1.5.3
@@ -106,7 +106,7 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	go.etcd.io/etcd/api/v3 v3.5.13 // indirect
 	go.etcd.io/etcd/pkg/v3 v3.5.13 // indirect
-	go.opentelemetry.io/otel/trace v1.24.0 // indirect
+	go.opentelemetry.io/otel/trace v1.25.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.1.0 // indirect
 	golang.org/x/mod v0.16.0 // indirect
 	golang.org/x/net v0.22.0 // indirect
