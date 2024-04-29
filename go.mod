@@ -24,10 +24,10 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.50.0
 	go.opentelemetry.io/otel v1.26.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.25.0
-	go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v1.25.0
+	go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v1.26.0
 	go.opentelemetry.io/otel/metric v1.26.0
 	go.opentelemetry.io/otel/sdk v1.26.0
-	go.opentelemetry.io/otel/sdk/metric v1.25.0
+	go.opentelemetry.io/otel/sdk/metric v1.26.0
 	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.4.0
