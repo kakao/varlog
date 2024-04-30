@@ -136,6 +136,13 @@ var (
 		Category: categoryStorage,
 		EnvVars:  []string{"STORAGE_VERBOSE"},
 	}
+	flagStorageCacheSize = &cli.StringFlag{
+		Name:     "storage-cache-size",
+		Category: categoryStorage,
+		EnvVars:  []string{"STORAGE_CACHE_SIZE"},
+		Value:    units.ToByteSizeString(storage.DefaultCacheSize),
+		Usage:    "Size of storage cache shared across all storages.",
+	}
 
 	flagStorageL0CompactionFileThreshold = &cli.IntSliceFlag{
 		Name:     "storage-l0-compaction-file-threshold",
