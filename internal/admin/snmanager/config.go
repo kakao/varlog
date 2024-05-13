@@ -4,15 +4,17 @@ import (
 	"errors"
 
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/internal/admin/mrmanager"
 	"github.com/kakao/varlog/pkg/types"
 )
 
 type config struct {
-	cid    types.ClusterID
-	cmview mrmanager.ClusterMetadataView
-	logger *zap.Logger
+	cid                    types.ClusterID
+	cmview                 mrmanager.ClusterMetadataView
+	defaultGRPCDialOptions []grpc.DialOption
+	logger                 *zap.Logger
 }
 
 func newConfig(opts []Option) (config, error) {
@@ -70,5 +72,11 @@ func WithClusterMetadataView(cmview mrmanager.ClusterMetadataView) Option {
 func WithLogger(logger *zap.Logger) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.logger = logger
+	})
+}
+
+func WithDefaultGRPCDialOptions(defaultGRPCDialOpts ...grpc.DialOption) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.defaultGRPCDialOptions = defaultGRPCDialOpts
 	})
 }

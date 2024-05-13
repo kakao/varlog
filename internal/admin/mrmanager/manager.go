@@ -112,6 +112,7 @@ func New(ctx context.Context, opts ...Option) (MetadataRepositoryManager, error)
 		mrconnector.WithConnectTimeout(cfg.connTimeout),
 		mrconnector.WithRPCTimeout(cfg.callTimeout),
 		mrconnector.WithSeed(cfg.metadataRepositoryAddresses),
+		mrconnector.WithDefaultGRPCDialOptions(cfg.defaultGRPCDialOptions...),
 		mrconnector.WithLogger(cfg.logger),
 	}
 	tryCnt := cfg.initialMRConnRetryCount + 1

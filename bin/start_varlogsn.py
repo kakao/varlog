@@ -10,9 +10,8 @@ import socket
 import subprocess
 import sys
 import time
-from typing import Tuple
-from typing import List
 from pathlib import Path
+from typing import List, Tuple
 
 cwd = os.path.dirname(os.path.realpath(__file__))  # noqa
 binpath = os.path.join(cwd, "..", "bin")  # noqa
@@ -20,10 +19,11 @@ pylib = os.path.join(cwd, "..", "pylib")  # noqa
 if os.path.isdir(pylib):  # noqa
     sys.path.insert(0, pylib)  # noqa
 
-from varlog import limits  # noqa
-from varlog import procutil  # noqa
 from varlog.killer import Killer  # noqa
 from varlog.logger import get_logger  # noqa
+
+from varlog import limits  # noqa
+from varlog import procutil  # noqa
 
 APP_NAME = "varlogsn"
 DEFAULT_CLUSTER_ID = 1
@@ -175,26 +175,6 @@ def start(args: argparse.Namespace) -> None:
             if args.append_pipeline_size:
                 cmd.append(f"--append-pipeline-size={args.append_pipeline_size}")
 
-            # grpc options
-            if args.server_read_buffer_size:
-                cmd.append(
-                    f"--server-read-buffer-size={args.server_read_buffer_size}")
-            if args.server_write_buffer_size:
-                cmd.append(
-                    f"--server-write-buffer-size={args.server_write_buffer_size}")
-            if args.server_initial_conn_window_size:
-                cmd.append(
-                        f"--server-initial-conn-window-size={args.server_initial_conn_window_size}")
-            if args.server_initial_stream_window_size:
-                cmd.append(
-                        f"--server-initial-stream-window-size={args.server_initial_stream_window_size}")
-            if args.replication_client_read_buffer_size:
-                cmd.append(
-                    f"--replication-client-read-buffer-size={args.replication_client_read_buffer_size}")
-            if args.replication_client_write_buffer_size:
-                cmd.append(
-                    f"--replication-client-write-buffer-size={args.replication_client_write_buffer_size}")
-
             # storage options
             if args.experimental_storage_separate_db:
                 cmd.append("--experimental-storage-separate-db")
@@ -272,14 +252,6 @@ def main() -> None:
                         type=str)
     parser.add_argument("--ballast-size", type=str)
     parser.add_argument("--append-pipeline-size", type=int)
-
-    # grpc options
-    parser.add_argument("--server-read-buffer-size", type=str)
-    parser.add_argument("--server-write-buffer-size", type=str)
-    parser.add_argument("--server-initial-conn-window-size", type=str)
-    parser.add_argument("--server-initial-stream-window-size", type=str)
-    parser.add_argument("--replication-client-read-buffer-size", type=str)
-    parser.add_argument("--replication-client-write-buffer-size", type=str)
 
     # storage options
     parser.add_argument("--experimental-storage-separate-db", action="store_true")

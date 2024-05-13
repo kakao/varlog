@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"os/signal"
 	"syscall"
@@ -67,29 +66,13 @@ func start(c *cli.Context) error {
 		return err
 	}
 
-	readBufferSize, err := units.FromByteSizeString(c.String(flagServerReadBufferSize.Name))
+	grpcServerOpts, err := flags.ParseGRPCServerOptionFlags(c)
 	if err != nil {
-		return fmt.Errorf("serverReadBufferSize: %w", err)
+		return err
 	}
-
-	writeBufferSize, err := units.FromByteSizeString(c.String(flagServerWriteBufferSize.Name))
+	grpcDialOpts, err := flags.ParseGRPCDialOptionFlags(c)
 	if err != nil {
-		return fmt.Errorf("serverWriteBufferSize: %w", err)
-	}
-
-	maxRecvMsgSize, err := units.FromByteSizeString(c.String(flagServerMaxRecvMsgSize.Name))
-	if err != nil {
-		return fmt.Errorf("serverMaxRecvMsgSize: %w", err)
-	}
-
-	replicateClientReadBufferSize, err := units.FromByteSizeString(c.String(flagReplicationClientReadBufferSize.Name))
-	if err != nil {
-		return fmt.Errorf("replicationClientReadBufferSize: %w", err)
-	}
-
-	replicateClientWriteBufferSize, err := units.FromByteSizeString(c.String(flagReplicationClientWriteBufferSize.Name))
-	if err != nil {
-		return fmt.Errorf("flagReplicationClientWriteBufferSize: %w", err)
+		return err
 	}
 
 	logger = logger.Named("sn").With(zap.Int32("cid", int32(clusterID)), zap.Int32("snid", int32(storageNodeID)))
@@ -128,11 +111,6 @@ func start(c *cli.Context) error {
 		storagenode.WithAdvertiseAddress(c.String(flagAdvertise.Name)),
 		storagenode.WithBallastSize(ballastSize),
 		storagenode.WithVolumes(c.StringSlice(flagVolumes.Name)...),
-		storagenode.WithGRPCServerReadBufferSize(readBufferSize),
-		storagenode.WithGRPCServerWriteBufferSize(writeBufferSize),
-		storagenode.WithGRPCServerMaxRecvMsgSize(maxRecvMsgSize),
-		storagenode.WithReplicateClientReadBufferSize(replicateClientReadBufferSize),
-		storagenode.WithReplicateClientWriteBufferSize(replicateClientWriteBufferSize),
 		storagenode.WithDefaultLogStreamExecutorOptions(
 			logstream.WithSequenceQueueCapacity(c.Int(flagLogStreamExecutorSequenceQueueCapacity.Name)),
 			logstream.WithWriteQueueCapacity(c.Int(flagLogStreamExecutorWriteQueueCapacity.Name)),
@@ -142,21 +120,9 @@ func start(c *cli.Context) error {
 		storagenode.WithMaxLogStreamReplicasCount(int32(c.Int(flagMaxLogStreamReplicasCount.Name))),
 		storagenode.WithAppendPipelineSize(int32(c.Int(flagAppendPipelineSize.Name))),
 		storagenode.WithDefaultStorageOptions(storageOpts...),
+		storagenode.WithDefaultGRPCServerOptions(grpcServerOpts...),
+		storagenode.WithDefaultGRPCDialOptions(grpcDialOpts...),
 		storagenode.WithLogger(logger),
-	}
-	if initialConnWindowSize := c.String(flagServerInitialConnWindowSize.Name); initialConnWindowSize != "" {
-		size, err := units.FromByteSizeString(initialConnWindowSize, 0, math.MaxInt32)
-		if err != nil {
-			return err
-		}
-		snOpts = append(snOpts, storagenode.WithGRPCServerInitialConnWindowSize(int32(size)))
-	}
-	if initialStreamWindowSize := c.String(flagServerInitialStreamWindowSize.Name); initialStreamWindowSize != "" {
-		size, err := units.FromByteSizeString(initialStreamWindowSize, 0, math.MaxInt32)
-		if err != nil {
-			return err
-		}
-		snOpts = append(snOpts, storagenode.WithGRPCServerInitialWindowSize(int32(size)))
 	}
 
 	sn, err := storagenode.NewStorageNode(snOpts...)

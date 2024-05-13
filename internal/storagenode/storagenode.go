@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -101,20 +102,11 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 	}
 	dataDirs = filterValidDataDirectories(dataDirs, cfg.cid, cfg.snid, cfg.logger)
 
-	grpcServerOpts := []grpc.ServerOption{
-		grpc.ReadBufferSize(int(cfg.grpcServerReadBufferSize)),
-		grpc.WriteBufferSize(int(cfg.grpcServerWriteBufferSize)),
-		grpc.MaxRecvMsgSize(int(cfg.grpcServerMaxRecvMsgSize)),
+	grpcServerOpts := slices.Concat([]grpc.ServerOption{
 		grpc.ChainUnaryInterceptor(
 			logging.UnaryServerInterceptor(cfg.logger),
 		),
-	}
-	if opt := cfg.grpcServerInitialConnWindowSize; opt.set {
-		grpcServerOpts = append(grpcServerOpts, grpc.InitialConnWindowSize(opt.value))
-	}
-	if opt := cfg.grpcServerInitialWindowSize; opt.set {
-		grpcServerOpts = append(grpcServerOpts, grpc.InitialWindowSize(opt.value))
-	}
+	}, cfg.defaultGRPCServerOptions)
 
 	sn := &StorageNode{
 		config:       cfg,
@@ -192,13 +184,6 @@ func (sn *StorageNode) Serve() error {
 	sn.logger.Info("serving",
 		zap.String("listen", sn.listen),
 		zap.Int64("ballast", sn.ballastSize),
-		zap.Int64("grpcServerReadBufferSize", sn.grpcServerReadBufferSize),
-		zap.Int64("grpcServerWriteBufferSize", sn.grpcServerWriteBufferSize),
-		zap.Int64("grpcServerMaxRecvMsgSize", sn.grpcServerMaxRecvMsgSize),
-		zap.Int32("grpcServerInitialConnWindowSize", sn.grpcServerInitialConnWindowSize.value),
-		zap.Int32("grpcServerInitialStreamWindowSize", sn.grpcServerInitialWindowSize.value),
-		zap.Int64("grpcReplicateClientReadBufferSize", sn.replicateClientReadBufferSize),
-		zap.Int64("grpcReplicateClientWriteBufferSize", sn.replicateClientWriteBufferSize),
 	)
 	sn.mu.Unlock()
 
@@ -346,8 +331,7 @@ func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID
 		logstream.WithLogger(sn.logger),
 		logstream.WithStorage(stg),
 		logstream.WithReplicateClientGRPCOptions(
-			grpc.WithReadBufferSize(int(sn.replicateClientReadBufferSize)),
-			grpc.WithWriteBufferSize(int(sn.replicateClientWriteBufferSize)),
+			sn.defaultGRPCDialOptions...,
 		),
 		logstream.WithLogStreamMetrics(lsm),
 	)

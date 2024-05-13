@@ -254,7 +254,7 @@ func (c *connectorImpl) connect(ctx context.Context) (*mrProxy, error) {
 func (c *connectorImpl) connectToMR(ctx context.Context, addr string) (cl mrc.MetadataRepositoryClient, mcl mrc.MetadataRepositoryManagementClient, err error) {
 	connCtx, cancel := context.WithTimeout(ctx, c.connTimeout)
 	defer cancel()
-	conn, err := rpc.NewConn(connCtx, addr)
+	conn, err := rpc.NewConn(connCtx, addr, c.defaultGRPCDialOptions...)
 	if err != nil {
 		return nil, nil, err
 	}

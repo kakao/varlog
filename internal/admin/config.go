@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/internal/admin/mrmanager"
 	"github.com/kakao/varlog/internal/admin/snmanager"
@@ -34,6 +35,7 @@ type config struct {
 	snSelector               ReplicaSelector
 	statRepository           stats.Repository
 	snwatcherOpts            []snwatcher.Option
+	defaultGRPCServerOptions []grpc.ServerOption
 	logger                   *zap.Logger
 }
 
@@ -184,5 +186,11 @@ func WithStatisticsRepository(statsRepos stats.Repository) Option {
 func WithStorageNodeWatcherOptions(opts ...snwatcher.Option) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.snwatcherOpts = opts
+	})
+}
+
+func WithDefaultGRPCServerOptions(grpcServerOptions ...grpc.ServerOption) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.defaultGRPCServerOptions = grpcServerOptions
 	})
 }

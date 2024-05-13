@@ -1,0 +1,121 @@
+$ varlogsn --help
+NAME:
+   varlogsn - storage node
+
+USAGE:
+   varlogsn [global options] command [command options] 
+
+VERSION:
+   devel
+
+COMMANDS:
+   start, s  
+   help, h   Shows a list of commands or help for one command
+
+GLOBAL OPTIONS:
+   --help, -h     show help
+   --version, -v  print the version
+
+$ varlogsn start --> FAIL
+NAME:
+   varlogsn start
+
+USAGE:
+   varlogsn start [command options]
+
+OPTIONS:
+   --advertise value, --advertise-address value                                                              [$ADVERTISE, $ADVERTISE_ADDRESS]
+   --append-pipeline-size value                                                                             Append pipleline size (default: 8)
+   --ballast-size value                                                                                     B, KiB, MiB, GiB (default: "0B") [$BALLAST_SIZE]
+   --listen value, --listen-address value                                                                   (default: "127.0.0.1:9091") [$LISTEN, $LISTEN_ADDRESS]
+   --logstream-executor-commit-queue-capacity value, --lse-commit-queue-capacity value                      (default: 1024)
+   --logstream-executor-replicate-client-queue-capacity value, --lse-replicate-client-queue-capacity value  (default: 1024)
+   --logstream-executor-sequence-queue-capacity value, --lse-sequence-queue-capacity value                  (default: 1024)
+   --logstream-executor-write-queue-capacity value, --lse-write-queue-capacity value                        (default: 1024)
+   --max-logstream-replicas-count value                                                                     The maximum number of log stream replicas in a storage node, infinity if a negative value (default: -1)
+   --storage-node-id value, --storage-node value, --storagenode value, --snid value                         (default: "1")
+   --volumes value, --volume value [ --volumes value, --volume value ]                                       [$VOLUMES, $VOLUME]
+
+   Cluster:
+
+   --cluster-id value, --cluster value, --cid value  (default: 1) [$CLUSTER_ID]
+
+   Logger:
+
+   --log-human-readable                 Human-readable output. (default: false) [$LOG_HUMAN_READABLE]
+   --logdir value, --log-dir value      Directory for the log files. [$LOGDIR, $LOG_DIR]
+   --logfile-compression                Compress backup log files. (default: false) [$LOGFILE_COMPRESSION]
+   --logfile-max-backups value          Maximum number of backup log files. Retain all backup files if zero. (default: 100) [$LOGFILE_MAX_BACKUPS]
+   --logfile-max-size-mb value          Maximum file size for each log file. (default: 100) [$LOGFILE_MAX_SIZE_MB]
+   --logfile-name-utc                   Whether backup log files are named with timestamps in UTC or local time if not set. Log files are named 'example-1970-01-01T00-00-00.000.log' when the file is rotated. (default: false) [$LOGFILE_NAME_UTC]
+   --logfile-retention-days value       Age of backup log files. Unlimited age if zero, that is, retain all. (default: 14) [$LOGFILE_RETENTION_DAYS]
+   --loglevel value, --log-level value  Log levels, either debug, info, warn, or error case-insensitively. (default: "INFO") [$LOGLEVEL, $LOG_LEVEL]
+   --logtostderr, --log-to-stderr       Print the logs to the stderr. (default: false) [$LOGTOSTDERR]
+
+   Storage:
+
+   --experimental-storage-separate-db                                                                                                                                                                   Separate databases of storage experimentally. (default: false) [$EXPERIMENTAL_STORAGE_SEPARATE_DB]
+   --storage-cache-size value                                                                                                                                                                           Size of storage cache shared across all storages. (default: "128MiB") [$STORAGE_CACHE_SIZE]
+   --storage-disable-wal                                                                                                                                                                                (default: false) [$STORAGE_DISABLE_WAL]
+   --storage-flush-split-bytes value [ --storage-flush-split-bytes value ]                                                                                                                              FlushSplitBytes of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>. (default: "0B") [$STORAGE_FLUSH_SPLIT_BYTES]
+   --storage-l0-compaction-file-threshold value [ --storage-l0-compaction-file-threshold value ]                                                                                                        L0CompactionFileThreshold of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>. (default: 500) [$STORAGE_L0_COMPACTION_FILE_THRESHOLD]
+   --storage-l0-compaction-threshold value [ --storage-l0-compaction-threshold value ]                                                                                                                  L0CompactionThreshold of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>. (default: 4) [$STORAGE_L0_COMPACTION_THRESHOLD]
+   --storage-l0-stop-writes-threshold value [ --storage-l0-stop-writes-threshold value ]                                                                                                                L0StopWritesThreshold of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>. (default: 12) [$STORAGE_L0_STOP_WRITES_THRESHOLD]
+   --storage-l0-target-file-size value [ --storage-l0-target-file-size value ]                                                                                                                          L0TargetFileSize of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>. (default: "2MiB") [$STORAGE_L0_TARGET_FILE_SIZE]
+   --storage-lbase-max-bytes value [ --storage-lbase-max-bytes value ]                                                                                                                                  LBaseMaxBytes of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>. (default: "64MiB") [$STORAGE_LBASE_MAX_BYTES]
+   --storage-max-concurrent-compaction value [ --storage-max-concurrent-compaction value ]                                                                                                              MaxConcurrentCompaction of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>. (default: 1) [$STORAGE_MAX_CONCURRENT_COMPACTION]
+   --storage-max-open-files value [ --storage-max-open-files value ]                                                                                                                                    MaxOpenFiles of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>. (default: 1000) [$STORAGE_MAX_OPEN_FILES]
+   --storage-mem-table-size value, --storage-memtable-size value [ --storage-mem-table-size value, --storage-memtable-size value ]                                                                      MemTableSize of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>. (default: "4MiB") [$STORAGE_MEM_TABLE_SIZE, $STORAGE_MEMTABLE_SIZE]
+   --storage-mem-table-stop-writes-threshold value, --storage-memtable-stop-writes-threshold value [ --storage-mem-table-stop-writes-threshold value, --storage-memtable-stop-writes-threshold value ]  MemTableStopWritesThreshold of storage database. Comma-separated values are allowed if the "--experimental-storage-separate-db" is used, for example, <value for data DB>,<value for commit DB>. (default: 2) [$STORAGE_MEM_TABLE_STOP_WRITES_THRESHOLD, $STORAGE_MEMTABLE_STOP_WRITES_THRESHOLD]
+   --storage-metrics-log-interval value                                                                                                                                                                 (default: 0s) [$STORAGE_METRICS_LOG_INTERVAL]
+   --storage-no-sync                                                                                                                                                                                    (default: false) [$STORAGE_NO_SYNC]
+   --storage-trim-delay value                                                                                                                                                                           Delay before deletion of log entries caused by Trim operation. If zero, lazy deletion waits for other log entries to be appended. (default: 0s) [$STORAGE_TRIM_DELAY]
+   --storage-trim-rate value                                                                                                                                                                            Trim deletion throttling rate in bytes per second. If zero, no throttling is applied. [$STORAGE_TRIM_RATE]
+   --storage-verbose                                                                                                                                                                                    (default: false) [$STORAGE_VERBOSE]
+
+   Telemetry:
+
+   --telemetry-exporter value, --exporter-type value                      Exporter type: noop, stdout or otlp. (default: "noop") [$TELEMETRY_EXPORTER, $EXPORTER_TYPE]
+   --telemetry-exporter-stop-timeout value, --expoter-stop-timeout value  Timeout for stopping OTLP exporter. (default: 3s) [$TELEMETRY_EXPORTER_STOP_TIMEOUT, $EXPORTER_STOP_TIMEOUT]
+   --telemetry-host                                                       Export host metrics. (default: false) [$TELEMETRY_HOST]
+   --telemetry-otlp-endpoint value, --exporter-otlp-endpoint value        Endpoint for OTLP exporter. (default: "localhost:4317") [$TELEMETRY_OTLP_ENDPOINT, $EXPORTER_OTLP_ENDPOINT]
+   --telemetry-otlp-insecure, --exporter-otlp-insecure                    Disable gRPC client transport security for OTLP exporter. (default: false) [$TELEMETRY_OTLP_INSECURE, $EXPORTER_OTLP_INSECURE]
+   --telemetry-runtime                                                    Export runtime metrics. (default: false) [$TELEMETRY_RUNTIME]
+
+   gRPC:
+
+   --grpc-client-initial-conn-window-size value  Set the gRPC client's initial window size for a connection. If not set, the default value of 64KiB defined by gRPC will be used. [$GRPC_CLIENT_INITIAL_CONN_WINDOW_SIZE]
+   --grpc-client-initial-window-size value       Set the gRPC client's initial window size for a stream. If not set, the default value of 64KiB defined by gRPC will be used. [$GRPC_CLIENT_INITIAL_WINDOW_SIZE]
+   --grpc-client-read-buffer-size value          Set the gRPC client's read buffer size for a single read syscall. If not set, the default value of 32KiB defined by gRPC will be used. [$GRPC_CLIENT_READ_BUFFER_SIZE]
+   --grpc-client-write-buffer-size value         Set the gRPC client's write buffer size for a single write syscall. If not set, the default value of 32KiB defined by gRPC will be used. [$GRPC_CLIENT_WRITE_BUFFER_SIZE]
+   --grpc-server-initial-conn-window-size value  Set the gRPC server's initial window size for a connection. If not set, the default value of 64KiB defined by gRPC will be used. [$GRPC_SERVER_INITIAL_CONN_WINDOW_SIZE]
+   --grpc-server-initial-window-size value       Set the gRPC server's initial window size for a stream. If not set, the default value of 64KiB defined by gRPC will be used. [$GRPC_SERVER_INITIAL_WINDOW_SIZE]
+   --grpc-server-max-recv-msg-size value         Set the maximum message size in bytes that the gRPC server can receive. If not set, the default value of 4MiB defined by gRPC will be used. [$GRPC_SERVER_MAX_RECV_MSG_SIZE]
+   --grpc-server-read-buffer-size value          Set the gRPC server's read buffer size for a single read syscall. If not set, the default value of 32KiB defined by gRPC will be used. [$GRPC_SERVER_READ_BUFFER_SIZE]
+   --grpc-server-write-buffer-size value         Set the gRPC server's write buffer size for a single write syscall. If not set, the default value of 32KiB defined by gRPC will be used. [$GRPC_SERVER_WRITE_BUFFER_SIZE]
+
+varlogsn: Required flag "volumes" not set
+
+$ varlogsn start --volumes=${ROOTDIR} --logtostderr --grpc-client-read-buffer-size -10MB --> FAIL
+varlogsn: invalid value "-10MB" for flag --grpc-client-read-buffer-size
+
+$ varlogsn start --volumes=${ROOTDIR} --logtostderr --grpc-client-write-buffer-size -10MB --> FAIL
+varlogsn: invalid value "-10MB" for flag --grpc-client-read-buffer-size
+
+$ varlogsn start --volumes=${ROOTDIR} --logtostderr --grpc-client-initial-conn-window-size 8GB --> FAIL
+varlogsn: invalid value "8GB" for flag --grpc-client-initial-conn-window-size
+
+$ varlogsn start --volumes=${ROOTDIR} --logtostderr --grpc-client-initial-window-size 8GB --> FAIL
+varlogsn: invalid value "8GB" for flag --grpc-client-initial-window-size
+
+$ varlogsn start --volumes=${ROOTDIR} --logtostderr --grpc-server-initial-conn-window-size 8GB --> FAIL
+varlogsn: invalid value "8GB" for flag --grpc-server-initial-conn-window-size
+
+$ varlogsn start --volumes=${ROOTDIR} --logtostderr --grpc-server-initial-window-size 8GB --> FAIL
+varlogsn: invalid value "8GB" for flag --grpc-server-initial-window-size
+
+$ varlogsn start --volumes=${ROOTDIR} --logtostderr --grpc-server-read-buffer-size -10MB --> FAIL
+varlogsn: invalid value "-10MB" for flag --grpc-server-read-buffer-size
+
+$ varlogsn start --volumes=${ROOTDIR} --logtostderr --grpc-server-write-buffer-size -10MB --> FAIL
+varlogsn: invalid value "-10MB" for flag --grpc-server-write-buffer-size

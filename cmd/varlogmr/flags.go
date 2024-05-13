@@ -106,16 +106,6 @@ var (
 		Envs:    []string{"PEERS"},
 	}
 
-	flagReportCommitterReadBufferSize = flags.FlagDesc{
-		Name: "reportcommitter-read-buffer-size",
-		Envs: []string{"REPORTCOMMITTER_READ_BUFFER_SIZE"},
-	}
-
-	flagReportCommitterWriteBufferSize = flags.FlagDesc{
-		Name: "reportcommitter-write-buffer-size",
-		Envs: []string{"REPORTCOMMITTER_WRITE_BUFFER_SIZE"},
-	}
-
 	flagMaxTopicsCount = &cli.IntFlag{
 		Name:  "max-topics-count",
 		Usage: "Maximum number of topics, infinity if it is negative",

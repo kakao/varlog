@@ -6,8 +6,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/kakao/varlog/proto/admpb"
-
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -17,6 +15,7 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/admpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
@@ -76,7 +75,7 @@ func New(ctx context.Context, opts ...Option) (StorageNodeManager, error) {
 		return nil, err
 	}
 
-	clients, err := client.NewManager[*client.ManagementClient]()
+	clients, err := client.NewManager[*client.ManagementClient](client.WithDefaultGRPCDialOptions(cfg.defaultGRPCDialOptions...))
 	if err != nil {
 		return nil, err
 	}

@@ -44,9 +44,7 @@ const (
 	UnusedRequestIndex uint64 = 0
 )
 
-var (
-	DefaultRaftAddress = makeDefaultRaftAddress()
-)
+var DefaultRaftAddress = makeDefaultRaftAddress()
 
 func makeDefaultRaftAddress() string {
 	ips, _ := netutil.AdvertisableIPs()
@@ -70,23 +68,23 @@ type raftConfig struct {
 
 type config struct {
 	raftConfig
-	clusterID                      types.ClusterID
-	rpcAddr                        string
-	raftAddr                       string
-	debugAddr                      string
-	replicationFactor              int
-	raftProposeTimeout             time.Duration
-	rpcTimeout                     time.Duration
-	commitTick                     time.Duration
-	promoteTick                    time.Duration
-	reporterClientFac              ReporterClientFactory
-	reportCommitterReadBufferSize  int
-	reportCommitterWriteBufferSize int
-	maxTopicsCount                 int32
-	maxLogStreamsCountPerTopic     int32
-	telemetryCollectorName         string
-	telemetryCollectorEndpoint     string
-	logger                         *zap.Logger
+	clusterID                  types.ClusterID
+	rpcAddr                    string
+	raftAddr                   string
+	debugAddr                  string
+	replicationFactor          int
+	raftProposeTimeout         time.Duration
+	rpcTimeout                 time.Duration
+	commitTick                 time.Duration
+	promoteTick                time.Duration
+	reporterClientFac          ReporterClientFactory
+	defaultGRPCServerOptions   []grpc.ServerOption
+	defaultGRPCDialOptions     []grpc.DialOption
+	maxTopicsCount             int32
+	maxLogStreamsCountPerTopic int32
+	telemetryCollectorName     string
+	telemetryCollectorEndpoint string
+	logger                     *zap.Logger
 }
 
 func newConfig(opts []Option) (config, error) {
@@ -99,22 +97,20 @@ func newConfig(opts []Option) (config, error) {
 			raftTick:          DefaultRaftTick,
 			raftDir:           DefaultRaftDir,
 		},
-		clusterID:                      defaultClusterID,
-		rpcAddr:                        DefaultRPCBindAddress,
-		raftAddr:                       DefaultRaftAddress,
-		debugAddr:                      DefaultDebugAddress,
-		replicationFactor:              DefaultLogReplicationFactor,
-		raftProposeTimeout:             DefaultProposeTimeout,
-		rpcTimeout:                     DefaultRPCTimeout,
-		commitTick:                     DefaultCommitTick,
-		promoteTick:                    DefaultPromoteTick,
-		reportCommitterReadBufferSize:  DefaultReportCommitterReadBufferSize,
-		reportCommitterWriteBufferSize: DefaultReportCommitterWriteBufferSize,
-		maxTopicsCount:                 DefaultMaxTopicsCount,
-		maxLogStreamsCountPerTopic:     DefaultMaxLogStreamsCountPerTopic,
-		telemetryCollectorName:         DefaultTelemetryCollectorName,
-		telemetryCollectorEndpoint:     DefaultTelmetryCollectorEndpoint,
-		logger:                         zap.NewNop(),
+		clusterID:                  defaultClusterID,
+		rpcAddr:                    DefaultRPCBindAddress,
+		raftAddr:                   DefaultRaftAddress,
+		debugAddr:                  DefaultDebugAddress,
+		replicationFactor:          DefaultLogReplicationFactor,
+		raftProposeTimeout:         DefaultProposeTimeout,
+		rpcTimeout:                 DefaultRPCTimeout,
+		commitTick:                 DefaultCommitTick,
+		promoteTick:                DefaultPromoteTick,
+		maxTopicsCount:             DefaultMaxTopicsCount,
+		maxLogStreamsCountPerTopic: DefaultMaxLogStreamsCountPerTopic,
+		telemetryCollectorName:     DefaultTelemetryCollectorName,
+		telemetryCollectorEndpoint: DefaultTelmetryCollectorEndpoint,
+		logger:                     zap.NewNop(),
 	}
 	for _, opt := range opts {
 		opt.apply(&cfg)
@@ -139,8 +135,7 @@ func (cfg *config) ensureDefault() {
 
 	if cfg.reporterClientFac == nil {
 		cfg.reporterClientFac = NewReporterClientFactory(
-			grpc.WithReadBufferSize(cfg.reportCommitterReadBufferSize),
-			grpc.WithWriteBufferSize(cfg.reportCommitterWriteBufferSize),
+			cfg.defaultGRPCDialOptions...,
 		)
 	}
 
@@ -332,15 +327,15 @@ func WithReporterClientFactory(reporterClientFac ReporterClientFactory) Option {
 	})
 }
 
-func WithReportCommitterReadBufferSize(readBufferSize int) Option {
+func WithDefaultGRPCServerOptions(serverOptions ...grpc.ServerOption) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.reportCommitterReadBufferSize = readBufferSize
+		cfg.defaultGRPCServerOptions = serverOptions
 	})
 }
 
-func WithReportCommitterWriteBufferSize(writeBufferSize int) Option {
+func WithDefaultGRPCDialOptions(dialOptions ...grpc.DialOption) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.reportCommitterWriteBufferSize = writeBufferSize
+		cfg.defaultGRPCDialOptions = dialOptions
 	})
 }
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/pkg/types"
@@ -21,14 +22,15 @@ const (
 )
 
 type config struct {
-	clusterID         types.ClusterID
-	connTimeout       time.Duration
-	rpcTimeout        time.Duration
-	initCount         int
-	initRetryInterval time.Duration
-	updateInterval    time.Duration
-	seed              []string
-	logger            *zap.Logger
+	clusterID              types.ClusterID
+	connTimeout            time.Duration
+	rpcTimeout             time.Duration
+	initCount              int
+	initRetryInterval      time.Duration
+	updateInterval         time.Duration
+	seed                   []string
+	logger                 *zap.Logger
+	defaultGRPCDialOptions []grpc.DialOption
 }
 
 func newConfig(opts []Option) (config, error) {
@@ -119,5 +121,11 @@ func WithSeed(seed []string) Option {
 func WithLogger(logger *zap.Logger) Option {
 	return func(opts *config) {
 		opts.logger = logger
+	}
+}
+
+func WithDefaultGRPCDialOptions(grpcDialOpts ...grpc.DialOption) Option {
+	return func(opts *config) {
+		opts.defaultGRPCDialOptions = grpcDialOpts
 	}
 }

@@ -1,0 +1,33 @@
+$ varlogmr --help
+NAME:
+   metadata_repository - run metadata repository
+
+USAGE:
+   metadata_repository [global options] command [command options] 
+
+VERSION:
+   devel
+
+COMMANDS:
+   start, s  start [flags]
+   help, h   Shows a list of commands or help for one command
+
+GLOBAL OPTIONS:
+   --help, -h     show help
+   --version, -v  print the version
+
+$ varlogmr start --logtostderr --grpc-client-read-buffer-size -10MB --> FAIL
+
+$ varlogmr start --logtostderr --grpc-client-write-buffer-size -10MB --> FAIL
+
+$ varlogmr start --logtostderr --grpc-client-initial-conn-window-size 8GB --> FAIL
+
+$ varlogmr start --logtostderr --grpc-client-initial-window-size 8GB --> FAIL
+
+$ varlogmr start --logtostderr --grpc-server-initial-conn-window-size 8GB --> FAIL
+
+$ varlogmr start --logtostderr --grpc-server-initial-window-size 8GB --> FAIL
+
+$ varlogmr start --logtostderr --grpc-server-read-buffer-size -10MB --> FAIL
+
+$ varlogmr start --logtostderr --grpc-server-write-buffer-size -10MB --> FAIL
