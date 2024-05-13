@@ -57,6 +57,16 @@ func newStartCommand() *cli.Command {
 			flagSNWatcherHeartbeatCheckDeadline.DurationFlag(false, snwatcher.DefaultHeartbeatDeadline),
 			flagSNWatcherReportDeadline.DurationFlag(false, snwatcher.DefaultReportDeadline),
 
+			flags.GRPCServerReadBufferSize,
+			flags.GRPCServerWriteBufferSize,
+			flags.GRPCServerMaxRecvMsgSize,
+			flags.GRPCServerInitialConnWindowSize,
+			flags.GRPCServerInitialWindowSize,
+			flags.GRPCClientReadBufferSize,
+			flags.GRPCClientWriteBufferSize,
+			flags.GRPCClientInitialConnWindowSize,
+			flags.GRPCClientInitialWindowSize,
+
 			// logger options
 			flags.LogDir,
 			flags.LogToStderr,
@@ -116,6 +126,11 @@ func start(c *cli.Context) error {
 
 	repfactor := c.Int(flagReplicationFactor.Name)
 
+	grpcDialOpts, err := flags.ParseGRPCDialOptionFlags(c)
+	if err != nil {
+		return err
+	}
+
 	mrMgr, err := mrmanager.New(context.TODO(),
 		mrmanager.WithAddresses(c.StringSlice(flagMetadataRepository.Name)...),
 		mrmanager.WithInitialMRConnRetryCount(c.Int(flagInitMRConnRetryCount.Name)),
@@ -125,6 +140,7 @@ func start(c *cli.Context) error {
 		mrmanager.WithClusterID(clusterID),
 		mrmanager.WithReplicationFactor(repfactor),
 		mrmanager.WithLogger(logger),
+		mrmanager.WithDefaultGRPCDialOptions(grpcDialOpts...),
 	)
 	if err != nil {
 		return err
@@ -133,6 +149,7 @@ func start(c *cli.Context) error {
 	snMgr, err := snmanager.New(context.TODO(),
 		snmanager.WithClusterID(clusterID),
 		snmanager.WithClusterMetadataView(mrMgr.ClusterMetadataView()),
+		snmanager.WithDefaultGRPCDialOptions(grpcDialOpts...),
 		snmanager.WithLogger(logger),
 	)
 	if err != nil {
@@ -140,6 +157,11 @@ func start(c *cli.Context) error {
 	}
 
 	repsel, err := admin.NewReplicaSelector(c.String(flagReplicaSelector.Name), mrMgr.ClusterMetadataView(), repfactor)
+	if err != nil {
+		return err
+	}
+
+	grpcServerOpts, err := flags.ParseGRPCServerOptionFlags(c)
 	if err != nil {
 		return err
 	}
@@ -156,6 +178,7 @@ func start(c *cli.Context) error {
 			snwatcher.WithHeartbeatCheckDeadline(c.Duration(flagSNWatcherHeartbeatCheckDeadline.Name)),
 			snwatcher.WithReportDeadline(c.Duration(flagSNWatcherReportDeadline.Name)),
 		),
+		admin.WithDefaultGRPCServerOptions(grpcServerOpts...),
 	}
 	if c.Bool(flagDisableAutoLogStreamSync.Name) {
 		opts = append(opts, admin.WithoutAutoLogStreamSync())

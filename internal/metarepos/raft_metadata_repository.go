@@ -139,7 +139,7 @@ func NewRaftMetadataRepository(opts ...Option) *RaftMetadataRepository {
 
 	mr.reportCollector = NewReportCollector(mr, mr.rpcTimeout, mr.tmStub, mr.logger.Named("report"))
 
-	mr.server = rpc.NewServer()
+	mr.server = rpc.NewServer(mr.defaultGRPCServerOptions...)
 	mr.healthServer = health.NewServer()
 	grpc_health_v1.RegisterHealthServer(mr.server, mr.healthServer)
 	NewMetadataRepositoryService(mr).Register(mr.server)

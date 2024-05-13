@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"net"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -75,18 +76,17 @@ func New(ctx context.Context, opts ...Option) (*Admin, error) {
 		return nil, err
 	}
 
-	grpcServer := rpc.NewServer(
+	grpcServerOpts := slices.Concat([]grpc.ServerOption{
 		grpc.ChainUnaryInterceptor(
 			logging.UnaryServerInterceptor(cfg.logger),
 			otelgrpc.UnaryServerInterceptor(telemetry.GetGlobalMeterProvider()),
 		),
-	)
-
+	}, cfg.defaultGRPCServerOptions)
 	cm := &Admin{
 		config:       cfg,
 		lsidGen:      logStreamIDGen,
 		tpidGen:      topicIDGen,
-		server:       grpcServer,
+		server:       rpc.NewServer(grpcServerOpts...),
 		healthServer: health.NewServer(),
 	}
 	cm.snw, err = snwatcher.New(append(
@@ -554,7 +554,6 @@ func (adm *Admin) describeTopic(ctx context.Context, tpid types.TopicID) (td var
 
 	res := iface.(*result)
 	return res.td, res.lsds, nil
-
 }
 
 func (adm *Admin) describeTopicInternal(ctx context.Context, tpid types.TopicID) (td varlogpb.TopicDescriptor, lsds []varlogpb.LogStreamDescriptor, err error) {
@@ -1099,7 +1098,7 @@ func (adm *Admin) HandleHeartbeatTimeout(ctx context.Context, snid types.Storage
 		return
 	}
 
-	//TODO: store sn status
+	// TODO: store sn status
 	for _, ls := range meta.GetLogStreams() {
 		if ls.IsReplica(snid) {
 			adm.logger.Debug("seal due to heartbeat timeout", zap.Any("snid", snid), zap.Any("lsid", ls.LogStreamID))

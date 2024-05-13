@@ -17,7 +17,6 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/log"
 	"github.com/kakao/varlog/pkg/util/telemetry"
-	"github.com/kakao/varlog/pkg/util/units"
 )
 
 func main() {
@@ -46,12 +45,7 @@ func start(c *cli.Context) error {
 		return fmt.Errorf("cluster id: %w", err)
 	}
 
-	readBufferSize, err := units.FromByteSizeString(c.String(flagReportCommitterReadBufferSize.Name))
-	if err != nil {
-		return err
-	}
-
-	writeBufferSize, err := units.FromByteSizeString(c.String(flagReportCommitterWriteBufferSize.Name))
+	grpcDialOpts, err := flags.ParseGRPCDialOptionFlags(c)
 	if err != nil {
 		return err
 	}
@@ -83,8 +77,7 @@ func start(c *cli.Context) error {
 		metarepos.WithSnapshotCount(c.Uint64(flagSnapshotCount.Name)),
 		metarepos.WithMaxSnapPurgeCount(c.Uint(flagMaxSnapPurgeCount.Name)),
 		metarepos.WithMaxWALPurgeCount(c.Uint(flagMaxWALPurgeCount.Name)),
-		metarepos.WithReportCommitterReadBufferSize(int(readBufferSize)),
-		metarepos.WithReportCommitterWriteBufferSize(int(writeBufferSize)),
+		metarepos.WithDefaultGRPCDialOptions(grpcDialOpts...),
 		metarepos.WithPeers(c.StringSlice(flagPeers.Name)...),
 		metarepos.WithMaxTopicsCount(int32(c.Int(flagMaxTopicsCount.Name))),
 		metarepos.WithMaxLogStreamsCountPerTopic(int32(c.Int(flagMaxLogStreamsCountPerTopic.Name))),
@@ -143,8 +136,15 @@ func initCLI() *cli.App {
 				flagRaftTick.DurationFlag(false, metarepos.DefaultRaftTick),
 				flagRaftDir.StringFlag(false, metarepos.DefaultRaftDir),
 				flagPeers.StringSliceFlag(false, nil),
-				flagReportCommitterReadBufferSize.StringFlag(false, units.ToByteSizeString(metarepos.DefaultReportCommitterReadBufferSize)),
-				flagReportCommitterWriteBufferSize.StringFlag(false, units.ToByteSizeString(metarepos.DefaultReportCommitterWriteBufferSize)),
+				flags.GRPCServerReadBufferSize,
+				flags.GRPCServerWriteBufferSize,
+				flags.GRPCServerMaxRecvMsgSize,
+				flags.GRPCServerInitialConnWindowSize,
+				flags.GRPCServerInitialWindowSize,
+				flags.GRPCClientReadBufferSize,
+				flags.GRPCClientWriteBufferSize,
+				flags.GRPCClientInitialConnWindowSize,
+				flags.GRPCClientInitialWindowSize,
 				flagMaxTopicsCount,
 				flagMaxLogStreamsCountPerTopic,
 

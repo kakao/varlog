@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/pkg/types"
@@ -27,6 +28,7 @@ type config struct {
 	connTimeout                 time.Duration
 	callTimeout                 time.Duration
 	logger                      *zap.Logger
+	defaultGRPCDialOptions      []grpc.DialOption
 }
 
 func newConfig(opts []Option) (config, error) {
@@ -122,5 +124,11 @@ func WithMRManagerCallTimeout(callTimeout time.Duration) Option {
 func WithLogger(logger *zap.Logger) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.logger = logger
+	})
+}
+
+func WithDefaultGRPCDialOptions(grpcDialOpts ...grpc.DialOption) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.defaultGRPCDialOptions = grpcDialOpts
 	})
 }

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"go.uber.org/zap"
+	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/internal/storagenode/logstream"
@@ -15,13 +16,8 @@ import (
 )
 
 const (
-	DefaultBallastSize                    = "0B"
-	DefaultServerReadBufferSize           = 32 << 10
-	DefaultServerWriteBufferSize          = 32 << 10
-	DefaultServerMaxRecvSize              = 4 << 20
-	DefaultReplicateClientReadBufferSize  = 32 << 10
-	DefaultReplicateClientWriteBufferSize = 32 << 10
-	DefaultMaxLogStreamReplicasCount      = -1
+	DefaultBallastSize               = "0B"
+	DefaultMaxLogStreamReplicasCount = -1
 
 	DefaultAppendPipelineSize = 8
 	MinAppendPipelineSize     = 1
@@ -34,19 +30,8 @@ type config struct {
 	listen                          string
 	advertise                       string
 	ballastSize                     int64
-	grpcServerReadBufferSize        int64
-	grpcServerWriteBufferSize       int64
-	grpcServerMaxRecvMsgSize        int64
-	grpcServerInitialConnWindowSize struct {
-		value int32
-		set   bool
-	}
-	grpcServerInitialWindowSize struct {
-		value int32
-		set   bool
-	}
-	replicateClientReadBufferSize   int64
-	replicateClientWriteBufferSize  int64
+	defaultGRPCServerOptions        []grpc.ServerOption
+	defaultGRPCDialOptions          []grpc.DialOption
 	maxLogStreamReplicasCount       int32
 	appendPipelineSize              int32
 	volumes                         []string
@@ -58,14 +43,9 @@ type config struct {
 
 func newConfig(opts []Option) (config, error) {
 	cfg := config{
-		grpcServerReadBufferSize:       DefaultServerReadBufferSize,
-		grpcServerWriteBufferSize:      DefaultServerWriteBufferSize,
-		grpcServerMaxRecvMsgSize:       DefaultServerMaxRecvSize,
-		replicateClientReadBufferSize:  DefaultReplicateClientReadBufferSize,
-		replicateClientWriteBufferSize: DefaultReplicateClientWriteBufferSize,
-		maxLogStreamReplicasCount:      DefaultMaxLogStreamReplicasCount,
-		appendPipelineSize:             DefaultAppendPipelineSize,
-		logger:                         zap.NewNop(),
+		maxLogStreamReplicasCount: DefaultMaxLogStreamReplicasCount,
+		appendPipelineSize:        DefaultAppendPipelineSize,
+		logger:                    zap.NewNop(),
 	}
 	for _, opt := range opts {
 		opt.apply(&cfg)
@@ -167,47 +147,15 @@ func WithBallastSize(ballastSize int64) Option {
 	})
 }
 
-func WithGRPCServerReadBufferSize(grpcServerReadBufferSize int64) Option {
+func WithDefaultGRPCServerOptions(grpcServerOptions ...grpc.ServerOption) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.grpcServerReadBufferSize = grpcServerReadBufferSize
+		cfg.defaultGRPCServerOptions = grpcServerOptions
 	})
 }
 
-func WithGRPCServerWriteBufferSize(grpcServerWriteBufferSize int64) Option {
+func WithDefaultGRPCDialOptions(grpcDialOptions ...grpc.DialOption) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.grpcServerWriteBufferSize = grpcServerWriteBufferSize
-	})
-}
-
-func WithGRPCServerMaxRecvMsgSize(grpcServerMaxRecvMsgSize int64) Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.grpcServerMaxRecvMsgSize = grpcServerMaxRecvMsgSize
-	})
-}
-
-func WithGRPCServerInitialConnWindowSize(grpcServerInitialConnWindowSize int32) Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.grpcServerInitialConnWindowSize.value = grpcServerInitialConnWindowSize
-		cfg.grpcServerInitialConnWindowSize.set = true
-	})
-}
-
-func WithGRPCServerInitialWindowSize(grpcServerInitialWindowSize int32) Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.grpcServerInitialWindowSize.value = grpcServerInitialWindowSize
-		cfg.grpcServerInitialWindowSize.set = true
-	})
-}
-
-func WithReplicateClientReadBufferSize(replicateClientReadBufferSize int64) Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.replicateClientReadBufferSize = replicateClientReadBufferSize
-	})
-}
-
-func WithReplicateClientWriteBufferSize(replicateClientWriteBufferSize int64) Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.replicateClientWriteBufferSize = replicateClientWriteBufferSize
+		cfg.defaultGRPCDialOptions = grpcDialOptions
 	})
 }
 

@@ -10,7 +10,6 @@ import (
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/storagenode/logstream"
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/units"
 )
 
 const (
@@ -47,13 +46,15 @@ func newStartCommand() *cli.Command {
 			// volumes
 			flagVolumes.StringSliceFlag(true, nil),
 
-			flagServerReadBufferSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultServerReadBufferSize)),
-			flagServerWriteBufferSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultServerWriteBufferSize)),
-			flagServerMaxRecvMsgSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultServerMaxRecvSize)),
-			flagReplicationClientReadBufferSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultReplicateClientReadBufferSize)),
-			flagReplicationClientWriteBufferSize.StringFlag(false, units.ToByteSizeString(storagenode.DefaultReplicateClientWriteBufferSize)),
-			flagServerInitialConnWindowSize,
-			flagServerInitialStreamWindowSize,
+			flags.GRPCServerReadBufferSize,
+			flags.GRPCServerWriteBufferSize,
+			flags.GRPCServerMaxRecvMsgSize,
+			flags.GRPCServerInitialConnWindowSize,
+			flags.GRPCServerInitialWindowSize,
+			flags.GRPCClientReadBufferSize,
+			flags.GRPCClientWriteBufferSize,
+			flags.GRPCClientInitialConnWindowSize,
+			flags.GRPCClientInitialWindowSize,
 
 			// lse options
 			flagLogStreamExecutorSequenceQueueCapacity.IntFlag(false, logstream.DefaultSequenceQueueCapacity),

@@ -18,10 +18,11 @@ pylib = os.path.join(cwd, "..", "pylib")  # noqa
 if os.path.isdir(pylib):  # noqa
     sys.path.insert(0, pylib)  # noqa
 
-from varlog import limits  # noqa
-from varlog import procutil  # noqa
 from varlog.killer import Killer  # noqa
 from varlog.logger import get_logger  # noqa
+
+from varlog import limits  # noqa
+from varlog import procutil  # noqa
 
 APP_NAME = "varlogmr"
 DEFAULT_CLUSTER_ID = 1
@@ -146,8 +147,6 @@ def start(
     seed: str,
     admin: str,
     replication_factor: int,
-    reportcommitter_read_buffer_size: str,
-    reportcommitter_write_buffer_size: str,
     add_after_seconds: int,
     retry_interval_seconds: int,
     raft_dir: str,
@@ -163,8 +162,6 @@ def start(
           metadata repositories can be used.
         admin: An address to connect to admin server.
         replication_factor: Replication factor.
-        reportcommitter_write_buffer_size:
-        reportcommitter_read_buffer_size:
         add_after_seconds: Add this node to the metadata repository cluster
           after this number of seconds.
         retry_interval_seconds: Retry interval seconds.
@@ -211,14 +208,6 @@ def start(
         if log_dir:
             cmd.append(f"--log-dir={log_dir}")
 
-        if reportcommitter_read_buffer_size:
-            cmd.append(
-                f"--reportcommitter-read-buffer-size={reportcommitter_read_buffer_size}")
-
-        if reportcommitter_write_buffer_size:
-            cmd.append(
-                f"--reportcommitter-write-buffer-size={reportcommitter_write_buffer_size}")
-
         if len(peers) > 0 or restart:
             cmd.append("--join=true")
 
@@ -251,8 +240,6 @@ def main() -> None:
     parser.add_argument("--seed", required=True)
     parser.add_argument("--admin", required=True)
     parser.add_argument("--replication-factor", required=True, type=int)
-    parser.add_argument("--reportcommitter-read-buffer-size", type=str)
-    parser.add_argument("--reportcommitter-write-buffer-size", type=str)
     parser.add_argument("--raft-dir")
     parser.add_argument("--log-dir")
     parser.add_argument("--add-after-seconds",
@@ -272,8 +259,6 @@ def main() -> None:
         args.seed,
         args.admin,
         args.replication_factor,
-        args.reportcommitter_read_buffer_size,
-        args.reportcommitter_write_buffer_size,
         args.add_after_seconds,
         args.retry_interval_seconds,
         args.raft_dir,
