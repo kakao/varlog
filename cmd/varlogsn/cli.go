@@ -47,12 +47,16 @@ func newStartCommand() *cli.Command {
 			flagVolumes.StringSliceFlag(true, nil),
 
 			flags.GRPCServerReadBufferSize,
+			flags.GRPCServerRecvBufferPool,
 			flags.GRPCServerWriteBufferSize,
+			flags.GRPCServerSharedWriteBuffer,
 			flags.GRPCServerMaxRecvMsgSize,
 			flags.GRPCServerInitialConnWindowSize,
 			flags.GRPCServerInitialWindowSize,
 			flags.GRPCClientReadBufferSize,
+			flags.GRPCClientRecvBufferPool,
 			flags.GRPCClientWriteBufferSize,
+			flags.GRPCClientSharedWriteBuffer,
 			flags.GRPCClientInitialConnWindowSize,
 			flags.GRPCClientInitialWindowSize,
 
