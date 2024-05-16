@@ -6,6 +6,7 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/experimental"
 
 	"github.com/kakao/varlog/pkg/util/units"
 )
@@ -32,6 +33,16 @@ var (
 			return nil
 		},
 	}
+	// GRPCServerRecvBufferPool is a flag to use the gRPC server's shared buffer pool for parsing incoming messages.
+	//
+	// See:
+	//   - https://pkg.go.dev/google.golang.org/grpc@v1.64.0/experimental#RecvBufferPool
+	GRPCServerRecvBufferPool = &cli.BoolFlag{
+		Name:     "grpc-server-recv-buffer-pool",
+		Category: CategoryGRPC,
+		EnvVars:  []string{"GRPC_SERVER_RECV_BUFFER_POOL"},
+		Usage:    "Use the gRPC server's shared buffer pool for parsing incoming messages. If not set, the buffer pool will not be used.",
+	}
 	// GRPCServerWriteBufferSize is a flag to set the gRPC server's write
 	// buffer size for a single write syscall.
 	//
@@ -48,6 +59,17 @@ var (
 			}
 			return nil
 		},
+	}
+	// GRPCServerSharedWriteBuffer is a flag to enable sharing gRPC server's transport write buffer across connections.
+	//
+	// See:
+	//   - https://pkg.go.dev/google.golang.org/grpc#WithSharedWriteBuffer
+	//   - https://github.com/grpc/grpc-go/pull/6309
+	GRPCServerSharedWriteBuffer = &cli.BoolFlag{
+		Name:     "grpc-server-shared-write-buffer",
+		Category: CategoryGRPC,
+		EnvVars:  []string{"GRPC_SERVER_SHARED_WRITE_BUFFER"},
+		Usage:    "Enable sharing gRPC server's transport write buffer across connections. If not set, each connection will allocate its own write buffer.",
 	}
 	// GRPCServerMaxRecvMsgSize is a flag to set the maximum message size the server can receive.
 	//
@@ -114,6 +136,16 @@ var (
 			return nil
 		},
 	}
+	// GRPCClientRecvBufferPool is a flag to use the gRPC client's shared buffer pool for parsing incoming messages.
+	//
+	// See:
+	//   - https://pkg.go.dev/google.golang.org/grpc/experimental#WithRecvBufferPool
+	GRPCClientRecvBufferPool = &cli.BoolFlag{
+		Name:     "grpc-client-recv-buffer-pool",
+		Category: CategoryGRPC,
+		EnvVars:  []string{"GRPC_CLIENT_RECV_BUFFER_POOL"},
+		Usage:    "Use the gRPC client's shared buffer pool for parsing incoming messages. If not set, the buffer pool will not be used.",
+	}
 	// GRPCClientWriteBufferSize is a flag to set the gRPC client's write
 	// buffer size for a single write syscall.
 	//
@@ -130,6 +162,17 @@ var (
 			}
 			return nil
 		},
+	}
+	// GRPCClientSharedWriteBuffer is a flag to enable sharing gRPC client's transport write buffer across connections.
+	//
+	// See:
+	//   - https://pkg.go.dev/google.golang.org/grpc#WithSharedWriteBuffer
+	//   - https://github.com/grpc/grpc-go/pull/6309
+	GRPCClientSharedWriteBuffer = &cli.BoolFlag{
+		Name:     "grpc-client-shared-write-buffer",
+		Category: CategoryGRPC,
+		EnvVars:  []string{"GRPC_CLIENT_SHARED_WRITE_BUFFER"},
+		Usage:    "Enable sharing gRPC client's transport write buffer across connections. If not set, each connection will allocate its own write buffer.",
 	}
 	// GRPCClientInitialConnWindowSize is a flag to set the gRPC client's initial window size for a connection.
 	//
@@ -173,6 +216,9 @@ func ParseGRPCServerOptionFlags(c *cli.Context) (opts []grpc.ServerOption, _ err
 		}
 		opts = append(opts, grpc.ReadBufferSize(int(readBufferSize)))
 	}
+	if c.IsSet(GRPCServerRecvBufferPool.Name) {
+		opts = append(opts, experimental.RecvBufferPool(grpc.NewSharedBufferPool()))
+	}
 	if c.IsSet(GRPCServerWriteBufferSize.Name) {
 		writeBufferSize, err := units.FromByteSizeString(c.String(GRPCServerWriteBufferSize.Name))
 		if err != nil {
@@ -180,6 +226,7 @@ func ParseGRPCServerOptionFlags(c *cli.Context) (opts []grpc.ServerOption, _ err
 		}
 		opts = append(opts, grpc.WriteBufferSize(int(writeBufferSize)))
 	}
+	opts = append(opts, grpc.SharedWriteBuffer(c.Bool(GRPCServerSharedWriteBuffer.Name)))
 	if c.IsSet(GRPCServerMaxRecvMsgSize.Name) {
 		maxRecvMsgSize, err := units.FromByteSizeString(c.String(GRPCServerMaxRecvMsgSize.Name))
 		if err != nil {
@@ -212,6 +259,9 @@ func ParseGRPCDialOptionFlags(c *cli.Context) (opts []grpc.DialOption, err error
 		}
 		opts = append(opts, grpc.WithReadBufferSize(int(readBufferSize)))
 	}
+	if c.IsSet(GRPCClientRecvBufferPool.Name) {
+		opts = append(opts, experimental.WithRecvBufferPool(grpc.NewSharedBufferPool()))
+	}
 	if c.IsSet(GRPCClientWriteBufferSize.Name) {
 		writeBufferSize, err := units.FromByteSizeString(c.String(GRPCClientWriteBufferSize.Name))
 		if err != nil {
@@ -219,6 +269,7 @@ func ParseGRPCDialOptionFlags(c *cli.Context) (opts []grpc.DialOption, err error
 		}
 		opts = append(opts, grpc.WithWriteBufferSize(int(writeBufferSize)))
 	}
+	opts = append(opts, grpc.WithSharedWriteBuffer(c.Bool(GRPCClientSharedWriteBuffer.Name)))
 	if c.IsSet(GRPCClientInitialConnWindowSize.Name) {
 		initialConnWindowSize, err := units.FromByteSizeString(c.String(GRPCClientInitialConnWindowSize.Name), 0, math.MaxInt32)
 		if err != nil {
