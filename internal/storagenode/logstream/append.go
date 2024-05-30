@@ -7,9 +7,12 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
 
 	"github.com/kakao/varlog/internal/batchlet"
 	snerrors "github.com/kakao/varlog/internal/storagenode/errors"
+	"github.com/kakao/varlog/internal/storagenode/telemetry"
+	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 )
@@ -27,6 +30,9 @@ type AppendTask struct {
 	start        time.Time
 	apc          appendContext
 	dataBatchLen int
+
+	LogStreamID  types.LogStreamID
+	RPCStartTime time.Time
 }
 
 func NewAppendTask() *AppendTask {
@@ -159,6 +165,9 @@ func (lse *Executor) AppendAsync(ctx context.Context, dataBatch [][]byte, append
 			lse.lsm.AppendBytes.Add(appendTask.apc.totalBytes)
 			lse.lsm.AppendOperations.Add(1)
 			lse.lsm.AppendPreparationMicro.Add(preparationDuration.Microseconds())
+
+			lse.lsm.LogRPCServerBatchSize.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, appendTask.apc.totalBytes)
+			lse.lsm.LogRPCServerLogEntriesPerBatch.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, int64(dataBatchLen))
 		}
 	}()
 
@@ -214,6 +223,10 @@ func (lse *Executor) Append(ctx context.Context, dataBatch [][]byte) ([]snpb.App
 		lse.lsm.AppendDuration.Add(time.Since(startTime).Microseconds())
 		lse.lsm.AppendOperations.Add(1)
 		lse.lsm.AppendPreparationMicro.Add(preparationDuration.Microseconds())
+
+		// TODO: Set a correct error code.
+		lse.lsm.LogRPCServerBatchSize.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, apc.totalBytes)
+		lse.lsm.LogRPCServerLogEntriesPerBatch.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, int64(dataBatchLen))
 	}()
 
 	lse.prepareAppendContext(dataBatch, &apc)
@@ -271,7 +284,12 @@ func (lse *Executor) prepareAppendContextInternal(dataBatch [][]byte, begin, end
 	st.cwts = newListQueue()
 	for i := 0; i < len(batchletData); i++ {
 		// st.dwb.PutData(batchletData[i])
-		apc.totalBytes += int64(len(batchletData[i]))
+		logEntrySize := int64(len(batchletData[i]))
+		apc.totalBytes += logEntrySize
+		if lse.lsm != nil {
+			// TODO: Set the correct status code.
+			lse.lsm.LogRPCServerLogEntrySize.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, logEntrySize)
+		}
 		awg := newAppendWaitGroup(st.wwg)
 		st.cwts.PushFront(newCommitWaitTask(awg))
 		apc.awgs = append(apc.awgs, awg)
