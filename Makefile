@@ -114,6 +114,8 @@ $(PROTO_PBS): $(PROTO_SRCS)
 		$(PROTOC) $(PROTO_INCS) \
 		--gogo_out=plugins=grpc,Mgoogle/protobuf/empty.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,paths=source_relative:. $$src ; \
 	done
+	$(MAKE) fmt
+	git apply -v proto/patches/*.patch
 
 proto-check:
 	$(MAKE) proto

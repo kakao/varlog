@@ -6,6 +6,17 @@ import (
 	"github.com/kakao/varlog/pkg/types"
 )
 
+func (m *ReplicateRequest) ResetReuse() {
+	llsnSlice := m.LLSN[:0]
+	for i := range m.Data {
+		m.Data[i] = m.Data[i][:0]
+	}
+	dataSlice := m.Data[:0]
+	m.Reset()
+	m.LLSN = llsnSlice
+	m.Data = dataSlice
+}
+
 func InvalidSyncPosition() SyncPosition {
 	return SyncPosition{LLSN: types.InvalidLLSN, GLSN: types.InvalidGLSN}
 }
