@@ -17,6 +17,10 @@ option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
 message ReplicateRequest {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+  option (gogoproto.testgen) = true;
+
   int32 topic_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
