@@ -74,7 +74,7 @@ func runCommandServe(c *cli.Context) error {
 		server.WithDatabaseName(c.String(flagDatabaseName.Name)),
 	)
 	if err != nil {
-		slog.Error("could not create server", err)
+		slog.Error("could not create server", slog.Any("error", err))
 		os.Exit(1)
 	}
 
@@ -101,7 +101,7 @@ func runCommandServe(c *cli.Context) error {
 	}()
 	wg.Wait()
 	if err != nil {
-		slog.Error("server stopped abnormally", err)
+		slog.Error("server stopped abnormally", slog.Any("error", err))
 		os.Exit(1)
 	}
 	return nil
