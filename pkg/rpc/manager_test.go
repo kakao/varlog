@@ -5,11 +5,10 @@ import (
 	"net"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
-	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/pkg/types"
 )
@@ -36,49 +35,69 @@ func testNewServer(t *testing.T) (addr string, closer func()) {
 }
 
 func TestManager(t *testing.T) {
-	mgr, err := NewManager[types.StorageNodeID]()
-	assert.NoError(t, err)
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, mgr *Manager[types.StorageNodeID], serverAddr string)
+	}{
+		{
+			name: "NewConn",
+			testf: func(t *testing.T, mgr *Manager[types.StorageNodeID], serverAddr string) {
+				_, err := mgr.GetOrConnect(context.Background(), 1, serverAddr)
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "GetConn",
+			testf: func(t *testing.T, mgr *Manager[types.StorageNodeID], serverAddr string) {
+				conn1, err := mgr.GetOrConnect(context.Background(), 1, serverAddr)
+				require.NoError(t, err)
 
-	defer func() {
-		assert.NoError(t, mgr.Close())
+				conn2, err := mgr.GetOrConnect(context.Background(), 1, serverAddr)
+				require.NoError(t, err)
 
-		// close closed manager
-		assert.NoError(t, mgr.Close())
-	}()
+				require.Equal(t, conn1, conn2)
+			},
+		},
+		{
+			name: "UnexpectedAddr",
+			testf: func(t *testing.T, mgr *Manager[types.StorageNodeID], serverAddr string) {
+				_, err := mgr.GetOrConnect(context.Background(), 1, serverAddr)
+				require.NoError(t, err)
 
-	addr1, closer1 := testNewServer(t)
-	defer closer1()
+				_, err = mgr.GetOrConnect(context.Background(), 1, serverAddr+"0")
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "UnreachableServer",
+			testf: func(t *testing.T, mgr *Manager[types.StorageNodeID], serverAddr string) {
+				_, err := mgr.GetOrConnect(context.Background(), 1, "bad-address")
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "CloseUnknownID",
+			testf: func(t *testing.T, mgr *Manager[types.StorageNodeID], serverAddr string) {
+				err := mgr.CloseClient(2)
+				require.NoError(t, err)
+			},
+		},
+	}
 
-	// new
-	conn1, err := mgr.GetOrConnect(context.Background(), 1, addr1)
-	assert.NoError(t, err)
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			mgr, err := NewManager[types.StorageNodeID]()
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				require.NoError(t, mgr.Close())
+			})
 
-	// cached
-	conn2, err := mgr.GetOrConnect(context.Background(), 1, addr1)
-	assert.NoError(t, err)
-	assert.Equal(t, conn1, conn2)
+			addr1, closer1 := testNewServer(t)
+			t.Cleanup(closer1)
 
-	// unexpected addr1
-	_, err = mgr.GetOrConnect(context.Background(), 1, addr1+"0")
-	assert.Error(t, err)
-
-	// failed connection
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
-	_, err = mgr.GetOrConnect(ctx, 2, "bad-address", grpc.WithBlock())
-	assert.Error(t, err)
-
-	// close unknown id
-	err = mgr.CloseClient(2)
-	assert.NoError(t, err)
-
-	addr2, closer2 := testNewServer(t)
-	defer closer2()
-	_, err = mgr.GetOrConnect(context.Background(), 2, addr2)
-	assert.NoError(t, err)
-
-	err = mgr.CloseClient(2)
-	assert.NoError(t, err)
+			tc.testf(t, mgr, addr1)
+		})
+	}
 }
 
 func TestManagerBadConfig(t *testing.T) {

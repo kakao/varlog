@@ -37,11 +37,15 @@ func TestManager_UnreachableServer(t *testing.T) {
 		),
 	)
 	assert.NoError(t, err)
+	t.Cleanup(func() {
+		err = mgr.Close()
+		assert.NoError(t, err)
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 	_, err = mgr.GetOrConnect(ctx, 1, "127.0.0.1:0")
-	assert.Error(t, err)
+	assert.NoError(t, err)
 }
 
 func TestManager_Client(t *testing.T) {

@@ -111,7 +111,7 @@ func TestMRConnector(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.TODO(), time.Second)
 			defer cancel()
 			// TODO (jun): Use NewConn
-			conn, err := rpc.NewBlockingConn(ctx, ep)
+			conn, err := rpc.NewConn(ctx, ep)
 			if err == nil {
 				So(conn.Close(), ShouldBeNil)
 			}
@@ -181,7 +181,6 @@ func TestMRConnector(t *testing.T) {
 					}
 				}
 				return true
-
 			}), ShouldBeTrue)
 		}
 
