@@ -18,6 +18,8 @@ func TestNewConn(t *testing.T, ctx context.Context, bufsize ...int) (listener ne
 	}
 	lis := bufconn.Listen(sz)
 	connect = func() *Conn {
+		// NOTE: google.golang.org/grpc/test/bufconn doesn't support google.golang.org/grpc.NewClient function.
+		//nolint:staticcheck
 		cc, err := grpc.DialContext(ctx, lis.Addr().String(), grpc.WithContextDialer(
 			func(ctx context.Context, addr string) (net.Conn, error) {
 				return lis.DialContext(ctx)
