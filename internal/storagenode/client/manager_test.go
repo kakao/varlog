@@ -30,12 +30,7 @@ func TestManager_CloseClosed(t *testing.T) {
 }
 
 func TestManager_UnreachableServer(t *testing.T) {
-	mgr, err := client.NewManager[*client.LogClient](
-		client.WithDefaultGRPCDialOptions(
-			grpc.WithBlock(),
-			grpc.FailOnNonTempDialError(true),
-		),
-	)
+	mgr, err := client.NewManager[*client.LogClient]()
 	assert.NoError(t, err)
 	t.Cleanup(func() {
 		err = mgr.Close()
