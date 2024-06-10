@@ -201,9 +201,9 @@ func (loader *Loader) makeAppendFunc(ctx context.Context, c varlog.Log, am *Appe
 		err := lsa.AppendBatch(loader.batch, func(lem []varlogpb.LogEntryMeta, err error) {
 			if err != nil {
 				if errors.Is(err, varlog.ErrClosed) {
-					loader.logger.Debug("closed client", err, slog.Any("tpid", tpid), slog.Any("lsid", lsid))
+					loader.logger.Debug("closed client", slog.Any("error", err), slog.Any("tpid", tpid), slog.Any("lsid", lsid))
 				} else {
-					loader.logger.Error("could not append", err, slog.Any("tpid", tpid), slog.Any("lsid", lsid))
+					loader.logger.Error("could not append", slog.Any("error", err), slog.Any("tpid", tpid), slog.Any("lsid", lsid))
 				}
 				return
 			}

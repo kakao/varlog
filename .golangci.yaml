@@ -1,10 +1,5 @@
 run:
   timeout: 5m
-  skip-files:
-    - ".*\\.pb\\.go$"
-    - ".*_mock\\.go$"
-
-
 linters:
   disable-all: true
   enable:
@@ -21,8 +16,6 @@ linters:
     - staticcheck
     - typecheck
     - unused
-
-
 linters-settings:
   depguard:
     rules:
@@ -60,8 +53,6 @@ linters-settings:
           - "fmt.Println"
           - "strings.Builder.WriteString"
           - "strings.Builder.WriteByte"
-
-
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
@@ -69,3 +60,6 @@ issues:
     - path: _test\.go
       linters:
         - gomnd
+  exclude-files:
+    - ".*\\.pb\\.go$"
+    - ".*_mock\\.go$"
