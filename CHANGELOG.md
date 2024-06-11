@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.21.0](https://github.com/kakao/varlog/compare/v0.20.0...v0.21.0) (2024-06-11)
+
+
+### Features
+
+* **all:** add CLI flags for gRPC buffer management ([57db00e](https://github.com/kakao/varlog/commit/57db00e513b3ff49beb7544660b4fc8d308c8556))
+* **storage:** add CLI flag '--storage-cache-size' for setting cache for storage ([e82fd37](https://github.com/kakao/varlog/commit/e82fd37d0a05b0632fee95a0a61618f22a5f828d))
+
+
+### Bug Fixes
+
+* **rpc:** use google.golang.org/grpc.NewClient instead of DialContext ([851f1c9](https://github.com/kakao/varlog/commit/851f1c9bcdd6e3d0e68612784090e67cb1dac918))
+
 ## [0.20.0](https://github.com/kakao/varlog/compare/v0.19.2...v0.20.0) (2024-03-05)
 
 
