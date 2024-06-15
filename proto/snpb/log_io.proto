@@ -20,6 +20,10 @@ option (gogoproto.goproto_sizecache_all) = false;
 // AppendRequest is a message to send a payload to a storage node. It contains
 // a vector of storage nodes to replicate the payload.
 message AppendRequest {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+  option (gogoproto.testgen) = true;
+
   int32 topic_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
