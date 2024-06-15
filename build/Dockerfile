@@ -1,4 +1,4 @@
-ARG GRPC_HEALTH_PROBE_VERSION=v0.4.11
+ARG GRPC_HEALTH_PROBE_VERSION=v0.4.26
 ARG DEBIAN_FRONTEND=noninteractive
 
 ARG VARLOGMR_RPC_PORT=9092
@@ -7,9 +7,9 @@ ARG VARLOGADM_RPC_PORT=9093
 ARG VARLOGSN_RPC_PORT=9091
 
 
-FROM busybox:1.36.1 AS tools
+FROM alpine:3.20.0 AS tools
 ARG GRPC_HEALTH_PROBE_VERSION
-RUN wget -qO/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-linux-amd64 \
+RUN wget --no-check-certificate -qO/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-linux-amd64 \
     && chmod +x /bin/grpc_health_probe
 
 
