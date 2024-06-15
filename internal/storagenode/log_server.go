@@ -89,34 +89,32 @@ func (ls *logServer) appendStreamRecvLoop(stream snpb.LogIO_AppendServer, cq cha
 		tpid       types.TopicID
 		lsid       types.LogStreamID
 	)
-	req := &snpb.AppendRequest{}
 	ctx := stream.Context()
 
 	for {
-		req.Reset()
-		err = stream.RecvMsg(req)
+		appendTask = logstream.NewAppendTask()
+		err = stream.RecvMsg(&appendTask.Request)
 		if err == io.EOF {
+			appendTask.Release()
 			return
 		}
-		appendTask = logstream.NewAppendTask()
 		if err != nil {
 			goto Out
 		}
 
 		if tpid.Invalid() && lsid.Invalid() {
-			err = snpb.ValidateTopicLogStream(req)
+			err = snpb.ValidateTopicLogStream(&appendTask.Request)
 			if err != nil {
 				err = status.Error(codes.InvalidArgument, err.Error())
 				goto Out
 			}
-			tpid = req.TopicID
-			lsid = req.LogStreamID
+			tpid = appendTask.Request.TopicID
+			lsid = appendTask.Request.LogStreamID
 		}
 
-		appendTask.LogStreamID = lsid
 		appendTask.RPCStartTime = time.Now()
 
-		if req.TopicID != tpid || req.LogStreamID != lsid {
+		if appendTask.Request.TopicID != tpid || appendTask.Request.LogStreamID != lsid {
 			err = status.Error(codes.InvalidArgument, "unmatched topic or logstream")
 			goto Out
 		}
@@ -129,7 +127,7 @@ func (ls *logServer) appendStreamRecvLoop(stream snpb.LogIO_AppendServer, cq cha
 			}
 		}
 
-		err = lse.AppendAsync(ctx, req.Payload, appendTask)
+		err = lse.AppendAsync(ctx, appendTask.Request.Payload, appendTask)
 	Out:
 		if err != nil {
 			appendTask.SetError(err)
@@ -155,10 +153,11 @@ func (ls *logServer) appendStreamSendLoop(stream snpb.LogIO_AppendServer, cq <-c
 				return nil
 			}
 
-			lsid := appendTask.LogStreamID
+			lsid := appendTask.Request.LogStreamID
 			res, err = appendTask.WaitForCompletion(ctx)
 			elapsed := time.Since(appendTask.RPCStartTime)
 			if err != nil {
+				appendTask.Request = snpb.AppendRequest{}
 				appendTask.Release()
 				goto RecordMetric
 			}
@@ -190,6 +189,7 @@ func (ls *logServer) appendStreamSendLoop(stream snpb.LogIO_AppendServer, cq <-c
 func (ls *logServer) appendStreamDrainCQLoop(cq <-chan *logstream.AppendTask) {
 	defer ls.sn.wgAppenders.Done()
 	for appendTask := range cq {
+		appendTask.Request = snpb.AppendRequest{}
 		appendTask.Release()
 	}
 }

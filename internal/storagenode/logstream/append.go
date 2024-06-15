@@ -12,7 +12,6 @@ import (
 	"github.com/kakao/varlog/internal/batchlet"
 	snerrors "github.com/kakao/varlog/internal/storagenode/errors"
 	"github.com/kakao/varlog/internal/storagenode/telemetry"
-	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 )
@@ -31,8 +30,9 @@ type AppendTask struct {
 	apc          appendContext
 	dataBatchLen int
 
-	LogStreamID  types.LogStreamID
 	RPCStartTime time.Time
+
+	Request snpb.AppendRequest
 }
 
 func NewAppendTask() *AppendTask {
@@ -48,7 +48,10 @@ func (at *AppendTask) Release() {
 	if at.deferredFunc != nil {
 		at.deferredFunc(at)
 	}
+	req := at.Request
+	req.ResetReuse()
 	*at = AppendTask{}
+	at.Request = req
 	appendTaskPool.Put(at)
 }
 

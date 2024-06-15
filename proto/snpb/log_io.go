@@ -9,7 +9,8 @@ import (
 func ValidateTopicLogStream(iface interface {
 	GetTopicID() types.TopicID
 	GetLogStreamID() types.LogStreamID
-}) error {
+},
+) error {
 	if tpid := iface.GetTopicID(); tpid.Invalid() {
 		return fmt.Errorf("invalid topic %d", tpid)
 	}
@@ -17,4 +18,13 @@ func ValidateTopicLogStream(iface interface {
 		return fmt.Errorf("invalid log stream %d", lsid)
 	}
 	return nil
+}
+
+func (m *AppendRequest) ResetReuse() {
+	for i := range m.Payload {
+		m.Payload[i] = m.Payload[i][:0]
+	}
+	payload := m.Payload[:0]
+	m.Reset()
+	m.Payload = payload
 }
