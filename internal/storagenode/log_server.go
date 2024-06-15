@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"time"
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"go.uber.org/multierr"
@@ -13,6 +14,7 @@ import (
 
 	snerrors "github.com/kakao/varlog/internal/storagenode/errors"
 	"github.com/kakao/varlog/internal/storagenode/logstream"
+	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
@@ -111,6 +113,9 @@ func (ls *logServer) appendStreamRecvLoop(stream snpb.LogIO_AppendServer, cq cha
 			lsid = req.LogStreamID
 		}
 
+		appendTask.LogStreamID = lsid
+		appendTask.RPCStartTime = time.Now()
+
 		if req.TopicID != tpid || req.LogStreamID != lsid {
 			err = status.Error(codes.InvalidArgument, "unmatched topic or logstream")
 			goto Out
@@ -149,17 +154,32 @@ func (ls *logServer) appendStreamSendLoop(stream snpb.LogIO_AppendServer, cq <-c
 			if !ok {
 				return nil
 			}
+
+			lsid := appendTask.LogStreamID
 			res, err = appendTask.WaitForCompletion(ctx)
+			elapsed := time.Since(appendTask.RPCStartTime)
 			if err != nil {
 				appendTask.Release()
-				return err
+				goto RecordMetric
 			}
-
 			appendTask.ReleaseWriteWaitGroups()
 			appendTask.Release()
 
 			rsp.Results = res
 			err = stream.Send(rsp)
+
+		RecordMetric:
+			code := codes.OK
+			if err != nil {
+				// TODO: Set the correct status code.
+				code = codes.Internal
+			}
+			if !lsid.Invalid() {
+				metrics, ok := ls.sn.metrics.GetLogStreamMetrics(lsid)
+				if ok {
+					metrics.LogRPCServerDuration.Record(ctx, telemetry.RPCKindAppend, code, elapsed.Microseconds())
+				}
+			}
 			if err != nil {
 				return err
 			}
