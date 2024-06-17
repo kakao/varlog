@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.0](https://github.com/kakao/varlog/compare/v0.21.0...v0.22.0) (2024-06-15)
+
+
+### Features
+
+* **sn:** add metrics for Append and Replicate RPCs ([d52ff1d](https://github.com/kakao/varlog/commit/d52ff1d1f2bf24d47ef9f969520b51570c9abe19))
+
 ## [0.21.0](https://github.com/kakao/varlog/compare/v0.20.0...v0.21.0) (2024-06-11)
 
 
