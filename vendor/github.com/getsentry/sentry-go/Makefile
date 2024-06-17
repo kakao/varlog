@@ -12,7 +12,11 @@ help: ## Show help
 .PHONY: help
 
 build: ## Build everything
-	go build ./...
+	for dir in $(ALL_GO_MOD_DIRS); do \
+		cd "$${dir}"; \
+		echo ">>> Running 'go build' for module: $${dir}"; \
+		go build ./...; \
+	done;
 .PHONY: build
 
 ### Tests (inspired by https://github.com/open-telemetry/opentelemetry-go/blob/main/Makefile)
@@ -39,19 +43,35 @@ $(COVERAGE_REPORT_DIR):
 clean-report-dir: $(COVERAGE_REPORT_DIR)
 	test $(COVERAGE_REPORT_DIR) && rm -f $(COVERAGE_REPORT_DIR)/*
 test-coverage: $(COVERAGE_REPORT_DIR) clean-report-dir  ## Test with coverage enabled
+	set -e ; \
 	for dir in $(ALL_GO_MOD_DIRS); do \
 	  echo ">>> Running tests with coverage for module: $${dir}"; \
 	  DIR_ABS=$$(python -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' $${dir}) ; \
 	  REPORT_NAME=$$(basename $${DIR_ABS}); \
 	  (cd "$${dir}" && \
-	    $(GO) test -count=1 -coverpkg=./... -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" ./... && \
+	    $(GO) test -count=1 -timeout $(TIMEOUT)s -coverpkg=./... -covermode=$(COVERAGE_MODE) -coverprofile="$(COVERAGE_PROFILE)" ./... && \
 		cp $(COVERAGE_PROFILE) "$(COVERAGE_REPORT_DIR_ABS)/$${REPORT_NAME}_$(COVERAGE_PROFILE)" && \
 	    $(GO) tool cover -html=$(COVERAGE_PROFILE) -o coverage.html); \
 	done;
 .PHONY: test-coverage clean-report-dir
 
+mod-tidy: ## Check go.mod tidiness
+	set -e ; \
+	for dir in $(ALL_GO_MOD_DIRS); do \
+		cd "$${dir}"; \
+		echo ">>> Running 'go mod tidy' for module: $${dir}"; \
+		go mod tidy -go=1.18 -compat=1.18; \
+	done; \
+	git diff --exit-code;
+.PHONY: mod-tidy
+
 vet: ## Run "go vet"
-	go vet ./...
+	set -e ; \
+	for dir in $(ALL_GO_MOD_DIRS); do \
+		cd "$${dir}"; \
+		echo ">>> Running 'go vet' for module: $${dir}"; \
+		go vet ./...; \
+	done;
 .PHONY: vet
 
 lint: ## Lint (using "golangci-lint")

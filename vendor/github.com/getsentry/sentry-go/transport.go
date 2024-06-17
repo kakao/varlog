@@ -94,7 +94,55 @@ func getRequestBodyFromEvent(event *Event) []byte {
 	return nil
 }
 
-func transactionEnvelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMessage) (*bytes.Buffer, error) {
+func encodeAttachment(enc *json.Encoder, b io.Writer, attachment *Attachment) error {
+	// Attachment header
+	err := enc.Encode(struct {
+		Type        string `json:"type"`
+		Length      int    `json:"length"`
+		Filename    string `json:"filename"`
+		ContentType string `json:"content_type,omitempty"`
+	}{
+		Type:        "attachment",
+		Length:      len(attachment.Payload),
+		Filename:    attachment.Filename,
+		ContentType: attachment.ContentType,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Attachment payload
+	if _, err = b.Write(attachment.Payload); err != nil {
+		return err
+	}
+
+	// "Envelopes should be terminated with a trailing newline."
+	//
+	// [1]: https://develop.sentry.dev/sdk/envelopes/#envelopes
+	if _, err := b.Write([]byte("\n")); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func encodeEnvelopeItem(enc *json.Encoder, itemType string, body json.RawMessage) error {
+	// Item header
+	err := enc.Encode(struct {
+		Type   string `json:"type"`
+		Length int    `json:"length"`
+	}{
+		Type:   itemType,
+		Length: len(body),
+	})
+	if err == nil {
+		// payload
+		err = enc.Encode(body)
+	}
+	return err
+}
+
+func envelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body json.RawMessage) (*bytes.Buffer, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
 
@@ -127,21 +175,32 @@ func transactionEnvelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body 
 		return nil, err
 	}
 
-	// Item header
-	err = enc.Encode(struct {
-		Type   string `json:"type"`
-		Length int    `json:"length"`
-	}{
-		Type:   transactionType,
-		Length: len(body),
-	})
+	if event.Type == transactionType || event.Type == checkInType {
+		err = encodeEnvelopeItem(enc, event.Type, body)
+	} else {
+		err = encodeEnvelopeItem(enc, eventType, body)
+	}
 	if err != nil {
 		return nil, err
 	}
-	// payload
-	err = enc.Encode(body)
-	if err != nil {
-		return nil, err
+
+	// Attachments
+	for _, attachment := range event.Attachments {
+		if err := encodeAttachment(enc, &b, attachment); err != nil {
+			return nil, err
+		}
+	}
+
+	// Profile data
+	if event.sdkMetaData.transactionProfile != nil {
+		body, err = json.Marshal(event.sdkMetaData.transactionProfile)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeEnvelopeItem(enc, profileType, body)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &b, nil
@@ -150,28 +209,34 @@ func transactionEnvelopeFromBody(event *Event, dsn *Dsn, sentAt time.Time, body 
 func getRequestFromEvent(event *Event, dsn *Dsn) (r *http.Request, err error) {
 	defer func() {
 		if r != nil {
-			r.Header.Set("User-Agent", userAgent)
+			r.Header.Set("User-Agent", fmt.Sprintf("%s/%s", event.Sdk.Name, event.Sdk.Version))
+			r.Header.Set("Content-Type", "application/x-sentry-envelope")
+
+			auth := fmt.Sprintf("Sentry sentry_version=%s, "+
+				"sentry_client=%s/%s, sentry_key=%s", apiVersion, event.Sdk.Name, event.Sdk.Version, dsn.publicKey)
+
+			// The key sentry_secret is effectively deprecated and no longer needs to be set.
+			// However, since it was required in older self-hosted versions,
+			// it should still passed through to Sentry if set.
+			if dsn.secretKey != "" {
+				auth = fmt.Sprintf("%s, sentry_secret=%s", auth, dsn.secretKey)
+			}
+
+			r.Header.Set("X-Sentry-Auth", auth)
 		}
 	}()
 	body := getRequestBodyFromEvent(event)
 	if body == nil {
 		return nil, errors.New("event could not be marshaled")
 	}
-	if event.Type == transactionType {
-		b, err := transactionEnvelopeFromBody(event, dsn, time.Now(), body)
-		if err != nil {
-			return nil, err
-		}
-		return http.NewRequest(
-			http.MethodPost,
-			dsn.EnvelopeAPIURL().String(),
-			b,
-		)
+	envelope, err := envelopeFromBody(event, dsn, time.Now(), body)
+	if err != nil {
+		return nil, err
 	}
 	return http.NewRequest(
 		http.MethodPost,
-		dsn.StoreAPIURL().String(),
-		bytes.NewReader(body),
+		dsn.GetAPIURL().String(),
+		envelope,
 	)
 }
 
@@ -294,10 +359,6 @@ func (t *HTTPTransport) SendEvent(event *Event) {
 	request, err := getRequestFromEvent(event, t.dsn)
 	if err != nil {
 		return
-	}
-
-	for headerKey, headerValue := range t.dsn.RequestHeaders() {
-		request.Header.Set(headerKey, headerValue)
 	}
 
 	// <-t.buffer is equivalent to acquiring a lock to access the current batch.
@@ -519,10 +580,6 @@ func (t *HTTPSyncTransport) SendEvent(event *Event) {
 	request, err := getRequestFromEvent(event, t.dsn)
 	if err != nil {
 		return
-	}
-
-	for headerKey, headerValue := range t.dsn.RequestHeaders() {
-		request.Header.Set(headerKey, headerValue)
 	}
 
 	var eventType string

@@ -1,4 +1,4 @@
-// Copyright 2019 The Cockroach Authors.
+// Copyright 2024 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,8 +12,9 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// Package errutil combines primitives from the library, the Go errors
-// package and github.com/pkg/errors. It aims to serve as drop-in
-// replacement to github.com/pkg/errors and replace the legacy
-// implementation of `pgerrors`.
-package errutil
+//go:build fifo_invariants
+
+package fifo
+
+// invariants is true if we were built with the "fifo_invariants" build tag.
+const invariants = true
