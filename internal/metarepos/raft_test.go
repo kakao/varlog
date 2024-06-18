@@ -13,10 +13,10 @@ import (
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
+	"github.com/kakao/varlog/internal/vtesting"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/util/testutil/ports"
-	"github.com/kakao/varlog/vtesting"
 )
 
 type (

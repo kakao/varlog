@@ -3,7 +3,7 @@ package varlog
 import (
 	"testing"
 
-	_ "github.com/kakao/varlog/vtesting"
+	_ "github.com/kakao/varlog/internal/vtesting"
 )
 
 func TestSubscribe(t *testing.T) {
