@@ -12,9 +12,13 @@ import (
 )
 
 const defaultRaftTick = time.Millisecond * 100
+
 const defaultCommitTick = time.Millisecond * 10
+
 const defaultTimeoutUnit = time.Millisecond * 400
+
 const defaultProcCount = 8
+
 const defaultRaftDir = "raftdata"
 
 var (
@@ -70,10 +74,6 @@ func TimeoutAccordingToProcCnt(timeout time.Duration) time.Duration {
 	}
 
 	return timeout
-}
-
-func TestLogger() *zap.Logger {
-	return testLogger
 }
 
 func TestRaftTick() time.Duration {

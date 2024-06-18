@@ -13,15 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
-	"github.com/kakao/varlog/internal/storagenode/volume"
-
 	"github.com/kakao/varlog/internal/admin"
 	"github.com/kakao/varlog/internal/admin/snwatcher"
+	"github.com/kakao/varlog/internal/storagenode/volume"
+	"github.com/kakao/varlog/internal/vtesting"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/proto/varlogpb"
 	"github.com/kakao/varlog/tests/it"
-	"github.com/kakao/varlog/vtesting"
 )
 
 func TestMain(m *testing.M) {

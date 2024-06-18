@@ -25,6 +25,7 @@ import (
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/storagenode/client"
 	"github.com/kakao/varlog/internal/storagenode/volume"
+	"github.com/kakao/varlog/internal/vtesting"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
@@ -33,7 +34,6 @@ import (
 	"github.com/kakao/varlog/proto/admpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/vtesting"
 )
 
 type VarlogCluster struct {
@@ -1568,7 +1568,8 @@ func (clus *VarlogCluster) AppendUncommittedLog(t *testing.T, topicID types.Topi
 
 func (clus *VarlogCluster) CommitWithoutMR(t *testing.T, lsID types.LogStreamID,
 	committedLLSNOffset types.LLSN, committedGLSNOffset types.GLSN, committedGLSNLen uint64,
-	version types.Version, highWatermark types.GLSN) {
+	version types.Version, highWatermark types.GLSN,
+) {
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()
 
@@ -1665,7 +1666,6 @@ func (clus *VarlogCluster) WaitSealed(t *testing.T, lsID types.LogStreamID) {
 }
 
 func (clus *VarlogCluster) GetUncommittedLLSNOffset(t *testing.T, lsID types.LogStreamID) types.LLSN {
-
 	clus.muSN.Lock()
 	defer clus.muSN.Unlock()
 

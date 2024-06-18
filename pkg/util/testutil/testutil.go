@@ -8,7 +8,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/kakao/varlog/vtesting"
+	"github.com/kakao/varlog/internal/vtesting"
 )
 
 func CompareWait(cmp func() bool, timeout time.Duration) bool {
