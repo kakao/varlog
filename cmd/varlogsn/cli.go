@@ -9,7 +9,6 @@ import (
 	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/storagenode/logstream"
-	"github.com/kakao/varlog/pkg/types"
 )
 
 const (
@@ -38,7 +37,7 @@ func newStartCommand() *cli.Command {
 		Action:  start,
 		Flags: []cli.Flag{
 			flagClusterID,
-			flagStorageNodeID.StringFlag(false, types.StorageNodeID(1).String()),
+			flagStorageNodeID,
 			flagListen.StringFlag(false, "127.0.0.1:9091"),
 			flagAdvertise.StringFlag(false, ""),
 			flagBallastSize.StringFlag(false, storagenode.DefaultBallastSize),

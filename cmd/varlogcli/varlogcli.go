@@ -51,10 +51,15 @@ const (
 
 var (
 	flagBatchSize = flags.FlagDesc{Name: "batch-size"}
+	flagTopicID   = func() *cli.IntFlag {
+		f := flags.GetTopicIDFlag()
+		f.Required = true
+		return f
+	}()
+	flagLogStreamID = flags.GetLogStreamIDFlag()
 )
 
 func newAppend() *cli.Command {
-
 	return &cli.Command{
 		Name:   cmdAppend,
 		Action: commandAction,
@@ -90,15 +95,9 @@ func commandAction(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	topicID, err = types.ParseTopicID(c.String(flags.TopicID().Name))
-	if err != nil {
-		return err
-	}
-	if c.IsSet(flags.LogStreamID().Name) {
-		logStreamID, err = types.ParseLogStreamID(c.String(flags.LogStreamID().Name))
-		if err != nil {
-			return err
-		}
+	topicID = types.TopicID(flagTopicID.Get(c))
+	if c.IsSet(flagLogStreamID.Name) {
+		logStreamID = types.LogStreamID(flagLogStreamID.Get(c))
 	}
 
 	switch c.Command.Name {
@@ -108,12 +107,12 @@ func commandAction(c *cli.Context) error {
 			return errors.New("invalid batch size")
 		}
 
-		if c.IsSet(flags.LogStreamID().Name) {
+		if c.IsSet(flagLogStreamID.Name) {
 			return varlogcli.AppendTo(mrAddrs, clusterID, topicID, logStreamID, batchSize)
 		}
 		return varlogcli.Append(mrAddrs, clusterID, topicID, batchSize)
 	case cmdSubscribe:
-		if c.IsSet(flags.LogStreamID().Name) {
+		if c.IsSet(flagLogStreamID.Name) {
 			return varlogcli.SubscribeTo(mrAddrs, clusterID, topicID, logStreamID)
 		}
 		return varlogcli.Subscribe(mrAddrs, clusterID, topicID)
@@ -125,7 +124,7 @@ func commonFlags() []cli.Flag {
 	return []cli.Flag{
 		flags.ClusterID,
 		flags.MetadataRepositoryAddress().StringSliceFlag(true, nil),
-		flags.TopicID().StringFlag(true, ""),
-		flags.LogStreamID().StringFlag(false, ""),
+		flagTopicID,
+		flagLogStreamID,
 	}
 }
