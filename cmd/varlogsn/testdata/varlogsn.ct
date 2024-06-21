@@ -33,12 +33,12 @@ OPTIONS:
    --logstream-executor-sequence-queue-capacity value, --lse-sequence-queue-capacity value                  (default: 1024)
    --logstream-executor-write-queue-capacity value, --lse-write-queue-capacity value                        (default: 1024)
    --max-logstream-replicas-count value                                                                     The maximum number of log stream replicas in a storage node, infinity if a negative value (default: -1)
-   --storage-node-id value, --storage-node value, --storagenode value, --snid value                         (default: "1")
    --volumes value, --volume value [ --volumes value, --volume value ]                                       [$VOLUMES, $VOLUME]
 
    Cluster:
 
-   --cluster-id value, --cluster value, --cid value  (default: 1) [$CLUSTER_ID]
+   --cluster-id value, --cluster value, --cid value               (default: 1) [$CLUSTER_ID]
+   --storagenode-id value, --storage-node-id value, --snid value  StorageNode ID (default: 1) [$STORAGENODE_ID, $STORAGE_NODE_ID, $SNID]
 
    Logger:
 

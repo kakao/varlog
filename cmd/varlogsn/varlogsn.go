@@ -56,10 +56,7 @@ func start(c *cli.Context) error {
 		return err
 	}
 
-	storageNodeID, err := types.ParseStorageNodeID(c.String(flagStorageNodeID.Name))
-	if err != nil {
-		return err
-	}
+	storageNodeID := types.StorageNodeID(flagStorageNodeID.Get(c))
 
 	ballastSize, err := units.FromByteSizeString(c.String(flagBallastSize.Name))
 	if err != nil {
