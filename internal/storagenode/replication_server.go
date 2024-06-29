@@ -93,15 +93,12 @@ type replicationServerTask struct {
 	err error
 }
 
-func newReplicationServerTask(req snpb.ReplicateRequest, err error) *replicationServerTask {
-	rst := replicationServerTaskPool.Get().(*replicationServerTask)
-	rst.req = req
-	rst.err = err
-	return rst
+func newReplicationServerTask() *replicationServerTask {
+	return replicationServerTaskPool.Get().(*replicationServerTask)
 }
 
 func (rst *replicationServerTask) release() {
-	rst.req = snpb.ReplicateRequest{}
+	rst.req.ResetReuse()
 	rst.err = nil
 	replicationServerTaskPool.Put(rst)
 }
@@ -113,11 +110,10 @@ func (rs *replicationServer) recv(ctx context.Context, stream snpb.Replicator_Re
 	go func() {
 		defer wg.Done()
 		defer close(c)
-		req := &snpb.ReplicateRequest{}
 		for {
-			req.Reset()
-			err := stream.RecvMsg(req)
-			rst := newReplicationServerTask(*req, err)
+			rst := newReplicationServerTask()
+			err := stream.RecvMsg(&rst.req)
+			rst.err = err
 			select {
 			case c <- rst:
 				if err != nil {
