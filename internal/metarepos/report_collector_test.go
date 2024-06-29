@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/reportcommitter"
+	"github.com/kakao/varlog/internal/vtesting"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/util/testutil"
@@ -19,7 +20,6 @@ import (
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/vtesting"
 )
 
 type dummyMetadataRepository struct {
@@ -539,7 +539,6 @@ func TestReportIgnore(t *testing.T) {
 				}
 			}
 		}
-
 	})
 }
 
@@ -1059,7 +1058,7 @@ func TestCommitWithDelay(t *testing.T) {
 
 func TestRPCFail(t *testing.T) {
 	Convey("Given ReportCollector", t, func(ctx C) {
-		//knownVer := types.InvalidVersion
+		// knownVer := types.InvalidVersion
 
 		clientFac := NewDummyStorageNodeClientFactory(1, false)
 		mr := NewDummyMetadataRepository(clientFac)
