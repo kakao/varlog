@@ -4,6 +4,7 @@ package client
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/stringsutil"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -84,7 +84,7 @@ func (c *ManagementClient) GetMetadata(ctx context.Context) (*snpb.StorageNodeMe
 }
 
 func (c *ManagementClient) AddLogStreamReplica(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, snpath string) (snpb.LogStreamReplicaMetadataDescriptor, error) {
-	if stringsutil.Empty(snpath) {
+	if len(strings.TrimSpace(snpath)) == 0 {
 		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.New("snmcl: empty path")
 	}
 	// FIXME(jun): Does the return value of AddLogStream need?
