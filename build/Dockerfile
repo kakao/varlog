@@ -1,4 +1,5 @@
 ARG GRPC_HEALTH_PROBE_VERSION=v0.4.26
+ARG JQ_VERSION=1.7.1
 ARG DEBIAN_FRONTEND=noninteractive
 
 ARG VARLOGMR_RPC_PORT=9092
@@ -9,8 +10,11 @@ ARG VARLOGSN_RPC_PORT=9091
 
 FROM alpine:3.20.1 AS tools
 ARG GRPC_HEALTH_PROBE_VERSION
+ARG JQ_VERSION
 RUN wget --no-check-certificate -qO/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-linux-amd64 \
-    && chmod +x /bin/grpc_health_probe
+    && chmod +x /bin/grpc_health_probe \
+    && wget --no-check-certificate -qO/bin/jq https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}/jq-linux-amd64 \
+    && chmod +x /bin/jq
 
 
 FROM golang:1.22 AS builder-cgo
@@ -50,6 +54,7 @@ ENV PATH=/varlog/bin:$PATH
 FROM scratch AS varlogbenchmark
 LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 WORKDIR /varlog
+COPY --from=tools /bin/jq /varlog/tools/jq
 COPY --from=builder-noncgo /varlog/bin/benchmark /varlog/bin/benchmark
 CMD ["/varlog/bin/benchmark"]
 
@@ -57,6 +62,7 @@ CMD ["/varlog/bin/benchmark"]
 FROM scratch AS varlogctl
 LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 WORKDIR /varlog
+COPY --from=tools /bin/jq /varlog/tools/jq
 COPY --from=builder-noncgo /varlog/bin/varlogctl /varlog/bin/varlogctl
 CMD ["/varlog/bin/varlogctl"]
 
@@ -64,6 +70,7 @@ CMD ["/varlog/bin/varlogctl"]
 FROM scratch AS varlogcli
 LABEL org.opencontainers.image.source=https://github.com/kakao/varlog
 WORKDIR /varlog
+COPY --from=tools /bin/jq /varlog/tools/jq
 COPY --from=builder-noncgo /varlog/bin/varlogcli /varlog/bin/varlogcli
 CMD ["/varlog/bin/varlogcli"]
 
@@ -75,6 +82,7 @@ EXPOSE ${VARLOGMR_RAFT_PORT}
 USER varlog
 WORKDIR /varlog
 COPY --from=tools /bin/grpc_health_probe /varlog/tools/grpc_health_probe
+COPY --from=tools /bin/jq /varlog/tools/jq
 COPY --from=builder-noncgo /varlog/bin/start_varlogmr.py /varlog/bin/start_varlogmr.py
 COPY --from=builder-noncgo /varlog/bin/varlogmr /varlog/bin/varlogmr
 COPY --from=builder-noncgo /varlog/bin/mrtool /varlog/bin/mrtool
@@ -88,6 +96,7 @@ EXPOSE ${VARLOGADM_RPC_PORT}
 USER varlog
 WORKDIR /varlog
 COPY --from=tools /bin/grpc_health_probe /varlog/tools/grpc_health_probe
+COPY --from=tools /bin/jq /varlog/tools/jq
 COPY --from=builder-noncgo /varlog/bin/varlogadm /varlog/bin/varlogadm
 COPY --from=builder-noncgo /varlog/pylib /varlog/pylib
 
@@ -98,6 +107,7 @@ EXPOSE ${VARLOGSN_RPC_PORT}
 USER varlog
 WORKDIR /varlog
 COPY --from=tools /bin/grpc_health_probe /varlog/tools/grpc_health_probe
+COPY --from=tools /bin/jq /varlog/tools/jq
 COPY --from=builder-cgo /varlog/bin/start_varlogsn.py /varlog/bin/start_varlogsn.py
 COPY --from=builder-cgo /varlog/bin/varlogsn /varlog/bin/varlogsn
 COPY --from=builder-cgo /varlog/bin/varlogctl /varlog/bin/varlogctl
