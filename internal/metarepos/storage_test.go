@@ -15,12 +15,12 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/kakao/varlog/internal/vtesting"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/proto/mrpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
-	"github.com/kakao/varlog/vtesting"
 )
 
 func TestStorageRegisterSN(t *testing.T) {

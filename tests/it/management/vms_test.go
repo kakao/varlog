@@ -13,13 +13,13 @@ import (
 
 	"github.com/kakao/varlog/internal/admin/mrmanager"
 	"github.com/kakao/varlog/internal/metarepos"
+	"github.com/kakao/varlog/internal/vtesting"
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/testutil"
 	"github.com/kakao/varlog/pkg/util/testutil/ports"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/tests/it"
-	"github.com/kakao/varlog/vtesting"
 )
 
 // FIXME: This test checks MRManager, move unit test or something similar.
@@ -101,7 +101,6 @@ func TestVarlogNewMRManager(t *testing.T) {
 				So(mrm.Close(), ShouldBeNil)
 			})
 		})
-
 	})
 
 	Convey("Given MR cluster", t, func(ctx C) {
