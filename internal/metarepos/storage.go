@@ -17,7 +17,6 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/mathutil"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/mrpb"
@@ -1004,7 +1003,7 @@ func (ms *MetadataStorage) GetPeers() *mrpb.MetadataRepositoryDescriptor_PeerDes
 			delete(peerMap.Peers, nodeID)
 		}
 	}
-	peerMap.AppliedIndex = mathutil.MaxUint64(
+	peerMap.AppliedIndex = max(
 		ms.origStateMachine.PeersMap.AppliedIndex,
 		ms.diffStateMachine.PeersMap.AppliedIndex,
 	)
@@ -1809,7 +1808,7 @@ func (ms *MetadataStorage) mergePeers() {
 		}
 	}
 
-	ms.origStateMachine.PeersMap.AppliedIndex = mathutil.MaxUint64(
+	ms.origStateMachine.PeersMap.AppliedIndex = max(
 		ms.origStateMachine.PeersMap.AppliedIndex,
 		ms.diffStateMachine.PeersMap.AppliedIndex,
 	)
