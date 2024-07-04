@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.1](https://github.com/kakao/varlog/compare/v0.22.0...v0.22.1) (2024-07-04)
+
+
+### Bug Fixes
+
+* **sn:** prevent panic on closed queue channel of replication server ([6c19613](https://github.com/kakao/varlog/commit/6c196130a9b9faac53f7e5216d3b824060f704f7))
+
 ## [0.22.0](https://github.com/kakao/varlog/compare/v0.21.0...v0.22.0) (2024-06-15)
 
 
