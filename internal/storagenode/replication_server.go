@@ -144,12 +144,16 @@ func (rs *replicationServer) replicate(ctx context.Context, requestC <-chan *rep
 		}()
 		var rst *replicationServerTask
 		var lse *logstream.Executor
+		var ok bool
 		for {
 			select {
 			case <-ctx.Done():
 				err = ctx.Err()
 				return
-			case rst = <-requestC:
+			case rst, ok = <-requestC:
+			}
+			if !ok {
+				return
 			}
 			err = rst.err
 			if err != nil {
