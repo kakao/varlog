@@ -287,14 +287,14 @@ github.com/rogpeppe/go-internal/fmtsort
 # github.com/russross/blackfriday/v2 v2.1.0
 ## explicit
 github.com/russross/blackfriday/v2
-# github.com/shirou/gopsutil/v3 v3.24.4
-## explicit; go 1.15
-github.com/shirou/gopsutil/v3/common
-github.com/shirou/gopsutil/v3/cpu
-github.com/shirou/gopsutil/v3/internal/common
-github.com/shirou/gopsutil/v3/mem
-github.com/shirou/gopsutil/v3/net
-github.com/shirou/gopsutil/v3/process
+# github.com/shirou/gopsutil/v4 v4.24.6
+## explicit; go 1.18
+github.com/shirou/gopsutil/v4/common
+github.com/shirou/gopsutil/v4/cpu
+github.com/shirou/gopsutil/v4/internal/common
+github.com/shirou/gopsutil/v4/mem
+github.com/shirou/gopsutil/v4/net
+github.com/shirou/gopsutil/v4/process
 # github.com/shoenig/go-m1cpu v0.1.6
 ## explicit; go 1.20
 github.com/shoenig/go-m1cpu
@@ -373,7 +373,7 @@ go.etcd.io/etcd/server/v3/etcdserver/api/snap/snappb
 go.etcd.io/etcd/server/v3/etcdserver/api/v2stats
 go.etcd.io/etcd/server/v3/wal
 go.etcd.io/etcd/server/v3/wal/walpb
-# go.opentelemetry.io/contrib/instrumentation/host v0.52.0
+# go.opentelemetry.io/contrib/instrumentation/host v0.53.0
 ## explicit; go 1.21
 go.opentelemetry.io/contrib/instrumentation/host
 # go.opentelemetry.io/contrib/instrumentation/runtime v0.52.0
