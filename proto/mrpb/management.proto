@@ -14,24 +14,26 @@ option (gogoproto.goproto_unkeyed_all) = false;
 option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
-// AddPeerRequest is a request message for AddPeer RPC.
-//
-// TODO: Define a new message representing a new peer, such as "Peer" or
-// "PeerInfo" and use it rather than primitive-type fields.
-// See:
-// - https://protobuf.dev/programming-guides/api/#dont-include-primitive-types
-message AddPeerRequest {
+// PeerInfo represents information about a RAFT peer.
+message PeerInfo {
+  // ClusterID is the identifier of the Varlog cluster.
   int32 cluster_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
     (gogoproto.customname) = "ClusterID"
   ];
-
+  // NodeID is the identifier of the metadata repository node.
   uint64 node_id = 2 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.NodeID",
     (gogoproto.customname) = "NodeID"
   ];
+  // URL is the RAFT endpoint of the metadata repository node.
+  // It should be in the format of "http://<IP>:<Port>".
+  string url = 3 [(gogoproto.customname) = "URL"];
+}
 
-  string url = 3;
+// AddPeerRequest is a request message for the AddPeer RPC.
+message AddPeerRequest {
+  PeerInfo peer = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // RemovePeerRequest is a request message for RemovePeer RPC.
