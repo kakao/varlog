@@ -102,24 +102,3 @@ func MetadataRepositoryAddress() *FlagDesc {
 		Aliases: []string{"mr-address", "metadata-repository", "mr"},
 	}
 }
-
-func StorageNodeID() *FlagDesc {
-	return &FlagDesc{
-		Name:    "storage-node-id",
-		Aliases: []string{"storage-node", "storagenode", "snid"},
-	}
-}
-
-func TopicID() *FlagDesc {
-	return &FlagDesc{
-		Name:    "topic-id",
-		Aliases: []string{"topic", "tpid"},
-	}
-}
-
-func LogStreamID() *FlagDesc {
-	return &FlagDesc{
-		Name:    "log-stream-id",
-		Aliases: []string{"logstream-id", "logstream", "lsid"},
-	}
-}

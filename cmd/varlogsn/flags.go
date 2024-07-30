@@ -8,6 +8,7 @@ import (
 	"github.com/kakao/varlog/internal/flags"
 	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/internal/storagenode"
+	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/units"
 )
 
@@ -17,8 +18,12 @@ const (
 
 var (
 	flagClusterID     = flags.ClusterID
-	flagStorageNodeID = flags.StorageNodeID()
-	flagListen        = flags.FlagDesc{
+	flagStorageNodeID = func() *cli.IntFlag {
+		f := flags.GetStorageNodeIDFlag()
+		f.Value = int(types.MinStorageNodeID)
+		return f
+	}()
+	flagListen = flags.FlagDesc{
 		Name:    "listen",
 		Aliases: []string{"listen-address"},
 		Envs:    []string{"LISTEN", "LISTEN_ADDRESS"},
