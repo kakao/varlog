@@ -70,9 +70,11 @@ func (c *metadataRepositoryManagementClient) AddPeer(ctx context.Context, cluste
 	}
 
 	req := &mrpb.AddPeerRequest{
-		ClusterID: clusterID,
-		NodeID:    nodeID,
-		Url:       url,
+		PeerInfo: mrpb.PeerInfo{
+			ClusterID: clusterID,
+			NodeID:    nodeID,
+			URL:       url,
+		},
 	}
 
 	_, err := c.client.AddPeer(ctx, req)

@@ -26,7 +26,7 @@ func (s *ManagementService) Register(server *grpc.Server) {
 }
 
 func (s *ManagementService) AddPeer(ctx context.Context, req *mrpb.AddPeerRequest) (*types.Empty, error) {
-	err := s.m.AddPeer(ctx, req.ClusterID, req.NodeID, req.Url)
+	err := s.m.AddPeer(ctx, req.ClusterID, req.NodeID, req.URL)
 	return &types.Empty{}, err
 }
 

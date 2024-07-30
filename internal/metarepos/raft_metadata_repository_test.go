@@ -3086,9 +3086,11 @@ func TestMetadataRepository_AddPeer(t *testing.T) {
 			name: "InvalidNodeID",
 			testf: func(t *testing.T, _ *RaftMetadataRepository, client mrpb.ManagementClient) {
 				_, err := client.AddPeer(context.Background(), &mrpb.AddPeerRequest{
-					ClusterID: clusterID,
-					NodeID:    types.InvalidNodeID,
-					Url:       "http://127.0.0.1:11000",
+					PeerInfo: mrpb.PeerInfo{
+						ClusterID: clusterID,
+						NodeID:    types.InvalidNodeID,
+						URL:       "http://127.0.0.1:11000",
+					},
 				})
 				require.Error(t, err)
 				require.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -3098,9 +3100,11 @@ func TestMetadataRepository_AddPeer(t *testing.T) {
 			name: "AlreadyExists",
 			testf: func(t *testing.T, server *RaftMetadataRepository, client mrpb.ManagementClient) {
 				_, err := client.AddPeer(context.Background(), &mrpb.AddPeerRequest{
-					ClusterID: clusterID,
-					NodeID:    server.nodeID,
-					Url:       server.raftNode.url,
+					PeerInfo: mrpb.PeerInfo{
+						ClusterID: clusterID,
+						NodeID:    server.nodeID,
+						URL:       server.raftNode.url,
+					},
 				})
 				require.Error(t, err)
 				require.Equal(t, codes.AlreadyExists, status.Code(err))
