@@ -1362,6 +1362,10 @@ func (mr *RaftMetadataRepository) Unseal(ctx context.Context, lsID types.LogStre
 }
 
 func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, _ types.ClusterID, nodeID types.NodeID, url string) error {
+	if nodeID == types.InvalidNodeID {
+		return status.Error(codes.InvalidArgument, "invalid node id")
+	}
+
 	if mr.membership.IsMember(nodeID) ||
 		mr.membership.IsLearner(nodeID) {
 		return status.Errorf(codes.AlreadyExists, "node %d, addr:%s", nodeID, url)
@@ -1394,6 +1398,10 @@ func (mr *RaftMetadataRepository) AddPeer(ctx context.Context, _ types.ClusterID
 }
 
 func (mr *RaftMetadataRepository) RemovePeer(ctx context.Context, _ types.ClusterID, nodeID types.NodeID) error {
+	if nodeID == types.InvalidNodeID {
+		return status.Error(codes.InvalidArgument, "invalid node id")
+	}
+
 	if !mr.membership.IsMember(nodeID) &&
 		!mr.membership.IsLearner(nodeID) {
 		return status.Errorf(codes.NotFound, "node %d", nodeID)

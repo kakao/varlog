@@ -11,6 +11,8 @@ import (
 
 	"github.com/pkg/errors"
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.uber.org/goleak"
 	"go.uber.org/multierr"
@@ -3071,4 +3073,176 @@ func TestMain(m *testing.M) {
 			"github.com/kakao/varlog/internal/metarepos.(*reportCollector).runPropagateCommit",
 		),
 	)
+}
+
+func TestMetadataRepository_AddPeer(t *testing.T) {
+	const clusterID = types.ClusterID(1)
+
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, server *RaftMetadataRepository, client mrpb.ManagementClient)
+	}{
+		{
+			name: "InvalidNodeID",
+			testf: func(t *testing.T, _ *RaftMetadataRepository, client mrpb.ManagementClient) {
+				_, err := client.AddPeer(context.Background(), &mrpb.AddPeerRequest{
+					ClusterID: clusterID,
+					NodeID:    types.InvalidNodeID,
+					Url:       "http://127.0.0.1:11000",
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
+			name: "AlreadyExists",
+			testf: func(t *testing.T, server *RaftMetadataRepository, client mrpb.ManagementClient) {
+				_, err := client.AddPeer(context.Background(), &mrpb.AddPeerRequest{
+					ClusterID: clusterID,
+					NodeID:    server.nodeID,
+					Url:       server.raftNode.url,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.AlreadyExists, status.Code(err))
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			portLease, err := ports.ReserveWeaklyWithRetry(10000)
+			require.NoError(t, err)
+
+			peer := fmt.Sprintf("http://127.0.0.1:%d", portLease.Base())
+			node := NewRaftMetadataRepository(
+				WithClusterID(clusterID),
+				WithRaftAddress(peer),
+				WithRPCAddress("127.0.0.1:0"),
+				WithRaftDirectory(t.TempDir()+"/raftdata"),
+			)
+			t.Cleanup(func() {
+				err := node.Close()
+				require.NoError(t, err)
+			})
+
+			node.Run()
+
+			// Wait for initialization
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				addr := node.endpointAddr.Load()
+				if !assert.NotNil(collect, addr) {
+					return
+				}
+			}, 3*time.Second, 100*time.Millisecond)
+			addr := node.endpointAddr.Load().(string)
+
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				conn, err := rpc.NewConn(context.Background(), addr)
+				assert.NoError(collect, err)
+				defer func() {
+					err := conn.Close()
+					assert.NoError(collect, err)
+				}()
+
+				healthClient := grpc_health_v1.NewHealthClient(conn.Conn)
+				_, err = healthClient.Check(context.Background(), &grpc_health_v1.HealthCheckRequest{})
+				assert.NoError(collect, err)
+			}, 3*time.Second, 100*time.Millisecond)
+
+			conn, err := rpc.NewConn(context.Background(), addr)
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				_ = conn.Close()
+				require.NoError(t, err)
+			})
+
+			client := mrpb.NewManagementClient(conn.Conn)
+			tc.testf(t, node, client)
+		})
+	}
+}
+
+func TestMetadataRepository_RemovePeer(t *testing.T) {
+	const clusterID = types.ClusterID(1)
+
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, server *RaftMetadataRepository, client mrpb.ManagementClient)
+	}{
+		{
+			name: "InvalidNodeID",
+			testf: func(t *testing.T, _ *RaftMetadataRepository, client mrpb.ManagementClient) {
+				_, err := client.RemovePeer(context.Background(), &mrpb.RemovePeerRequest{
+					ClusterID: clusterID,
+					NodeID:    types.InvalidNodeID,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
+			name: "NotFound",
+			testf: func(t *testing.T, server *RaftMetadataRepository, client mrpb.ManagementClient) {
+				_, err := client.RemovePeer(context.Background(), &mrpb.RemovePeerRequest{
+					ClusterID: clusterID,
+					NodeID:    server.nodeID + 1,
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			portLease, err := ports.ReserveWeaklyWithRetry(10000)
+			require.NoError(t, err)
+
+			peer := fmt.Sprintf("http://127.0.0.1:%d", portLease.Base())
+			node := NewRaftMetadataRepository(
+				WithClusterID(clusterID),
+				WithRaftAddress(peer),
+				WithRPCAddress("127.0.0.1:0"),
+				WithRaftDirectory(t.TempDir()+"/raftdata"),
+			)
+			t.Cleanup(func() {
+				err := node.Close()
+				require.NoError(t, err)
+			})
+
+			node.Run()
+
+			// Wait for initialization
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				addr := node.endpointAddr.Load()
+				if !assert.NotNil(collect, addr) {
+					return
+				}
+			}, 3*time.Second, 100*time.Millisecond)
+			addr := node.endpointAddr.Load().(string)
+
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				conn, err := rpc.NewConn(context.Background(), addr)
+				assert.NoError(collect, err)
+				defer func() {
+					err := conn.Close()
+					assert.NoError(collect, err)
+				}()
+
+				healthClient := grpc_health_v1.NewHealthClient(conn.Conn)
+				_, err = healthClient.Check(context.Background(), &grpc_health_v1.HealthCheckRequest{})
+				assert.NoError(collect, err)
+			}, 3*time.Second, 100*time.Millisecond)
+
+			conn, err := rpc.NewConn(context.Background(), addr)
+			require.NoError(t, err)
+			t.Cleanup(func() {
+				_ = conn.Close()
+				require.NoError(t, err)
+			})
+
+			client := mrpb.NewManagementClient(conn.Conn)
+			tc.testf(t, node, client)
+		})
+	}
 }

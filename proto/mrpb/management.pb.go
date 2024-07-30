@@ -33,7 +33,7 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // AddPeerRequest is a request message for AddPeer RPC.
 //
-// TODO: TODO: Define a new message representing a new peer, such as "Peer" or
+// TODO: Define a new message representing a new peer, such as "Peer" or
 // "PeerInfo" and use it rather than primitive-type fields.
 // See:
 // - https://protobuf.dev/programming-guides/api/#dont-include-primitive-types
@@ -458,21 +458,31 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type ManagementClient interface {
-	// AddPeer is a remote procedure to add a new node to the Raft cluster. If the
-	// node is already a member or learner, it fails and returns the gRPC status
-	// code "AlreadyExists". Users can cancel this RPC, but it doesn't guarantee
-	// that adding a new peer is not handled.
+	// AddPeer adds a new node to the Raft cluster.
 	//
-	// TODO: Check if the cluster ID is the same as the current node's. If they
-	// are not the same, return a proper gRPC status code.
+	// It takes an AddPeerRequest as an argument and checks the validity of the
+	// given Node ID. If the Node ID is invalid, it returns a gRPC status code
+	// "InvalidArgument". If the node is already a member or learner, it returns a
+	// gRPC status code "AlreadyExists". Upon successful execution, this operation
+	// returns an instance of google.protobuf.Empty.
+	//
+	// Note that users can cancel this operation, but cancellation does not
+	// guarantee that the addition of a new peer will not be handled.
+	//
+	// TODO: Implement a check for the cluster ID.
 	AddPeer(ctx context.Context, in *AddPeerRequest, opts ...grpc.CallOption) (*types.Empty, error)
-	// RemovePeer is a remote procedure to remove a node from the Raft cluster. If
-	// the node is neither a member nor a learner of the cluster, it fails and
-	// returns the gRPC status code "NotFound". Users can cancel this RPC, but it
-	// doesn't guarantee that the node will not be removed.
+	// RemovePeer removes a specific node from a Raft cluster.
 	//
-	// TODO: Check if the cluster ID is the same as the current node's. If they
-	// are not the same, return a proper gRPC status code.
+	// It takes a RemovePeerRequest as an argument and checks the validity of the
+	// Node ID. If the Node ID is invalid, it returns a gRPC status code
+	// "InvalidArgument". If the node is neither a member nor a learner in the
+	// cluster, it returns a gRPC status code "NotFound". Upon successful
+	// execution, this operation returns an instance of google.protobuf.Empty.
+	//
+	// Note that although users can cancel this operation, cancellation does not
+	// guarantee that the node will not be removed.
+	//
+	// TODO: Implement a check for the cluster ID.
 	RemovePeer(ctx context.Context, in *RemovePeerRequest, opts ...grpc.CallOption) (*types.Empty, error)
 	// GetClusterInfo is a remote procedure used to retrieve information about the
 	// Raft cluster, specifically the ClusterInfo. If the current node is not a
@@ -524,21 +534,31 @@ func (c *managementClient) GetClusterInfo(ctx context.Context, in *GetClusterInf
 
 // ManagementServer is the server API for Management service.
 type ManagementServer interface {
-	// AddPeer is a remote procedure to add a new node to the Raft cluster. If the
-	// node is already a member or learner, it fails and returns the gRPC status
-	// code "AlreadyExists". Users can cancel this RPC, but it doesn't guarantee
-	// that adding a new peer is not handled.
+	// AddPeer adds a new node to the Raft cluster.
 	//
-	// TODO: Check if the cluster ID is the same as the current node's. If they
-	// are not the same, return a proper gRPC status code.
+	// It takes an AddPeerRequest as an argument and checks the validity of the
+	// given Node ID. If the Node ID is invalid, it returns a gRPC status code
+	// "InvalidArgument". If the node is already a member or learner, it returns a
+	// gRPC status code "AlreadyExists". Upon successful execution, this operation
+	// returns an instance of google.protobuf.Empty.
+	//
+	// Note that users can cancel this operation, but cancellation does not
+	// guarantee that the addition of a new peer will not be handled.
+	//
+	// TODO: Implement a check for the cluster ID.
 	AddPeer(context.Context, *AddPeerRequest) (*types.Empty, error)
-	// RemovePeer is a remote procedure to remove a node from the Raft cluster. If
-	// the node is neither a member nor a learner of the cluster, it fails and
-	// returns the gRPC status code "NotFound". Users can cancel this RPC, but it
-	// doesn't guarantee that the node will not be removed.
+	// RemovePeer removes a specific node from a Raft cluster.
 	//
-	// TODO: Check if the cluster ID is the same as the current node's. If they
-	// are not the same, return a proper gRPC status code.
+	// It takes a RemovePeerRequest as an argument and checks the validity of the
+	// Node ID. If the Node ID is invalid, it returns a gRPC status code
+	// "InvalidArgument". If the node is neither a member nor a learner in the
+	// cluster, it returns a gRPC status code "NotFound". Upon successful
+	// execution, this operation returns an instance of google.protobuf.Empty.
+	//
+	// Note that although users can cancel this operation, cancellation does not
+	// guarantee that the node will not be removed.
+	//
+	// TODO: Implement a check for the cluster ID.
 	RemovePeer(context.Context, *RemovePeerRequest) (*types.Empty, error)
 	// GetClusterInfo is a remote procedure used to retrieve information about the
 	// Raft cluster, specifically the ClusterInfo. If the current node is not a
