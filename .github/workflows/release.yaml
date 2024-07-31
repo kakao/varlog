@@ -1,16 +1,13 @@
 name: release
-
 on:
   push:
     branches:
       - main
-
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: google-github-actions/release-please-action@v4.1.1
+      - uses: googleapis/release-please-action@v4.1.3
         with:
           token: ${{ secrets.VARLOG_GITHUB_TOKEN }}
           release-type: go
-          package-name: varlog
