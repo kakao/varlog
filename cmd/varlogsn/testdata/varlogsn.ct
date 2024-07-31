@@ -3,7 +3,7 @@ NAME:
    varlogsn - storage node
 
 USAGE:
-   varlogsn [global options] command [command options] 
+   varlogsn [global options] command [command options]
 
 VERSION:
    devel

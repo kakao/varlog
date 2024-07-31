@@ -3,7 +3,7 @@ NAME:
    metadata_repository - run metadata repository
 
 USAGE:
-   metadata_repository [global options] command [command options] 
+   metadata_repository [global options] command [command options]
 
 VERSION:
    devel

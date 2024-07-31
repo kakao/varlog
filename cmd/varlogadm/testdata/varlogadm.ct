@@ -3,7 +3,7 @@ NAME:
    varlogadm - run varlog admin server
 
 USAGE:
-   varlogadm [global options] command [command options] 
+   varlogadm [global options] command [command options]
 
 VERSION:
    devel
