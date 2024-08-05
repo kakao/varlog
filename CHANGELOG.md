@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.2](https://github.com/kakao/varlog/compare/v0.22.1...v0.22.2) (2024-08-05)
+
+
+### Bug Fixes
+
+* **metarepos:** check the NodeID for adding and removing peers ([43003d4](https://github.com/kakao/varlog/commit/43003d4a711654a6fc9751e87921bba2d4a2f78f))
+
 ## [0.22.1](https://github.com/kakao/varlog/compare/v0.22.0...v0.22.1) (2024-07-04)
 
 
