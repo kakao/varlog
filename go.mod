@@ -17,7 +17,7 @@ require (
 	github.com/smartystreets/goconvey v1.8.1
 	github.com/soheilhy/cmux v0.1.5
 	github.com/stretchr/testify v1.9.0
-	github.com/urfave/cli/v2 v2.27.3
+	github.com/urfave/cli/v2 v2.27.4
 	go.etcd.io/etcd/client/pkg/v3 v3.5.15
 	go.etcd.io/etcd/raft/v3 v3.5.15
 	go.etcd.io/etcd/server/v3 v3.5.15
