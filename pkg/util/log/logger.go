@@ -2,6 +2,7 @@ package log
 
 import (
 	"os"
+	"slices"
 	"time"
 
 	"go.uber.org/zap"
@@ -54,10 +55,10 @@ func New(opts ...Option) (*zap.Logger, error) {
 	core := zapcore.NewCore(encoder, syncer, level)
 
 	// Recommended zap.Option
-	zapOpts := append(cfg.zapOpts,
+	zapOpts := slices.Concat([]zap.Option{
 		zap.AddCaller(),
 		zap.AddStacktrace(zap.ErrorLevel),
-	)
+	}, cfg.zapOpts)
 
 	// Sampler
 	if cfg.zapSampling != nil {
