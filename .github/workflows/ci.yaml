@@ -5,7 +5,7 @@ on:
       - main
   pull_request:
 env:
-  GO_VERSION: "1.22"
+  GO_VERSION: "1.23"
   PYTHON_VERSION: 3.9
   GRPC_HEALTH_PROBE_VERSION: v0.4.13
 jobs:
