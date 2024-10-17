@@ -8,7 +8,7 @@ ARG VARLOGADM_RPC_PORT=9093
 ARG VARLOGSN_RPC_PORT=9091
 
 
-FROM alpine:3.20.2 AS tools
+FROM alpine:3.20.3 AS tools
 ARG GRPC_HEALTH_PROBE_VERSION
 ARG JQ_VERSION
 RUN wget --no-check-certificate -qO/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-linux-amd64 \
@@ -31,7 +31,7 @@ COPY . .
 RUN CGO_ENABLED=0 make build GCFLAGS=""
 
 
-FROM python:3.12 AS base-cgo
+FROM python:3.13 AS base-cgo
 ARG DEBIAN_FRONTEND
 RUN groupadd -r varlog && useradd -r -g varlog varlog --home-dir=/varlog \
     && mkdir /varlog \
@@ -41,7 +41,7 @@ USER varlog
 ENV PATH=/varlog/bin:$PATH
 
 
-FROM python:3.12-alpine AS base-noncgo
+FROM python:3.13-alpine AS base-noncgo
 RUN addgroup -S -g 1000 varlog \
     && adduser -H -S -D -h /varlog -G varlog -u 999 -s /bin/sh varlog \
     && mkdir /varlog \
