@@ -43,7 +43,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6.1.1
         with:
-          version: v1.59
+          version: v1.60.1
           skip-cache: true
           skip-pkg-cache: true
   build:
