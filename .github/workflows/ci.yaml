@@ -91,7 +91,7 @@ jobs:
         run: |
           make generate_coverage_profile
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4.5.0
+        uses: codecov/codecov-action@v4.6.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.out,./coverage.xml
