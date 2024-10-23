@@ -6,7 +6,6 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/experimental"
 
 	"github.com/kakao/varlog/pkg/util/units"
 )
@@ -32,16 +31,6 @@ var (
 			}
 			return nil
 		},
-	}
-	// GRPCServerRecvBufferPool is a flag to use the gRPC server's shared buffer pool for parsing incoming messages.
-	//
-	// See:
-	//   - https://pkg.go.dev/google.golang.org/grpc@v1.64.0/experimental#RecvBufferPool
-	GRPCServerRecvBufferPool = &cli.BoolFlag{
-		Name:     "grpc-server-recv-buffer-pool",
-		Category: CategoryGRPC,
-		EnvVars:  []string{"GRPC_SERVER_RECV_BUFFER_POOL"},
-		Usage:    "Use the gRPC server's shared buffer pool for parsing incoming messages. If not set, the buffer pool will not be used.",
 	}
 	// GRPCServerWriteBufferSize is a flag to set the gRPC server's write
 	// buffer size for a single write syscall.
@@ -136,16 +125,6 @@ var (
 			return nil
 		},
 	}
-	// GRPCClientRecvBufferPool is a flag to use the gRPC client's shared buffer pool for parsing incoming messages.
-	//
-	// See:
-	//   - https://pkg.go.dev/google.golang.org/grpc/experimental#WithRecvBufferPool
-	GRPCClientRecvBufferPool = &cli.BoolFlag{
-		Name:     "grpc-client-recv-buffer-pool",
-		Category: CategoryGRPC,
-		EnvVars:  []string{"GRPC_CLIENT_RECV_BUFFER_POOL"},
-		Usage:    "Use the gRPC client's shared buffer pool for parsing incoming messages. If not set, the buffer pool will not be used.",
-	}
 	// GRPCClientWriteBufferSize is a flag to set the gRPC client's write
 	// buffer size for a single write syscall.
 	//
@@ -216,9 +195,6 @@ func ParseGRPCServerOptionFlags(c *cli.Context) (opts []grpc.ServerOption, _ err
 		}
 		opts = append(opts, grpc.ReadBufferSize(int(readBufferSize)))
 	}
-	if c.IsSet(GRPCServerRecvBufferPool.Name) {
-		opts = append(opts, experimental.RecvBufferPool(grpc.NewSharedBufferPool()))
-	}
 	if c.IsSet(GRPCServerWriteBufferSize.Name) {
 		writeBufferSize, err := units.FromByteSizeString(c.String(GRPCServerWriteBufferSize.Name))
 		if err != nil {
@@ -258,9 +234,6 @@ func ParseGRPCDialOptionFlags(c *cli.Context) (opts []grpc.DialOption, err error
 			return nil, err
 		}
 		opts = append(opts, grpc.WithReadBufferSize(int(readBufferSize)))
-	}
-	if c.IsSet(GRPCClientRecvBufferPool.Name) {
-		opts = append(opts, experimental.WithRecvBufferPool(grpc.NewSharedBufferPool()))
 	}
 	if c.IsSet(GRPCClientWriteBufferSize.Name) {
 		writeBufferSize, err := units.FromByteSizeString(c.String(GRPCClientWriteBufferSize.Name))
