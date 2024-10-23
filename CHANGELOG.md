@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.23.0](https://github.com/kakao/varlog/compare/v0.22.1...v0.23.0) (2024-10-23)
+
+
+### Features
+
+* remove gRPC buffer pool flags ([282bcaa](https://github.com/kakao/varlog/commit/282bcaa39672c2d76166ad67cceaf8e3779fa49c))
+
+
+### Bug Fixes
+
+* **logger:** no overriding custom zap logger options ([ed416fe](https://github.com/kakao/varlog/commit/ed416fec2e7f6fac52dcc5502a780c2d038b2a5c))
+* **metarepos:** check the NodeID for adding and removing peers ([43003d4](https://github.com/kakao/varlog/commit/43003d4a711654a6fc9751e87921bba2d4a2f78f))
+
 ## [0.22.1](https://github.com/kakao/varlog/compare/v0.22.0...v0.22.1) (2024-07-04)
 
 
