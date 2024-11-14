@@ -102,7 +102,7 @@ github.com/docker/go-units
 # github.com/dustin/go-humanize v1.0.0
 ## explicit
 github.com/dustin/go-humanize
-# github.com/ebitengine/purego v0.8.0
+# github.com/ebitengine/purego v0.8.1
 ## explicit; go 1.18
 github.com/ebitengine/purego
 github.com/ebitengine/purego/internal/cgo
@@ -296,7 +296,7 @@ github.com/rogpeppe/go-internal/fmtsort
 # github.com/russross/blackfriday/v2 v2.1.0
 ## explicit
 github.com/russross/blackfriday/v2
-# github.com/shirou/gopsutil/v4 v4.24.9
+# github.com/shirou/gopsutil/v4 v4.24.10
 ## explicit; go 1.18
 github.com/shirou/gopsutil/v4/common
 github.com/shirou/gopsutil/v4/cpu
@@ -382,7 +382,7 @@ go.etcd.io/etcd/server/v3/etcdserver/api/snap/snappb
 go.etcd.io/etcd/server/v3/etcdserver/api/v2stats
 go.etcd.io/etcd/server/v3/wal
 go.etcd.io/etcd/server/v3/wal/walpb
-# go.opentelemetry.io/contrib/instrumentation/host v0.56.0
+# go.opentelemetry.io/contrib/instrumentation/host v0.57.0
 ## explicit; go 1.22
 go.opentelemetry.io/contrib/instrumentation/host
 # go.opentelemetry.io/contrib/instrumentation/runtime v0.56.0
