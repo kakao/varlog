@@ -385,7 +385,7 @@ go.etcd.io/etcd/server/v3/wal/walpb
 # go.opentelemetry.io/contrib/instrumentation/host v0.57.0
 ## explicit; go 1.22
 go.opentelemetry.io/contrib/instrumentation/host
-# go.opentelemetry.io/contrib/instrumentation/runtime v0.56.0
+# go.opentelemetry.io/contrib/instrumentation/runtime v0.57.0
 ## explicit; go 1.22
 go.opentelemetry.io/contrib/instrumentation/runtime
 go.opentelemetry.io/contrib/instrumentation/runtime/internal/deprecatedruntime
