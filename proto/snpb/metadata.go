@@ -29,15 +29,6 @@ func (snmd *StorageNodeMetadataDescriptor) GetLogStream(logStreamID types.LogStr
 	return LogStreamReplicaMetadataDescriptor{}, false
 }
 
-func (snmd StorageNodeMetadataDescriptor) FindLogStream(logStreamID types.LogStreamID) (LogStreamReplicaMetadataDescriptor, bool) {
-	for _, lsmeta := range snmd.GetLogStreamReplicas() {
-		if lsmeta.GetLogStreamID() == logStreamID {
-			return lsmeta, true
-		}
-	}
-	return LogStreamReplicaMetadataDescriptor{}, false
-}
-
 func (lsrmd *LogStreamReplicaMetadataDescriptor) Head() varlogpb.LogEntryMeta {
 	if lsrmd == nil {
 		return varlogpb.LogEntryMeta{}

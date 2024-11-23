@@ -449,7 +449,7 @@ func TestSyncLogStream(t *testing.T) {
 						if err != nil {
 							return false
 						}
-						lsmd, exist := snmd.FindLogStream(lsID)
+						lsmd, exist := snmd.GetLogStream(lsID)
 						if !exist {
 							return false
 						}
@@ -544,7 +544,6 @@ func TestSyncLogStreamWithAutoUnseal(t *testing.T) {
 		assert.True(t, ok)
 		return lsrmd.LocalHighWatermark.GLSN == types.GLSN(numLogs) &&
 			lsrmd.Status == varlogpb.LogStreamStatusRunning
-
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
@@ -706,7 +705,7 @@ func TestGCZombieLogStream(t *testing.T) {
 			meta, err = snMCL.GetMetadata(context.TODO())
 			So(err, ShouldBeNil)
 
-			_, exist := meta.FindLogStream(lsID)
+			_, exist := meta.GetLogStream(lsID)
 			So(exist, ShouldBeTrue)
 
 			Convey("Then the LogStream should removed after GCTimeout", func(ctx C) {
@@ -714,7 +713,7 @@ func TestGCZombieLogStream(t *testing.T) {
 				meta, err := snMCL.GetMetadata(context.TODO())
 				So(err, ShouldBeNil)
 
-				_, exist := meta.FindLogStream(lsID)
+				_, exist := meta.GetLogStream(lsID)
 				So(exist, ShouldBeTrue)
 
 				So(testutil.CompareWait(func() bool {
@@ -722,7 +721,7 @@ func TestGCZombieLogStream(t *testing.T) {
 					if err != nil {
 						return false
 					}
-					_, exist := meta.FindLogStream(lsID)
+					_, exist := meta.GetLogStream(lsID)
 					return !exist
 				}, gcTimeout), ShouldBeTrue)
 			})
