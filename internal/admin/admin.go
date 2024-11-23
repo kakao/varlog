@@ -811,7 +811,7 @@ func (adm *Admin) hasSealedReplica(ctx context.Context, lsdesc *varlogpb.LogStre
 			continue
 		}
 
-		lsmeta, ok := meta.FindLogStream(lsdesc.LogStreamID)
+		lsmeta, ok := meta.GetLogStream(lsdesc.LogStreamID)
 		if !ok {
 			continue
 		}
