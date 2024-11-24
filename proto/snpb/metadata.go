@@ -5,6 +5,9 @@ import (
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
+// ToStorageNodeDescriptor converts a StorageNodeMetadataDescriptor to a
+// varlogpb.StorageNodeDescriptor. It returns nil if the
+// StorageNodeMetadataDescriptor is nil.
 func (snmd *StorageNodeMetadataDescriptor) ToStorageNodeDescriptor() *varlogpb.StorageNodeDescriptor {
 	if snmd == nil {
 		return nil
@@ -19,6 +22,9 @@ func (snmd *StorageNodeMetadataDescriptor) ToStorageNodeDescriptor() *varlogpb.S
 	return snd
 }
 
+// GetLogStream retrieves a LogStreamReplicaMetadataDescriptor by its
+// LogStreamID. It returns the LogStreamReplicaMetadataDescriptor and true if
+// found, otherwise an empty descriptor and false.
 func (snmd *StorageNodeMetadataDescriptor) GetLogStream(logStreamID types.LogStreamID) (LogStreamReplicaMetadataDescriptor, bool) {
 	logStreams := snmd.GetLogStreamReplicas()
 	for i := range logStreams {
@@ -29,6 +35,10 @@ func (snmd *StorageNodeMetadataDescriptor) GetLogStream(logStreamID types.LogStr
 	return LogStreamReplicaMetadataDescriptor{}, false
 }
 
+// Head returns the varlogpb.LogEntryMeta corresponding to the local low
+// watermark of the LogStreamReplicaMetadataDescriptor. The "head" represents
+// the earliest log entry in the log stream replica. It returns an empty
+// varlogpb.LogEntryMeta if the LogStreamReplicaMetadataDescriptor is nil.
 func (lsrmd *LogStreamReplicaMetadataDescriptor) Head() varlogpb.LogEntryMeta {
 	if lsrmd == nil {
 		return varlogpb.LogEntryMeta{}
@@ -41,6 +51,10 @@ func (lsrmd *LogStreamReplicaMetadataDescriptor) Head() varlogpb.LogEntryMeta {
 	}
 }
 
+// Tail returns the varlogpb.LogEntryMeta corresponding to the local high
+// watermark of the LogStreamReplicaMetadataDescriptor. The "tail" represents
+// the latest log entry in the log stream replica. It returns an empty
+// varlogpb.LogEntryMeta if the LogStreamReplicaMetadataDescriptor is nil.
 func (lsrmd *LogStreamReplicaMetadataDescriptor) Tail() varlogpb.LogEntryMeta {
 	if lsrmd == nil {
 		return varlogpb.LogEntryMeta{}
