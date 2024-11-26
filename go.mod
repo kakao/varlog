@@ -16,7 +16,7 @@ require (
 	github.com/smartystreets/assertions v1.13.1
 	github.com/smartystreets/goconvey v1.8.1
 	github.com/soheilhy/cmux v0.1.5
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	github.com/urfave/cli/v2 v2.27.5
 	go.etcd.io/etcd/client/pkg/v3 v3.5.17
 	go.etcd.io/etcd/raft/v3 v3.5.17
