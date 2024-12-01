@@ -215,7 +215,7 @@ func (c *testLog) Subscribe(ctx context.Context, topicID types.TopicID, begin ty
 		for _, logEntry := range copiedLogEntries {
 			onNextFunc(logEntry, nil)
 		}
-		onNextFunc(varlogpb.InvalidLogEntry(), io.EOF)
+		onNextFunc(varlogpb.LogEntry{}, io.EOF)
 	}()
 
 	return func() {
@@ -319,7 +319,6 @@ func (c *testLog) PeekLogStream(ctx context.Context, tpid types.TopicID, lsid ty
 		GLSN: tail.GLSN,
 	}
 	return first, last, nil
-
 }
 
 func (c *testLog) AppendableLogStreams(tpid types.TopicID) map[types.LogStreamID]struct{} {
@@ -463,7 +462,7 @@ func newErrSubscriber(err error) *errSubscriber {
 }
 
 func (s errSubscriber) Next() (varlogpb.LogEntry, error) {
-	return varlogpb.InvalidLogEntry(), s.err
+	return varlogpb.LogEntry{}, s.err
 }
 
 func (s errSubscriber) Close() error {
@@ -496,7 +495,7 @@ func (s *subscriberImpl) Next() (varlogpb.LogEntry, error) {
 	logEntry, err := s.next()
 	if err != nil {
 		s.setErr(err)
-		return varlogpb.InvalidLogEntry(), err
+		return varlogpb.LogEntry{}, err
 	}
 	if s.cursor == s.end {
 		s.setErr(io.EOF)

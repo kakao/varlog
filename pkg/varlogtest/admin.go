@@ -82,6 +82,7 @@ func (c *testAdmin) ListStorageNodes(ctx context.Context, opts ...varlog.AdminCa
 
 	return ret, nil
 }
+
 func (c *testAdmin) GetStorageNodes(ctx context.Context, opts ...varlog.AdminCallOption) (map[types.StorageNodeID]admpb.StorageNodeMetadata, error) {
 	snms, err := c.ListStorageNodes(ctx)
 	if err != nil {
@@ -182,8 +183,7 @@ func (c *testAdmin) AddTopic(ctx context.Context, opts ...varlog.AdminCallOption
 	c.vt.topics[topicID] = topicDesc
 	c.vt.trimGLSNs[topicID] = types.InvalidGLSN
 
-	invalidLogEntry := varlogpb.InvalidLogEntry()
-	c.vt.globalLogEntries[topicID] = []*varlogpb.LogEntry{&invalidLogEntry}
+	c.vt.globalLogEntries[topicID] = []*varlogpb.LogEntry{{}}
 
 	return proto.Clone(&topicDesc).(*varlogpb.TopicDescriptor), nil
 }
@@ -294,8 +294,7 @@ func (c *testAdmin) AddLogStream(_ context.Context, topicID types.TopicID, logSt
 
 	c.vt.logStreams[logStreamID] = lsd
 
-	invalidLogEntry := varlogpb.InvalidLogEntry()
-	c.vt.localLogEntries[logStreamID] = []*varlogpb.LogEntry{&invalidLogEntry}
+	c.vt.localLogEntries[logStreamID] = []*varlogpb.LogEntry{{}}
 
 	topicDesc.LogStreams = append(topicDesc.LogStreams, logStreamID)
 	c.vt.topics[topicID] = topicDesc

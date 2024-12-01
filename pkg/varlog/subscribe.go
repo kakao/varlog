@@ -518,7 +518,7 @@ func (p *dispatcher) dispatch(_ context.Context) {
 		sentErr = sentErr || res.Error != nil
 	}
 	if !sentErr {
-		p.onNextFunc(varlogpb.InvalidLogEntry(), io.EOF)
+		p.onNextFunc(varlogpb.LogEntry{}, io.EOF)
 	}
 }
 
@@ -532,7 +532,7 @@ type invalidSubscriber struct {
 }
 
 func (s invalidSubscriber) Next() (varlogpb.LogEntry, error) {
-	return varlogpb.InvalidLogEntry(), s.err
+	return varlogpb.LogEntry{}, s.err
 }
 
 func (s invalidSubscriber) Close() error {
