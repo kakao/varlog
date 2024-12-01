@@ -18,7 +18,7 @@ type SubscribeResult struct {
 }
 
 var InvalidSubscribeResult = SubscribeResult{
-	LogEntry: varlogpb.InvalidLogEntry(),
+	LogEntry: varlogpb.LogEntry{},
 	Error:    errors.New("invalid subscribe result"),
 }
 
