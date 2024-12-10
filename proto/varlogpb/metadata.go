@@ -288,20 +288,6 @@ func (m *MetadataDescriptor) MustHaveStorageNode(id types.StorageNodeID) (*Stora
 	return m.Must().HaveStorageNode(id)
 }
 
-func (m *MetadataDescriptor) NotHaveStorageNode(id types.StorageNodeID) error {
-	if m == nil {
-		return errors.New("MetadataDescriptor is nil")
-	}
-	if snd := m.GetStorageNode(id); snd == nil {
-		return nil
-	}
-	return errors.Wrap(verrors.ErrExist, "storage node")
-}
-
-func (m *MetadataDescriptor) MustNotHaveStorageNode(id types.StorageNodeID) error {
-	return m.Must().NotHaveStorageNode(id)
-}
-
 func (m *MetadataDescriptor) InsertLogStream(ls *LogStreamDescriptor) error {
 	if m == nil || ls == nil {
 		return nil
@@ -517,20 +503,6 @@ func (m *MetadataDescriptor) HaveTopic(id types.TopicID) (*TopicDescriptor, erro
 
 func (m *MetadataDescriptor) MustHaveTopic(id types.TopicID) (*TopicDescriptor, error) {
 	return m.Must().HaveTopic(id)
-}
-
-func (m *MetadataDescriptor) NotHaveTopic(id types.TopicID) error {
-	if m == nil {
-		return errors.New("MetadataDescriptor is nil")
-	}
-	if tnd := m.GetTopic(id); tnd == nil {
-		return nil
-	}
-	return errors.Wrap(verrors.ErrExist, "storage node")
-}
-
-func (m *MetadataDescriptor) MustNotHaveTopic(id types.TopicID) error {
-	return m.Must().NotHaveTopic(id)
 }
 
 func (t *TopicDescriptor) searchLogStream(id types.LogStreamID) (int, bool) {
