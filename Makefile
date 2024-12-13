@@ -70,12 +70,12 @@ test:
 	$(PYTEST)
 
 test_coverage:
-	mkdir $(COVDATA_DIR)/unit
-	$(GO) test $(TEST_FLAGS) -cover -covermode=atomic ./... -args -test.gocoverdir=$(COVDATA_DIR)/unit
+	rm -rf $(COVDATA_DIR)/unit && mkdir $(COVDATA_DIR)/unit
+	$(GO) test $(TEST_FLAGS) -cover -coverpkg ./... -covermode=atomic ./... -args -test.gocoverdir=$(COVDATA_DIR)/unit
 	$(PYTEST) --cov=./ --cov-report=xml:$(PYTHON_COVERAGE_OUTPUT)
 
 generate_coverage_profile:
-	mkdir $(COVDATA_DIR)/merged
+	rm -rf $(COVDATA_DIR)/merged && mkdir $(COVDATA_DIR)/merged
 	$(GO) tool covdata merge -i=$(COVDATA_DIR)/unit,$(COVDATA_DIR)/ee -o $(COVDATA_DIR)/merged
 	$(GO) tool covdata textfmt -i=$(COVDATA_DIR)/merged -o $(GO_COVERAGE_OUTPUT_TMP)
 	cat $(GO_COVERAGE_OUTPUT_TMP) | grep -v "_mock.go" | grep -v ".pb.go" > $(GO_COVERAGE_OUTPUT)
@@ -88,8 +88,8 @@ generate_coverage_profile:
 # unnecessary to enter TEST_ARGS.
 TEST_ARGS :=
 test_e2e_local_coverage:
-	make build COVERFLAGS="-cover -covermode=atomic"
-	mkdir $(COVDATA_DIR)/ee
+	make build COVERFLAGS="-cover -covermode=atomic -coverpkg ./..."
+	rm -rf $(COVDATA_DIR)/ee && mkdir $(COVDATA_DIR)/ee
 	GOCOVERDIR=$(COVDATA_DIR)/ee $(GO) test $(TEST_FLAGS) ./tests/ee/... -tags=e2e $(TEST_ARGS)
 
 test_e2e_local: build
