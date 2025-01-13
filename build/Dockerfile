@@ -8,7 +8,7 @@ ARG VARLOGADM_RPC_PORT=9093
 ARG VARLOGSN_RPC_PORT=9091
 
 
-FROM alpine:3.21.0 AS tools
+FROM alpine:3.21.2 AS tools
 ARG GRPC_HEALTH_PROBE_VERSION
 ARG JQ_VERSION
 RUN wget --no-check-certificate -qO/bin/grpc_health_probe https://github.com/grpc-ecosystem/grpc-health-probe/releases/download/${GRPC_HEALTH_PROBE_VERSION}/grpc_health_probe-linux-amd64 \
