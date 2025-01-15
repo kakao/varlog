@@ -173,7 +173,12 @@ func (rs *replicationServer) replicate(ctx context.Context, requestC <-chan *rep
 
 			lse.Metrics().ReplicateServerOperations.Add(1)
 
-			err = lse.Replicate(ctx, rst.req.LLSN, rst.req.Data)
+			// NOTE: In older versions, BeginLLSN is not present. Therefore, we
+			// need to set BeginLLSN to the first value in the LLSN field.
+			if rst.req.BeginLLSN.Invalid() && len(rst.req.LLSN) > 0 {
+				rst.req.BeginLLSN = rst.req.LLSN[0]
+			}
+			err = lse.Replicate(ctx, rst.req.BeginLLSN, rst.req.Data)
 			if err != nil {
 				rst.release()
 				return

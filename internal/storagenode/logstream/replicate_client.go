@@ -26,7 +26,7 @@ type replicateClient struct {
 
 	rpcClient    snpb.ReplicatorClient
 	streamClient snpb.Replicator_ReplicateClient
-	//req          *snpb.ReplicateRequest
+	// req          *snpb.ReplicateRequest
 }
 
 // newReplicateClient creates a new client to replicate logs to backup replica.
@@ -52,7 +52,7 @@ func newReplicateClient(ctx context.Context, cfg replicateClientConfig) (*replic
 		replicateClientConfig: cfg,
 		queue:                 make(chan *replicateTask, cfg.queueCapacity),
 		runner:                runner.New("replicate client", cfg.logger),
-		//rpcConn:               rpcConn,
+		// rpcConn:               rpcConn,
 		rpcClient:    rpcClient,
 		streamClient: streamClient,
 		// NOTE: To reuse the request struct, we need to initialize the field LLSN.
@@ -135,11 +135,15 @@ func (rc *replicateClient) sendLoop(ctx context.Context) {
 func (rc *replicateClient) sendLoopInternal(_ context.Context, rt *replicateTask, req *snpb.ReplicateRequest) error {
 	// Remove maxAppendSubBatchSize, since rt already has batched data.
 	startTime := time.Now()
+	// TODO(jun): Since (snpb.ReplicateRequest).LLSN is deprecated, it will disappear soon.
 	// NOTE: We need to copy the LLSN array, since the array is reused.
 	req.LLSN = req.LLSN[0:len(rt.llsnList)]
 	copy(req.LLSN, rt.llsnList)
-	//req.LLSN = rt.llsnList
+	// req.LLSN = rt.llsnList
 	req.Data = rt.dataList
+	if len(rt.llsnList) > 0 {
+		req.BeginLLSN = rt.llsnList[0]
+	}
 	rt.release()
 	err := rc.streamClient.Send(req)
 	inflight := rc.inflight.Add(-1)
