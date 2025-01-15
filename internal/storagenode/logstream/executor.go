@@ -160,7 +160,7 @@ func NewExecutor(opts ...ExecutorOption) (lse *Executor, err error) {
 	return lse, err
 }
 
-func (lse *Executor) Replicate(ctx context.Context, llsnList []types.LLSN, dataList [][]byte) error {
+func (lse *Executor) Replicate(ctx context.Context, beginLLSN types.LLSN, dataList [][]byte) error {
 	lse.inflight.Add(1)
 	defer lse.inflight.Add(-1)
 
@@ -178,7 +178,7 @@ func (lse *Executor) Replicate(ctx context.Context, llsnList []types.LLSN, dataL
 	var preparationDuration time.Duration
 	startTime := time.Now()
 	dataBytes := int64(0)
-	batchSize := len(llsnList)
+	batchSize := len(dataList)
 	defer func() {
 		if lse.lsm == nil {
 			return
@@ -190,11 +190,11 @@ func (lse *Executor) Replicate(ctx context.Context, llsnList []types.LLSN, dataL
 		lse.lsm.ReplicatePreparationMicro.Add(preparationDuration.Microseconds())
 	}()
 
-	oldLLSN, newLLSN := llsnList[0], llsnList[batchSize-1]+1
+	oldLLSN, newLLSN := beginLLSN, beginLLSN+types.LLSN(batchSize)
 	wb := lse.stg.NewWriteBatch()
 	cwts := newListQueue()
-	for i := 0; i < len(llsnList); i++ {
-		_ = wb.Set(llsnList[i], dataList[i])
+	for i := 0; i < batchSize; i++ {
+		_ = wb.Set(beginLLSN+types.LLSN(i), dataList[i])
 		dataBytes += int64(len(dataList[i]))
 		cwts.PushFront(newCommitWaitTask(nil))
 	}
@@ -329,7 +329,7 @@ func (lse *Executor) Unseal(_ context.Context, replicas []varlogpb.LogStreamRepl
 				replica:       replicas[i],
 				rpcConn:       rpcConn,
 				queueCapacity: lse.replicateClientQueueCapacity,
-				//grpcDialOptions: lse.replicateClientGRPCOptions,
+				// grpcDialOptions: lse.replicateClientGRPCOptions,
 				lse:    lse,
 				logger: lse.logger.Named("replicate client"),
 			})
