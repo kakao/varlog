@@ -173,7 +173,7 @@ func (rs *replicationServer) replicate(ctx context.Context, requestC <-chan *rep
 
 			lse.Metrics().ReplicateServerOperations.Add(1)
 
-			err = lse.Replicate(ctx, rst.req.LLSN, rst.req.Data)
+			err = lse.Replicate(ctx, rst.req.BeginLLSN, rst.req.Data)
 			if err != nil {
 				rst.release()
 				return
