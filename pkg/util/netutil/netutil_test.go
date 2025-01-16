@@ -2,14 +2,96 @@ package netutil
 
 import (
 	"context"
+	"net"
 	"strconv"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/verrors"
 )
+
+func TestStoppableListener(t *testing.T) {
+	tcs := []struct {
+		name    string
+		addr    string
+		wantErr bool
+	}{
+		{
+			name:    "ValidAddress",
+			addr:    "127.0.0.1:0",
+			wantErr: false,
+		},
+		{
+			name:    "InvalidAddress",
+			addr:    "127.0.0.1:-1",
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			lis, err := NewStoppableListener(context.Background(), tc.addr)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, lis)
+
+			err = lis.Close()
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestStoppableListener_AcceptStopped(t *testing.T) {
+	const expireDuration = 10 * time.Millisecond
+
+	ctx, cancel := context.WithTimeout(context.Background(), expireDuration)
+	defer cancel()
+
+	lis, err := NewStoppableListener(ctx, "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		err := lis.Close()
+		require.NoError(t, err)
+	})
+
+	_, err = lis.Accept()
+	require.Equal(t, verrors.ErrStopped, err)
+}
+
+func TestStoppableListener_AcceptSucceed(t *testing.T) {
+	lis, err := NewStoppableListener(context.Background(), "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		err := lis.Close()
+		require.NoError(t, err)
+	})
+
+	addr := lis.Addr().String()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		conn, err := net.Dial("tcp", addr)
+		require.NoError(t, err)
+		err = conn.Close()
+		require.NoError(t, err)
+	}()
+
+	conn, err := lis.Accept()
+	require.NoError(t, err)
+	require.NotNil(t, conn)
+
+	err = conn.Close()
+	require.NoError(t, err)
+}
 
 func TestGetListenerAddr(t *testing.T) {
 	tests := []struct {
