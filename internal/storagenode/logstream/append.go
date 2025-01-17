@@ -9,7 +9,6 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
-	"github.com/kakao/varlog/internal/batchlet"
 	snerrors "github.com/kakao/varlog/internal/storagenode/errors"
 	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/pkg/types"
@@ -52,10 +51,8 @@ func (at *AppendTask) Release() {
 	appendTaskPool.Put(at)
 }
 
-func (at *AppendTask) ReleaseWriteWaitGroups() {
-	for i := range at.apc.wwgs {
-		at.apc.wwgs[i].release()
-	}
+func (at *AppendTask) ReleaseWriteWaitGroup() {
+	at.apc.wwg.release()
 }
 
 func (at *AppendTask) WaitForCompletion(ctx context.Context) (res []snpb.AppendResult, err error) {
@@ -118,8 +115,14 @@ func appendTaskDeferredFunc(at *AppendTask) {
 }
 
 type appendContext struct {
-	sts        []*sequenceTask
-	wwgs       []*writeWaitGroup
+	st  *sequenceTask
+	wwg *writeWaitGroup
+	// NOTE(jun): awgs represents a collection of wait groups corresponding to
+	// each log entry in the batch. While storage typically writes log entries
+	// in a batch simultaneously, the commit operation, although expected to
+	// handle all entries in a batch, is not strictly enforced to do so.
+	// Therefore, we should maintain awgs until we can guarantee batch-level
+	// atomic commits.
 	awgs       []*appendWaitGroup
 	totalBytes int64
 }
@@ -146,15 +149,7 @@ func (lse *Executor) AppendAsync(ctx context.Context, dataBatch [][]byte, append
 		return snerrors.ErrNotPrimary
 	}
 
-	_, batchletLen := batchlet.SelectLengthClass(dataBatchLen)
-	batchletCount := dataBatchLen / batchletLen
-	if dataBatchLen%batchletLen > 0 {
-		batchletCount++
-	}
-
 	appendTask.apc = appendContext{
-		sts:  make([]*sequenceTask, 0, batchletCount),
-		wwgs: make([]*writeWaitGroup, 0, batchletCount),
 		awgs: make([]*appendWaitGroup, 0, dataBatchLen),
 	}
 
@@ -173,7 +168,7 @@ func (lse *Executor) AppendAsync(ctx context.Context, dataBatch [][]byte, append
 
 	lse.prepareAppendContext(dataBatch, &appendTask.apc)
 	preparationDuration = time.Since(startTime)
-	lse.sendSequenceTasks(ctx, appendTask.apc.sts)
+	lse.sendSequenceTask(ctx, appendTask.apc.st)
 	return nil
 }
 
@@ -202,15 +197,7 @@ func (lse *Executor) Append(ctx context.Context, dataBatch [][]byte) ([]snpb.App
 	var preparationDuration time.Duration
 	dataBatchLen := len(dataBatch)
 
-	_, batchletLen := batchlet.SelectLengthClass(dataBatchLen)
-	batchletCount := dataBatchLen / batchletLen
-	if dataBatchLen%batchletLen > 0 {
-		batchletCount++
-	}
-
 	apc := appendContext{
-		sts:  make([]*sequenceTask, 0, batchletCount),
-		wwgs: make([]*writeWaitGroup, 0, batchletCount),
 		awgs: make([]*appendWaitGroup, 0, dataBatchLen),
 	}
 
@@ -231,60 +218,43 @@ func (lse *Executor) Append(ctx context.Context, dataBatch [][]byte) ([]snpb.App
 
 	lse.prepareAppendContext(dataBatch, &apc)
 	preparationDuration = time.Since(startTime)
-	lse.sendSequenceTasks(ctx, apc.sts)
+	lse.sendSequenceTask(ctx, apc.st)
 	res, err := lse.waitForCompletionOfAppends(ctx, dataBatchLen, apc.awgs)
 	if err == nil {
-		for i := range apc.wwgs {
-			apc.wwgs[i].release()
-		}
+		apc.wwg.release()
 	}
 	return res, err
 }
 
 func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext) {
-	begin, end := 0, len(dataBatch)
-	for begin < end {
-		batchletClassIdx, batchletLen := batchlet.SelectLengthClass(end - begin)
-		batchletEndIdx := begin + batchletLen
-		if batchletEndIdx > end {
-			batchletEndIdx = end
-		}
-
-		lse.prepareAppendContextInternal(dataBatch, begin, batchletEndIdx, batchletClassIdx, apc)
-		begin = batchletEndIdx
-	}
-}
-
-func (lse *Executor) prepareAppendContextInternal(dataBatch [][]byte, begin, end, batchletClassIdx int, apc *appendContext) {
 	numBackups := len(lse.primaryBackups) - 1
-	batchletData := dataBatch[begin:end]
 
 	st := newSequenceTask()
-	apc.sts = append(apc.sts, st)
+	apc.st = st
 
 	// data batch
-	st.dataBatch = batchletData
+	st.dataBatch = dataBatch
 
 	// replicate tasks
 	st.rts = newReplicateTaskSlice()
 	for i := 0; i < numBackups; i++ {
-		rt := newReplicateTask(end - begin)
+		rt := newReplicateTask(len(dataBatch))
 		rt.tpid = lse.tpid
 		rt.lsid = lse.lsid
-		rt.dataList = batchletData
+		rt.dataList = dataBatch
 		st.rts.tasks = append(st.rts.tasks, rt)
 	}
 
 	// write wait group
 	st.wwg = newWriteWaitGroup()
-	apc.wwgs = append(apc.wwgs, st.wwg)
+	apc.wwg = st.wwg
 
 	// st.dwb = lse.stg.NewWriteBatch().Deferred(batchletClassIdx)
 	st.wb = lse.stg.NewWriteBatch()
 	st.cwts = newListQueue()
-	for i := 0; i < len(batchletData); i++ {
+	for i := 0; i < len(dataBatch); i++ {
 		// st.dwb.PutData(batchletData[i])
-		logEntrySize := int64(len(batchletData[i]))
+		logEntrySize := int64(len(dataBatch[i]))
 		apc.totalBytes += logEntrySize
 		if lse.lsm != nil {
 			// TODO: Set the correct status code.
@@ -294,23 +264,12 @@ func (lse *Executor) prepareAppendContextInternal(dataBatch [][]byte, begin, end
 		st.cwts.PushFront(newCommitWaitTask(awg))
 		apc.awgs = append(apc.awgs, awg)
 	}
-	st.awgs = apc.awgs[begin:end]
+	st.awgs = apc.awgs
 }
 
-func (lse *Executor) sendSequenceTasks(ctx context.Context, sts []*sequenceTask) {
-	var err error
-	sendIdx := 0
-	for sendIdx < len(sts) {
-		err = lse.sq.send(ctx, sts[sendIdx])
-		if err != nil {
-			break
-		}
-		sendIdx++
-	}
-	for stIdx := sendIdx; stIdx < len(sts); stIdx++ {
-		st := sts[stIdx]
+func (lse *Executor) sendSequenceTask(ctx context.Context, st *sequenceTask) {
+	if err := lse.sq.send(ctx, st); err != nil {
 		st.wwg.done(err)
-		// _ = st.dwb.Close()
 		_ = st.wb.Close()
 		releaseCommitWaitTaskList(st.cwts)
 		releaseReplicateTasks(st.rts.tasks)

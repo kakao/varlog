@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/kakao/varlog/internal/batchlet"
 	"github.com/kakao/varlog/internal/storage"
 	snerrors "github.com/kakao/varlog/internal/storagenode/errors"
 	"github.com/kakao/varlog/pkg/types"
@@ -488,9 +487,15 @@ func TestExecutor_Append(t *testing.T) {
 			}
 
 			// primary
-			batchLens := make([]int, 0, len(batchlet.LengthClasses)*3+1)
+			lengthClasses := []int{
+				1 << 4,
+				1 << 6,
+				1 << 8,
+				1 << 10,
+			}
+			batchLens := make([]int, 0, len(lengthClasses)*3+1)
 			batchLens = append(batchLens, 1)
-			for _, batchletLen := range batchlet.LengthClasses {
+			for _, batchletLen := range lengthClasses {
 				batchLens = append(batchLens, batchletLen-1)
 				batchLens = append(batchLens, batchletLen)
 				batchLens = append(batchLens, batchletLen+1)
@@ -621,9 +626,15 @@ func TestExecutor_Replicate(t *testing.T) {
 				return
 			}
 
+			lengthClasses := []int{
+				1 << 4,
+				1 << 6,
+				1 << 8,
+				1 << 10,
+			}
 			// backup
 			llsn := types.MinLLSN
-			for _, batchLen := range batchlet.LengthClasses {
+			for _, batchLen := range lengthClasses {
 				dataList := TestNewBatchData(t, batchLen, 0)
 				err := lse.Replicate(context.Background(), llsn, dataList)
 				assert.NoError(t, err)
@@ -636,7 +647,7 @@ func TestExecutor_Replicate(t *testing.T) {
 				lastGLSN    = types.InvalidGLSN
 				lastVersion = types.InvalidVersion
 			)
-			for _, batchLen := range batchlet.LengthClasses {
+			for _, batchLen := range lengthClasses {
 				assert.Eventually(t, func() bool {
 					_ = lse.Commit(context.Background(), snpb.LogStreamCommitResult{
 						TopicID:             lse.tpid,
