@@ -162,7 +162,7 @@ func (ls *logServer) appendStreamSendLoop(stream snpb.LogIO_AppendServer, cq <-c
 				appendTask.Release()
 				goto RecordMetric
 			}
-			appendTask.ReleaseWriteWaitGroups()
+			appendTask.ReleaseWriteWaitGroup()
 			appendTask.Release()
 
 			rsp.Results = res
