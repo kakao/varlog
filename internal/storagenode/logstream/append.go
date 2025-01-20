@@ -249,11 +249,9 @@ func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext
 	st.wwg = newWriteWaitGroup()
 	apc.wwg = st.wwg
 
-	// st.dwb = lse.stg.NewWriteBatch().Deferred(batchletClassIdx)
 	st.wb = lse.stg.NewWriteBatch()
 	st.cwts = newListQueue()
 	for i := 0; i < len(dataBatch); i++ {
-		// st.dwb.PutData(batchletData[i])
 		logEntrySize := int64(len(dataBatch[i]))
 		apc.totalBytes += logEntrySize
 		if lse.lsm != nil {
