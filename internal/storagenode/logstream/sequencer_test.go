@@ -73,9 +73,8 @@ func testSequenceTask(stg *storage.Storage) *sequenceTask {
 	awg := newAppendWaitGroup(st.wwg)
 	st.awgs = append(st.awgs, awg)
 
-	st.wb = stg.NewWriteBatch() // .Deferred(0)
+	st.wb = stg.NewWriteBatch()
 	st.dataBatch = [][]byte{nil}
-	// st.dwb.PutData(nil)
 
 	st.cwts = newListQueue()
 	st.cwts.PushFront(newCommitWaitTask(awg))

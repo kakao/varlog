@@ -88,7 +88,6 @@ func (w *writer) writeLoopInternal(_ context.Context, st *sequenceTask) {
 	cnt := len(st.awgs)
 	defer func() {
 		st.wwg.done(err)
-		// _ = st.dwb.Close()
 		_ = st.wb.Close()
 		st.release()
 		inflight := w.inflight.Add(-1)
@@ -100,7 +99,6 @@ func (w *writer) writeLoopInternal(_ context.Context, st *sequenceTask) {
 		w.lse.lsm.WriterInflightOperations.Store(inflight)
 	}()
 
-	// err = st.dwb.Apply()
 	err = st.wb.Apply()
 	if err != nil {
 		w.logger.Error("could not apply data", zap.Error(err))
