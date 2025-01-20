@@ -118,7 +118,6 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 		if err := st.wb.Set(sq.llsn, st.dataBatch[dataIdx]); err != nil {
 			// TODO: handle error
 		}
-		// st.dwb.SetLLSN(dataIdx, sq.llsn)
 	}
 
 	operationEndTime = time.Now()
@@ -250,9 +249,8 @@ var sequenceTaskPool = sync.Pool{
 }
 
 type sequenceTask struct {
-	wwg  *writeWaitGroup
-	awgs []*appendWaitGroup
-	// dwb  *storage.DeferredWriteBatch
+	wwg       *writeWaitGroup
+	awgs      []*appendWaitGroup
 	wb        *storage.WriteBatch
 	dataBatch [][]byte
 	cwts      *listQueue
@@ -264,20 +262,9 @@ func newSequenceTask() *sequenceTask {
 	return st
 }
 
-//func newSequenceTask(wwg *writeWaitGroup, dwb *storage.DeferredWriteBatch, awgs []*appendWaitGroup, cwts *listQueue, rts []*replicateTask) *sequenceTask {
-//	st := sequenceTaskPool.Get().(*sequenceTask)
-//	st.wwg = wwg
-//	st.awgs = awgs
-//	st.dwb = dwb
-//	st.cwts = cwts
-//	st.rts = rts
-//	return st
-//}
-
 func (st *sequenceTask) release() {
 	st.wwg = nil
 	st.awgs = nil
-	// st.dwb = nil
 	st.wb = nil
 	st.dataBatch = nil
 	st.cwts = nil
