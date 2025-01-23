@@ -80,7 +80,9 @@ func TestExecutor_Closed(t *testing.T) {
 	assert.NoError(t, lse.Close())
 	assert.Equal(t, executorStateClosed, lse.esm.load())
 
-	_, err := lse.Append(context.Background(), TestNewBatchData(t, 1, 0))
+	appendTask := NewAppendTask()
+	defer appendTask.Release()
+	err := lse.AppendAsync(context.Background(), TestNewBatchData(t, 1, 0), appendTask)
 	assert.ErrorIs(t, err, verrors.ErrClosed)
 
 	err = lse.Replicate(context.Background(), types.LLSN(1), TestNewBatchData(t, 1, 0))
@@ -168,7 +170,9 @@ func TestExecutor_Sealing(t *testing.T) {
 				assert.Equal(t, varlogpb.LogStreamStatusSealing, st)
 				assert.Equal(t, executorStateSealing, lse.esm.load())
 
-				_, err = lse.Append(context.Background(), TestNewBatchData(t, 1, 0))
+				appendTask := NewAppendTask()
+				defer appendTask.Release()
+				err = lse.AppendAsync(context.Background(), TestNewBatchData(t, 1, 0), appendTask)
 				assert.ErrorIs(t, err, verrors.ErrSealed)
 			},
 		},
@@ -282,7 +286,9 @@ func TestExecutor_Sealed(t *testing.T) {
 	assert.Equal(t, varlogpb.LogStreamStatusSealed, st)
 	assert.Equal(t, executorStateSealed, lse.esm.load())
 
-	_, err = lse.Append(context.Background(), TestNewBatchData(t, 1, 0))
+	appendTask := NewAppendTask()
+	defer appendTask.Release()
+	err = lse.AppendAsync(context.Background(), TestNewBatchData(t, 1, 0), appendTask)
 	assert.ErrorIs(t, err, verrors.ErrSealed)
 
 	err = lse.Replicate(context.Background(), types.LLSN(1), TestNewBatchData(t, 1, 0))
@@ -294,7 +300,9 @@ func testUnsealInitialExecutor(t *testing.T, lse *Executor, replicas []varlogpb.
 	assert.NoError(t, err)
 	assert.Equal(t, varlogpb.LogStreamStatusSealing, lsmd.Status)
 
-	_, err = lse.Append(context.Background(), [][]byte{[]byte("hello")})
+	appendTask := NewAppendTask()
+	defer appendTask.Release()
+	err = lse.AppendAsync(context.Background(), [][]byte{[]byte("hello")}, appendTask)
 	assert.Error(t, err)
 
 	st, localHWM, err := lse.Seal(context.Background(), lastGLSN)
@@ -481,8 +489,10 @@ func TestExecutor_Append(t *testing.T) {
 
 			// backup
 			if tc.isErr {
-				_, err := lse.Append(context.Background(), [][]byte{nil})
+				appendTask := NewAppendTask()
+				err := lse.AppendAsync(context.Background(), [][]byte{nil}, appendTask)
 				assert.Error(t, err)
+				appendTask.Release()
 				return
 			}
 
@@ -508,7 +518,11 @@ func TestExecutor_Append(t *testing.T) {
 				go func() {
 					defer wg.Done()
 					batch := TestNewBatchData(t, batchLen, 0)
-					_, err := lse.Append(context.Background(), batch)
+					appendTask := NewAppendTask()
+					defer appendTask.Release()
+					err := lse.AppendAsync(context.Background(), batch, appendTask)
+					assert.NoError(t, err)
+					_, err = appendTask.WaitForCompletion(context.Background())
 					assert.NoError(t, err)
 				}()
 			}
@@ -733,7 +747,13 @@ func TestExecutor_AppendSeal(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for {
-				_, err := lse.Append(context.Background(), [][]byte{[]byte("hello")})
+				appendTask := NewAppendTask()
+				if err := lse.AppendAsync(context.Background(), [][]byte{[]byte("hello")}, appendTask); err != nil {
+					appendTask.Release()
+					break
+				}
+				_, err := appendTask.WaitForCompletion(context.Background())
+				appendTask.Release()
 				if err != nil {
 					break
 				}
@@ -805,10 +825,17 @@ func TestExecutor_AppendSeal(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for {
-				_, err := lse.Append(context.Background(), [][]byte{[]byte("hello")})
+				appendTask := NewAppendTask()
+				if err := lse.AppendAsync(context.Background(), [][]byte{[]byte("hello")}, appendTask); err != nil {
+					appendTask.Release()
+					break
+				}
+				_, err := appendTask.WaitForCompletion(context.Background())
+				appendTask.Release()
 				if err != nil {
 					break
 				}
+
 			}
 		}()
 	}
@@ -1305,7 +1332,11 @@ func TestExecutor_SubscribeWithGLSN(t *testing.T) {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					_, err := lse.Append(context.Background(), [][]byte{msg})
+					appendTask := NewAppendTask()
+					defer appendTask.Release()
+					err := lse.AppendAsync(context.Background(), [][]byte{msg}, appendTask)
+					assert.NoError(t, err)
+					_, err = appendTask.WaitForCompletion(context.Background())
 					assert.NoError(t, err)
 				}()
 			}
@@ -1353,8 +1384,12 @@ func TestExecutor_Subscribe(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < numLogs; i++ {
 			data := []byte(strconv.Itoa(int(expectedGLSN)))
-			res, err := lse.Append(context.Background(), [][]byte{data})
+			appendTask := NewAppendTask()
+			err := lse.AppendAsync(context.Background(), [][]byte{data}, appendTask)
 			assert.NoError(t, err)
+			res, err := appendTask.WaitForCompletion(context.Background())
+			assert.NoError(t, err)
+			appendTask.Release()
 			assert.Equal(t, []snpb.AppendResult{{
 				Meta: varlogpb.LogEntryMeta{
 					TopicID:     lse.tpid,
@@ -1492,7 +1527,11 @@ func TestExecutor_Subscribe(t *testing.T) {
 	go func() {
 		defer appendWg.Done()
 		data := []byte(strconv.Itoa(int(expectedGLSN)))
-		res, err := lse.Append(context.Background(), [][]byte{data})
+		appendTask := NewAppendTask()
+		defer appendTask.Release()
+		err := lse.AppendAsync(context.Background(), [][]byte{data}, appendTask)
+		assert.NoError(t, err)
+		res, err := appendTask.WaitForCompletion(context.Background())
 		assert.NoError(t, err)
 		assert.Equal(t, []snpb.AppendResult{{
 			Meta: varlogpb.LogEntryMeta{
@@ -1653,10 +1692,16 @@ func TestExecutor_Recover(t *testing.T) {
 				wg.Done()
 			}()
 			for {
-				_, err := lse.Append(context.Background(), [][]byte{[]byte("hello")})
+				appendTask := NewAppendTask()
+				err := lse.AppendAsync(context.Background(), [][]byte{[]byte("hello")}, appendTask)
 				if err == nil {
-					continue
+					_, err = appendTask.WaitForCompletion(context.Background())
+					if err == nil {
+						appendTask.Release()
+						continue
+					}
 				}
+				appendTask.Release()
 				if assert.ErrorIs(t, err, verrors.ErrClosed) {
 					return
 				}
@@ -2015,12 +2060,20 @@ func TestExecutor_SealAfterRestart(t *testing.T) {
 				wg.Add(2)
 				go func() {
 					defer wg.Done()
-					_, err := lse.Append(context.Background(), [][]byte{[]byte("foo")})
+					appendTask := NewAppendTask()
+					defer appendTask.Release()
+					err := lse.AppendAsync(context.Background(), [][]byte{[]byte("foo")}, appendTask)
+					assert.NoError(t, err)
+					_, err = appendTask.WaitForCompletion(context.Background())
 					assert.NoError(t, err)
 				}()
 				go func() {
 					defer wg.Done()
-					_, err := lse.Append(context.Background(), [][]byte{[]byte("foo")})
+					appendTask := NewAppendTask()
+					defer appendTask.Release()
+					err := lse.AppendAsync(context.Background(), [][]byte{[]byte("foo")}, appendTask)
+					assert.NoError(t, err)
+					_, err = appendTask.WaitForCompletion(context.Background())
 					assert.NoError(t, err)
 				}()
 				require.Eventually(t, func() bool {
@@ -2095,12 +2148,20 @@ func TestExecutor_SealAfterRestart(t *testing.T) {
 				wg.Add(2)
 				go func() {
 					defer wg.Done()
-					_, err := lse.Append(context.Background(), [][]byte{[]byte("foo")})
+					appendTask := NewAppendTask()
+					defer appendTask.Release()
+					err := lse.AppendAsync(context.Background(), [][]byte{[]byte("foo")}, appendTask)
+					assert.NoError(t, err)
+					_, err = appendTask.WaitForCompletion(context.Background())
 					assert.NoError(t, err)
 				}()
 				go func() {
 					defer wg.Done()
-					_, err := lse.Append(context.Background(), [][]byte{[]byte("foo")})
+					appendTask := NewAppendTask()
+					defer appendTask.Release()
+					err := lse.AppendAsync(context.Background(), [][]byte{[]byte("foo")}, appendTask)
+					assert.NoError(t, err)
+					_, err = appendTask.WaitForCompletion(context.Background())
 					assert.NoError(t, err)
 				}()
 				require.Eventually(t, func() bool {
@@ -2165,12 +2226,20 @@ func TestExecutor_SealAfterRestart(t *testing.T) {
 				wg.Add(2)
 				go func() {
 					defer wg.Done()
-					_, err := lse.Append(context.Background(), [][]byte{[]byte("foo")})
+					appendTask := NewAppendTask()
+					defer appendTask.Release()
+					err := lse.AppendAsync(context.Background(), [][]byte{[]byte("foo")}, appendTask)
+					assert.NoError(t, err)
+					_, err = appendTask.WaitForCompletion(context.Background())
 					assert.NoError(t, err)
 				}()
 				go func() {
 					defer wg.Done()
-					_, err := lse.Append(context.Background(), [][]byte{[]byte("foo")})
+					appendTask := NewAppendTask()
+					defer appendTask.Release()
+					err := lse.AppendAsync(context.Background(), [][]byte{[]byte("foo")}, appendTask)
+					assert.NoError(t, err)
+					_, err = appendTask.WaitForCompletion(context.Background())
 					assert.NoError(t, err)
 				}()
 				require.Eventually(t, func() bool {
@@ -3075,7 +3144,11 @@ func TestExecutorSyncInit(t *testing.T) {
 					wg.Add(1)
 					go func() {
 						defer wg.Done()
-						_, err := dst.Append(context.Background(), [][]byte{[]byte("foo")})
+						appendTask := NewAppendTask()
+						defer appendTask.Release()
+						err := dst.AppendAsync(context.Background(), [][]byte{[]byte("foo")}, appendTask)
+						assert.NoError(t, err)
+						_, err = appendTask.WaitForCompletion(context.Background())
 						assert.NoError(t, err)
 					}()
 				}
@@ -3483,7 +3556,11 @@ func TestExecutorSyncReplicate(t *testing.T) {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
-					_, err := dst.Append(context.Background(), [][]byte{[]byte("foo")})
+					appendTask := NewAppendTask()
+					defer appendTask.Release()
+					err := dst.AppendAsync(context.Background(), [][]byte{[]byte("foo")}, appendTask)
+					assert.NoError(t, err)
+					_, err = appendTask.WaitForCompletion(context.Background())
 					assert.NoError(t, err)
 				}()
 			}
@@ -3566,7 +3643,11 @@ func TestExecutor_Trim(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := lse.Append(context.Background(), [][]byte{[]byte("hello")})
+			appendTask := NewAppendTask()
+			defer appendTask.Release()
+			err := lse.AppendAsync(context.Background(), [][]byte{[]byte("hello")}, appendTask)
+			assert.NoError(t, err)
+			_, err = appendTask.WaitForCompletion(context.Background())
 			assert.NoError(t, err)
 		}()
 	}
