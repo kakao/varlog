@@ -172,60 +172,6 @@ func (lse *Executor) AppendAsync(ctx context.Context, dataBatch [][]byte, append
 	return nil
 }
 
-// Append appends a batch of logs to the log stream.
-func (lse *Executor) Append(ctx context.Context, dataBatch [][]byte) ([]snpb.AppendResult, error) {
-	lse.inflight.Add(1)
-	lse.inflightAppend.Add(1)
-
-	defer func() {
-		lse.inflightAppend.Add(-1)
-		lse.inflight.Add(-1)
-	}()
-
-	switch lse.esm.load() {
-	case executorStateSealing, executorStateSealed, executorStateLearning:
-		return nil, verrors.ErrSealed
-	case executorStateClosed:
-		return nil, verrors.ErrClosed
-	}
-
-	if !lse.isPrimary() {
-		return nil, snerrors.ErrNotPrimary
-	}
-
-	startTime := time.Now()
-	var preparationDuration time.Duration
-	dataBatchLen := len(dataBatch)
-
-	apc := appendContext{
-		awgs: make([]*appendWaitGroup, 0, dataBatchLen),
-	}
-
-	defer func() {
-		if lse.lsm == nil {
-			return
-		}
-		lse.lsm.AppendLogs.Add(int64(dataBatchLen))
-		lse.lsm.AppendBytes.Add(apc.totalBytes)
-		lse.lsm.AppendDuration.Add(time.Since(startTime).Microseconds())
-		lse.lsm.AppendOperations.Add(1)
-		lse.lsm.AppendPreparationMicro.Add(preparationDuration.Microseconds())
-
-		// TODO: Set a correct error code.
-		lse.lsm.LogRPCServerBatchSize.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, apc.totalBytes)
-		lse.lsm.LogRPCServerLogEntriesPerBatch.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, int64(dataBatchLen))
-	}()
-
-	lse.prepareAppendContext(dataBatch, &apc)
-	preparationDuration = time.Since(startTime)
-	lse.sendSequenceTask(ctx, apc.st)
-	res, err := lse.waitForCompletionOfAppends(ctx, dataBatchLen, apc.awgs)
-	if err == nil {
-		apc.wwg.release()
-	}
-	return res, err
-}
-
 func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext) {
 	numBackups := len(lse.primaryBackups) - 1
 
@@ -274,31 +220,4 @@ func (lse *Executor) sendSequenceTask(ctx context.Context, st *sequenceTask) {
 		releaseReplicateTaskSlice(st.rts)
 		st.release()
 	}
-}
-
-func (lse *Executor) waitForCompletionOfAppends(ctx context.Context, dataBatchLen int, awgs []*appendWaitGroup) ([]snpb.AppendResult, error) {
-	var err error
-	result := make([]snpb.AppendResult, dataBatchLen)
-	for i := range awgs {
-		cerr := awgs[i].wait(ctx)
-		if cerr != nil {
-			result[i].Error = cerr.Error()
-			if err == nil {
-				err = cerr
-			}
-			continue
-		}
-		if err != nil {
-			lse.logger.Panic("Results of batch requests of Append RPC must not be interleaved with success and failure", zap.Error(err))
-		}
-		result[i].Meta.TopicID = lse.tpid
-		result[i].Meta.LogStreamID = lse.lsid
-		result[i].Meta.GLSN = awgs[i].glsn
-		result[i].Meta.LLSN = awgs[i].llsn
-		awgs[i].release()
-	}
-	if result[0].Meta.GLSN.Invalid() {
-		return nil, err
-	}
-	return result, nil
 }
