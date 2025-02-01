@@ -636,16 +636,15 @@ func (mr *RaftMetadataRepository) applyUnregisterTopic(r *mrpb.UnregisterTopic, 
 		return verrors.ErrNotExist
 	}
 
-UnregisterLS:
 	for _, lsID := range topic.LogStreams {
 		ls := mr.storage.lookupLogStream(lsID)
 		if ls == nil {
-			continue UnregisterLS
+			continue
 		}
 
 		err := mr.storage.unregisterLogStream(lsID)
 		if err != nil {
-			continue UnregisterLS
+			continue
 		}
 
 		for _, replica := range ls.Replicas {
@@ -656,8 +655,6 @@ UnregisterLS:
 				mr.logger.Panic("could not unregister reporter", zap.String("err", err.Error()))
 			}
 		}
-
-		return nil
 	}
 
 	err := mr.storage.UnregisterTopic(r.TopicID, nodeIndex, requestIndex)
