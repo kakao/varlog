@@ -192,12 +192,11 @@ func (lse *Executor) Replicate(ctx context.Context, beginLLSN types.LLSN, dataLi
 
 	oldLLSN, newLLSN := beginLLSN, beginLLSN+types.LLSN(batchSize)
 	wb := lse.stg.NewWriteBatch()
-	cwts := newListQueue()
 	for i := 0; i < batchSize; i++ {
 		_ = wb.Set(beginLLSN+types.LLSN(i), dataList[i])
 		dataBytes += int64(len(dataList[i]))
-		cwts.PushFront(newCommitWaitTask(nil))
 	}
+	cwt := newCommitWaitTask(nil, batchSize)
 	bwt := newBackupWriteTask(wb, oldLLSN, newLLSN)
 
 	preparationDuration = time.Since(startTime)
@@ -206,17 +205,13 @@ func (lse *Executor) Replicate(ctx context.Context, beginLLSN types.LLSN, dataLi
 		lse.logger.Error("could not send backup batch write task", zap.Error(err))
 		_ = wb.Close()
 		bwt.release()
+		cwt.release()
 		return err
 	}
 
-	if err := lse.cm.sendCommitWaitTask(ctx, cwts, false /*ignoreSealing*/); err != nil {
+	if err := lse.cm.sendCommitWaitTask(ctx, cwt, false /*ignoreSealing*/); err != nil {
 		lse.logger.Error("could not send commit wait task list", zap.Error(err))
-		cwtListNode := cwts.Back()
-		for cwtListNode != nil {
-			cwt := cwtListNode.value.(*commitWaitTask)
-			cwt.release()
-			cwtListNode = cwtListNode.Prev()
-		}
+		cwt.release()
 		return err
 	}
 	return nil
@@ -749,20 +744,13 @@ func (lse *Executor) restoreCommitWaitTasks(rp storage.RecoveryPoints) error {
 		return nil
 	}
 
-	cwts := newListQueue()
 	for i := rp.UncommittedLLSN.Begin; i < rp.UncommittedLLSN.End; i++ {
-		cwts.PushFront(newCommitWaitTask(nil))
-	}
-	err := lse.cm.sendCommitWaitTask(context.Background(), cwts, true /*ignoreSealing*/)
-	if err != nil {
-		lse.logger.Error("could not send commit wait task list", zap.Error(err))
-		cwtListNode := cwts.Back()
-		for cwtListNode != nil {
-			cwt := cwtListNode.value.(*commitWaitTask)
+		cwt := newCommitWaitTask(nil, 1)
+		if err := lse.cm.sendCommitWaitTask(context.Background(), cwt, true /*ignoreSealing*/); err != nil {
+			lse.logger.Error("could not send commit wait task list", zap.Error(err))
 			cwt.release()
-			cwtListNode = cwtListNode.Prev()
+			return err
 		}
-		return err
 	}
 	return nil
 }
