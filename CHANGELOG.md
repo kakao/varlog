@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.24.0](https://github.com/kakao/varlog/compare/v0.23.0...v0.24.0) (2025-02-03)
+
+
+### Features
+
+* **testutil:** add unit tests and remove unused functions ([6bb7f1d](https://github.com/kakao/varlog/commit/6bb7f1d82aa9b0a6e0281f9e7e647a30a862a66a))
+
+
+### Bug Fixes
+
+* prevent panic on partial append failures ([b6fb11e](https://github.com/kakao/varlog/commit/b6fb11e454e02b03fdada9e38c90b5d6bb71b4f2))
+* unregistering topic translates to multiple redundant Raft proposals ([8ddf8f5](https://github.com/kakao/varlog/commit/8ddf8f51a29cfd30e7e909d5afe6c39167087643))
+
+
+### Performance Improvements
+
+* **grpc:** switch to gRPC CodecV2 for improved performance ([b0c7406](https://github.com/kakao/varlog/commit/b0c74066cdb18aaa77e2930edda71f8c2c167091))
+
 ## [0.23.0](https://github.com/kakao/varlog/compare/v0.22.1...v0.23.0) (2024-10-23)
 
 
