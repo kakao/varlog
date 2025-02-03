@@ -511,21 +511,21 @@ func TestExecutor_Append(t *testing.T) {
 				batchLens = append(batchLens, batchletLen+1)
 			}
 
-			var wg sync.WaitGroup
+			var appendTasks []*AppendTask
 			for i := 0; i < len(batchLens); i++ {
 				batchLen := batchLens[i]
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					batch := TestNewBatchData(t, batchLen, 0)
-					appendTask := NewAppendTask()
-					defer appendTask.Release()
-					err := lse.AppendAsync(context.Background(), batch, appendTask)
-					assert.NoError(t, err)
-					_, err = appendTask.WaitForCompletion(context.Background())
-					assert.NoError(t, err)
-				}()
+				batch := TestNewBatchData(t, batchLen, 0)
+				appendTask := NewAppendTask()
+				t.Logf("AppendAsync: batchLen=%d", len(batch))
+				err := lse.AppendAsync(context.Background(), batch, appendTask)
+				assert.NoError(t, err)
+				appendTasks = append(appendTasks, appendTask)
 			}
+			defer func() {
+				for _, appendTask := range appendTasks {
+					appendTask.Release()
+				}
+			}()
 
 			var (
 				lastLLSN    = types.InvalidLLSN
@@ -558,7 +558,11 @@ func TestExecutor_Append(t *testing.T) {
 					return true
 				}, time.Second, 10*time.Millisecond)
 			}
-			wg.Wait()
+
+			for _, appendTask := range appendTasks {
+				_, err := appendTask.WaitForCompletion(context.Background())
+				assert.NoError(t, err)
+			}
 
 			// FIXME: Use lse.Report to check local high watermark and low watermark
 			version, globalHWM, uncommittedBegin, _ := lse.lsc.reportCommitBase()
