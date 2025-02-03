@@ -22,7 +22,7 @@ require (
 	go.etcd.io/etcd/raft/v3 v3.5.18
 	go.etcd.io/etcd/server/v3 v3.5.18
 	go.opentelemetry.io/contrib/instrumentation/host v0.59.0
-	go.opentelemetry.io/contrib/instrumentation/runtime v0.58.0
+	go.opentelemetry.io/contrib/instrumentation/runtime v0.59.0
 	go.opentelemetry.io/otel v1.34.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.34.0
 	go.opentelemetry.io/otel/exporters/stdout/stdoutmetric v1.34.0
