@@ -629,12 +629,10 @@ func TestStorageNode_Append(t *testing.T) {
 					res, err := lc.Append(context.Background(), tpid, lsid, batch)
 					require.NoError(t, err)
 					require.Len(t, res, len(batch))
-					require.Empty(t, res[0].Error)
-					require.False(t, res[0].Meta.GLSN.Invalid())
-					require.NotEmpty(t, res[1].Error)
-					require.True(t, res[1].Meta.GLSN.Invalid())
-					require.NotEmpty(t, res[2].Error)
-					require.True(t, res[2].Meta.GLSN.Invalid())
+					for _, r := range res {
+						require.Empty(t, r.Error)
+						require.False(t, r.Meta.GLSN.Invalid())
+					}
 				}()
 
 				require.Eventually(t, func() bool {
@@ -645,7 +643,7 @@ func TestStorageNode_Append(t *testing.T) {
 							LogStreamID:         lsid,
 							CommittedLLSNOffset: 1,
 							CommittedGLSNOffset: 1,
-							CommittedGLSNLength: 1,
+							CommittedGLSNLength: uint64(len(batch)),
 							Version:             1,
 							HighWatermark:       1,
 						},
@@ -655,9 +653,9 @@ func TestStorageNode_Append(t *testing.T) {
 					return reports[0].Version == types.Version(1)
 				}, time.Second, 10*time.Millisecond)
 
-				lss, lastGLSN = TestSealLogStreamReplica(t, cid, snid, tpid, lsid, 1, addr)
+				lss, lastGLSN = TestSealLogStreamReplica(t, cid, snid, tpid, lsid, 3, addr)
 				require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
-				require.Equal(t, types.GLSN(1), lastGLSN)
+				require.Equal(t, types.GLSN(3), lastGLSN)
 
 				wg.Wait()
 			},
@@ -1712,7 +1710,7 @@ func TestStorageNode_Sync(t *testing.T) {
 
 				_, err := snmc.Sync(context.Background(), tpid, lsid, dst.snid, dst.advertise, types.InvalidGLSN /*unused*/)
 				require.Error(t, err)
-				//require.Equal(t, codes.InvalidArgument, status.Code(err))
+				// require.Equal(t, codes.InvalidArgument, status.Code(err))
 
 				//require.NoError(t, err)
 				//require.Equal(t, snpb.SyncStateStart, st.State)
@@ -1761,7 +1759,7 @@ func TestStorageNode_Sync(t *testing.T) {
 
 				_, err := snmc.Sync(context.Background(), tpid, lsid, dst.snid, dst.advertise, types.InvalidGLSN /*unused*/)
 				require.Error(t, err)
-				//require.Equal(t, codes.InvalidArgument, status.Code(err))
+				// require.Equal(t, codes.InvalidArgument, status.Code(err))
 
 				//require.NoError(t, err)
 				//require.Equal(t, snpb.SyncStateStart, st.State)
