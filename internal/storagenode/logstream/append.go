@@ -2,11 +2,9 @@ package logstream
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
 	snerrors "github.com/kakao/varlog/internal/storagenode/errors"
@@ -55,55 +53,58 @@ func (at *AppendTask) ReleaseWriteWaitGroup() {
 	at.apc.wwg.release()
 }
 
-func (at *AppendTask) WaitForCompletion(ctx context.Context) (res []snpb.AppendResult, err error) {
+func (at *AppendTask) WaitForCompletion(ctx context.Context) ([]snpb.AppendResult, error) {
 	if at.err != nil {
 		return nil, at.err
 	}
 
-	// Append batch requests can succeed partially. In case of partial failure,
-	// failed log entries must be sequential. That is, suffixes of the batch
-	// can be failed to append, whose length can be from zero to the full size.
-	hasNonContextErr := false
-	res = make([]snpb.AppendResult, at.dataBatchLen)
-	for i := range at.apc.awgs {
-		cerr := at.apc.awgs[i].wait(ctx)
-		if cerr != nil {
-			if !hasNonContextErr {
-				hasNonContextErr = !errors.Is(cerr, context.Canceled) && !errors.Is(cerr, context.DeadlineExceeded)
-			}
+	// Append batch requests will eventually only succeed or fail atomically.
+	// This is a work in progress to resolve #843.
+	cctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-			res[i].Error = cerr.Error()
-			if err == nil {
-				err = cerr
-			}
-			continue
-		}
+	var err error
+	res := make([]snpb.AppendResult, at.dataBatchLen)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
 
-		// It has not failed yet.
-		if err == nil {
+		// TODO(jun): We will reduce appendWaitGroups to a single object for
+		// each append batch.
+		for i, awg := range at.apc.awgs {
+			cerr := awg.wait(cctx)
+			if cerr != nil {
+				if err == nil {
+					err = cerr
+				}
+				if cctx.Err() == nil {
+					// Since it's neither canceled nor timed out, we can
+					// release awg.
+					at.apc.awgs[i].release()
+				}
+				continue
+			}
 			res[i].Meta.TopicID = at.lse.tpid
 			res[i].Meta.LogStreamID = at.lse.lsid
 			res[i].Meta.GLSN = at.apc.awgs[i].glsn
 			res[i].Meta.LLSN = at.apc.awgs[i].llsn
 			at.apc.awgs[i].release()
-			continue
 		}
+	}()
 
-		// It panics when the batch's success and failure are interleaved.
-		// However, context errors caused by clients can be ignored since
-		// the batch can succeed in the storage node, although clients
-		// canceled it.
-		// Once the codebase stabilizes, it is planned to be removed.
-		if hasNonContextErr {
-			at.lse.logger.Panic("Results of batch requests of Append RPC must not be interleaved with success and failure", zap.Error(err))
+	select {
+	case <-ctx.Done():
+		// NOTE: If the request is timed out or canceled by the peer, we cannot
+		// guarantee either success or failure.
+		cancel()
+		<-done
+		return nil, ctx.Err()
+	case <-done:
+		if err != nil {
+			return nil, err
 		}
-		res[i].Error = err.Error()
-		at.apc.awgs[i].release()
+		return res, nil
 	}
-	if res[0].Meta.GLSN.Invalid() {
-		return nil, err
-	}
-	return res, nil
 }
 
 func appendTaskDeferredFunc(at *AppendTask) {
