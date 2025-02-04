@@ -630,7 +630,6 @@ func TestStorageNode_Append(t *testing.T) {
 					require.NoError(t, err)
 					require.Len(t, res, len(batch))
 					for _, r := range res {
-						require.Empty(t, r.Error)
 						require.False(t, r.Meta.GLSN.Invalid())
 					}
 				}()

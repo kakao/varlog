@@ -4,7 +4,6 @@ package varlog
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -269,13 +268,7 @@ func (lsa *logStreamAppender) recvLoop() {
 
 			meta = make([]varlogpb.LogEntryMeta, len(rsp.Results))
 			for idx, res := range rsp.Results {
-				if len(res.Error) == 0 {
-					meta[idx] = res.Meta
-					continue
-				}
-				recvErr = errors.New(res.Error)
-				lsa.cancelFunc(recvErr)
-				break
+				meta[idx] = res.Meta
 			}
 			qe.meta = meta
 		}
