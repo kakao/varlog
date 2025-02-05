@@ -218,7 +218,7 @@ func TestReplicateClient(t *testing.T) {
 	assert.NoError(t, rr.err)
 	assert.Equal(t, lse.tpid, rr.req.TopicID)
 	assert.Equal(t, lse.lsid, rr.req.LogStreamID)
-	assert.Equal(t, []types.LLSN{1}, rr.req.LLSN)
+	assert.Equal(t, types.LLSN(1), rr.req.BeginLLSN)
 	assert.Len(t, rr.req.Data, 1)
 	assert.Empty(t, rr.req.Data[0])
 }
