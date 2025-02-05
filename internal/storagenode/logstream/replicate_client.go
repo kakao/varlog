@@ -8,9 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/kakao/varlog/internal/batchlet"
 	"github.com/kakao/varlog/pkg/rpc"
-	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
@@ -107,12 +105,9 @@ func (rc *replicateClient) sendLoop(ctx context.Context) {
 	defer func() {
 		_ = rc.streamClient.CloseSend()
 	}()
-	// NOTE: To reuse the request struct, we need to initialize the field LLSN.
-	maxBatchletLength := batchlet.LengthClasses[len(batchlet.LengthClasses)-1]
 	req := &snpb.ReplicateRequest{
 		TopicID:     rc.lse.tpid,
 		LogStreamID: rc.lse.lsid,
-		LLSN:        make([]types.LLSN, maxBatchletLength),
 	}
 	streamCtx := rc.streamClient.Context()
 	for {
@@ -135,11 +130,6 @@ func (rc *replicateClient) sendLoop(ctx context.Context) {
 func (rc *replicateClient) sendLoopInternal(_ context.Context, rt *replicateTask, req *snpb.ReplicateRequest) error {
 	// Remove maxAppendSubBatchSize, since rt already has batched data.
 	startTime := time.Now()
-	// TODO(jun): Since (snpb.ReplicateRequest).LLSN is deprecated, it will disappear soon.
-	// NOTE: We need to copy the LLSN array, since the array is reused.
-	req.LLSN = req.LLSN[0:len(rt.llsnList)]
-	copy(req.LLSN, rt.llsnList)
-	// req.LLSN = rt.llsnList
 	req.Data = rt.dataList
 	if len(rt.llsnList) > 0 {
 		req.BeginLLSN = rt.llsnList[0]

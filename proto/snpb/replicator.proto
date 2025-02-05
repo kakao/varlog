@@ -21,6 +21,8 @@ message ReplicateRequest {
   option (gogoproto.populate) = true;
   option (gogoproto.testgen) = true;
 
+  reserved 3;
+
   int32 topic_id = 1 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
     (gogoproto.customname) = "TopicID"
@@ -28,14 +30,6 @@ message ReplicateRequest {
   int32 log_stream_id = 2 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
-  ];
-  // LLSN is a list of local log sequence numbers where the log entries are
-  // replicated. The primary replica fills this field for backward
-  // compatibility, but it will disappear soon.
-  repeated uint64 llsn = 3 [
-    deprecated = true,
-    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
-    (gogoproto.customname) = "LLSN"
   ];
   repeated bytes data = 4;
   uint64 begin_llsn = 5 [
