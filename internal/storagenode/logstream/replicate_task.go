@@ -8,28 +8,20 @@ import (
 
 // replicateTask is a task struct including a list of LLSNs and bytes of data.
 type replicateTask struct {
-	tpid     types.TopicID
-	lsid     types.LogStreamID
-	llsnList []types.LLSN
-	dataList [][]byte
+	tpid      types.TopicID
+	lsid      types.LogStreamID
+	beginLLSN types.LLSN
+	dataList  [][]byte
 }
 
-// newReplicateTask returns a new replicateTask. The capacity of the returned
-// replicateTask's llsnList is equal to or greater than the argument size, and
-// its length is zero.
-// Since (snpb.ReplicateRequest).LLSN is deprecated, (*replicateTask).llsnList
-// will be deprecated soon. Until that, newReplicateTask simplifies the pool
-// management of replicateTask.
-func newReplicateTask(size int) *replicateTask {
-	return defaultReplicateTaskPool.get(size)
+// newReplicateTask returns a new replicateTask.
+func newReplicateTask() *replicateTask {
+	return defaultReplicateTaskPool.get()
 }
 
 // release relreases the task to the pool.
 func (rt *replicateTask) release() {
-	rt.tpid = 0
-	rt.lsid = 0
-	rt.llsnList = rt.llsnList[0:0]
-	rt.dataList = nil
+	*rt = replicateTask{}
 	defaultReplicateTaskPool.put(rt)
 }
 
@@ -47,18 +39,12 @@ type replicateTaskPool struct {
 
 var defaultReplicateTaskPool replicateTaskPool
 
-func (p *replicateTaskPool) get(size int) *replicateTask {
+func (p *replicateTaskPool) get() *replicateTask {
 	rt, ok := p.pool.Get().(*replicateTask)
-	if ok && cap(rt.llsnList) >= size {
-		rt.llsnList = rt.llsnList[0:0]
+	if ok {
 		return rt
 	}
-	if ok {
-		p.pool.Put(rt)
-	}
-	return &replicateTask{
-		llsnList: make([]types.LLSN, 0, size),
-	}
+	return &replicateTask{}
 }
 
 func (p *replicateTaskPool) put(rt *replicateTask) {
