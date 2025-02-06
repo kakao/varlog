@@ -238,7 +238,7 @@ func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext
 	// replicate tasks
 	st.rts = newReplicateTaskSlice()
 	for i := 0; i < numBackups; i++ {
-		rt := newReplicateTask(len(dataBatch))
+		rt := newReplicateTask()
 		rt.tpid = lse.tpid
 		rt.lsid = lse.lsid
 		rt.dataList = dataBatch
