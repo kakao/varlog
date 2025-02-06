@@ -128,12 +128,9 @@ func (rc *replicateClient) sendLoop(ctx context.Context) {
 
 // sendLoopInternal sends a replicate task to the backup replica.
 func (rc *replicateClient) sendLoopInternal(_ context.Context, rt *replicateTask, req *snpb.ReplicateRequest) error {
-	// Remove maxAppendSubBatchSize, since rt already has batched data.
 	startTime := time.Now()
 	req.Data = rt.dataList
-	if len(rt.llsnList) > 0 {
-		req.BeginLLSN = rt.llsnList[0]
-	}
+	req.BeginLLSN = rt.beginLLSN
 	rt.release()
 	err := rc.streamClient.Send(req)
 	inflight := rc.inflight.Add(-1)
