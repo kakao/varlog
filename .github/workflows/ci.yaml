@@ -5,7 +5,7 @@ on:
       - main
   pull_request:
 env:
-  GO_VERSION: "1.23"
+  GO_VERSION: "1.24"
   PYTHON_VERSION: 3.9
   GRPC_HEALTH_PROBE_VERSION: v0.4.13
 jobs:
@@ -41,9 +41,9 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6.3.1
+        uses: golangci/golangci-lint-action@v6.5.0
         with:
-          version: v1.60.1
+          version: v1.64.5
           skip-cache: true
           skip-pkg-cache: true
   build:
