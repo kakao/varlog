@@ -17,14 +17,14 @@ RUN wget --no-check-certificate -qO/bin/grpc_health_probe https://github.com/grp
     && chmod +x /bin/jq
 
 
-FROM golang:1.23 AS builder-cgo
+FROM golang:1.24 AS builder-cgo
 ARG DEBIAN_FRONTEND
 WORKDIR /varlog
 COPY . .
 RUN make build GCFLAGS=""
 
 
-FROM golang:1.23 AS builder-noncgo
+FROM golang:1.24 AS builder-noncgo
 ARG DEBIAN_FRONTEND
 WORKDIR /varlog
 COPY . .
