@@ -3,7 +3,6 @@ package logstream
 import (
 	"sync"
 
-	"github.com/kakao/varlog/internal/batchlet"
 	"github.com/kakao/varlog/pkg/types"
 )
 
@@ -13,28 +12,6 @@ type replicateTask struct {
 	lsid     types.LogStreamID
 	llsnList []types.LLSN
 	dataList [][]byte
-
-	poolIdx int
-}
-
-// newReplicateTaskDeprecated returns a new replicateTask.
-// The argument poolIdx should be the index of replicateTaskPools, which is returned from batchlet.SelectLengthClass.
-//
-// Deprecated: Use newReplicateTask.
-func newReplicateTaskDeprecated(poolIdx int) *replicateTask {
-	rt := replicateTaskPools[poolIdx].Get().(*replicateTask)
-	return rt
-}
-
-// releaseDeprecated releases the task to the pool.
-//
-// Deprecated: Use release.
-func (rt *replicateTask) releaseDeprecated() {
-	rt.tpid = 0
-	rt.lsid = 0
-	rt.llsnList = rt.llsnList[0:0]
-	rt.dataList = nil
-	replicateTaskPools[rt.poolIdx].Put(rt)
 }
 
 // newReplicateTask returns a new replicateTask. The capacity of the returned
@@ -81,49 +58,11 @@ func (p *replicateTaskPool) get(size int) *replicateTask {
 	}
 	return &replicateTask{
 		llsnList: make([]types.LLSN, 0, size),
-		poolIdx:  0,
 	}
 }
 
 func (p *replicateTaskPool) put(rt *replicateTask) {
 	p.pool.Put(rt)
-}
-
-// replicateTaskPools is a set of pools for replicateTask.
-// Deprecated: Use defaultReplicateTaskPool.
-var replicateTaskPools = [...]sync.Pool{
-	{
-		New: func() interface{} {
-			return &replicateTask{
-				llsnList: make([]types.LLSN, 0, batchlet.LengthClasses[0]),
-				poolIdx:  0,
-			}
-		},
-	},
-	{
-		New: func() interface{} {
-			return &replicateTask{
-				llsnList: make([]types.LLSN, 0, batchlet.LengthClasses[1]),
-				poolIdx:  1,
-			}
-		},
-	},
-	{
-		New: func() interface{} {
-			return &replicateTask{
-				llsnList: make([]types.LLSN, 0, batchlet.LengthClasses[2]),
-				poolIdx:  2,
-			}
-		},
-	},
-	{
-		New: func() interface{} {
-			return &replicateTask{
-				llsnList: make([]types.LLSN, 0, batchlet.LengthClasses[3]),
-				poolIdx:  3,
-			}
-		},
-	},
 }
 
 const defaultLengthOfReplicationTaskSlice = 3
