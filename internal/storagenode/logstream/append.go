@@ -268,7 +268,7 @@ func (lse *Executor) prepareAppendContextInternal(dataBatch [][]byte, begin, end
 	// replicate tasks
 	st.rts = newReplicateTaskSlice()
 	for i := 0; i < numBackups; i++ {
-		rt := newReplicateTask(batchletClassIdx)
+		rt := newReplicateTask(end - begin)
 		rt.tpid = lse.tpid
 		rt.lsid = lse.lsid
 		rt.dataList = batchletData

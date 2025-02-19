@@ -123,7 +123,7 @@ func TestReplicateClientRPCError(t *testing.T) {
 	rc.queue = make(chan *replicateTask, 1)
 	rc.streamClient = mockStreamClient
 
-	rt := newReplicateTask(0)
+	rt := newReplicateTaskDeprecated(0)
 	rt.tpid = lse.tpid
 	rt.lsid = lse.lsid
 	rt.llsnList = append(rt.llsnList, 1)
@@ -156,7 +156,7 @@ func TestReplicateClientDrain(t *testing.T) {
 	rc.queue = make(chan *replicateTask, numTasks)
 
 	for i := 0; i < numTasks; i++ {
-		rt := newReplicateTask(0)
+		rt := newReplicateTaskDeprecated(0)
 		err := rc.send(context.Background(), rt)
 		assert.NoError(t, err)
 	}
@@ -206,7 +206,7 @@ func TestReplicateClient(t *testing.T) {
 	assert.NoError(t, err)
 	defer rc.stop()
 
-	rt := newReplicateTask(0)
+	rt := newReplicateTaskDeprecated(0)
 	rt.tpid = lse.tpid
 	rt.lsid = lse.lsid
 	rt.llsnList = append(rt.llsnList, 1)
