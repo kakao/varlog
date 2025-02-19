@@ -171,8 +171,16 @@ func (ls *logServer) appendStreamSendLoop(stream snpb.LogIO_AppendServer, cq <-c
 		RecordMetric:
 			code := codes.OK
 			if err != nil {
-				// TODO: Set the correct status code.
 				code = codes.Internal
+				if errors.Is(err, context.DeadlineExceeded) {
+					code = codes.DeadlineExceeded
+				}
+				if errors.Is(err, context.Canceled) {
+					code = codes.Canceled
+				}
+				if errors.Is(err, verrors.ErrSealed) {
+					code = codes.FailedPrecondition
+				}
 			}
 			if !lsid.Invalid() {
 				metrics, ok := ls.sn.metrics.GetLogStreamMetrics(lsid)

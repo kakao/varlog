@@ -73,14 +73,6 @@ RETRY:
 		result.Err = nil
 
 		for idx := 0; idx < len(res); idx++ {
-			if len(res[idx].Error) > 0 {
-				if strings.Contains(res[idx].Error, "sealed") {
-					result.Err = fmt.Errorf("append: %s: %w", res[idx].Error, verrors.ErrSealed)
-				} else {
-					result.Err = fmt.Errorf("append: %s", res[idx].Error)
-				}
-				break
-			}
 			result.Metadata = append(result.Metadata, res[idx].Meta)
 		}
 		break
