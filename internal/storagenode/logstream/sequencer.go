@@ -123,7 +123,7 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 	operationEndTime = time.Now()
 
 	// NOTE: cwts and rts must be set before sending st to writer, since st can be released after sending.
-	cwts := st.cwts
+	cwt := st.cwt
 	rts := st.rts
 
 	// NOTE: If sending to the writer is ahead of sending to the committer,
@@ -140,12 +140,12 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 	// before sending tasks to writer. It prevents the above subtle case.
 	//
 	// send to committer
-	if err := sq.lse.cm.sendCommitWaitTask(ctx, cwts, false /*ignoreSealing*/); err != nil {
+	if err := sq.lse.cm.sendCommitWaitTask(ctx, cwt, false /*ignoreSealing*/); err != nil {
 		sq.logger.Error("could not send to committer", zap.Error(err))
 		sq.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
 		st.wwg.done(err)
 		_ = st.wb.Close()
-		releaseCommitWaitTaskList(cwts)
+		cwt.release()
 		releaseReplicateTasks(rts.tasks)
 		releaseReplicateTaskSlice(rts)
 		st.release()
@@ -158,7 +158,6 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 		sq.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
 		st.wwg.done(err)
 		_ = st.wb.Close()
-		releaseCommitWaitTaskList(cwts)
 		releaseReplicateTasks(rts.tasks)
 		releaseReplicateTaskSlice(rts)
 		st.release()
@@ -253,7 +252,7 @@ type sequenceTask struct {
 	awgs      []*appendWaitGroup
 	wb        *storage.WriteBatch
 	dataBatch [][]byte
-	cwts      *listQueue
+	cwt       *commitWaitTask
 	rts       *replicateTaskSlice
 }
 
@@ -267,7 +266,7 @@ func (st *sequenceTask) release() {
 	st.awgs = nil
 	st.wb = nil
 	st.dataBatch = nil
-	st.cwts = nil
+	st.cwt = nil
 	st.rts = nil
 	sequenceTaskPool.Put(st)
 }

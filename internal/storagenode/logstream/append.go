@@ -196,7 +196,6 @@ func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext
 	apc.wwg = st.wwg
 
 	st.wb = lse.stg.NewWriteBatch()
-	st.cwts = newListQueue()
 	for i := 0; i < len(dataBatch); i++ {
 		logEntrySize := int64(len(dataBatch[i]))
 		apc.totalBytes += logEntrySize
@@ -205,9 +204,9 @@ func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext
 			lse.lsm.LogRPCServerLogEntrySize.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, logEntrySize)
 		}
 		awg := newAppendWaitGroup(st.wwg)
-		st.cwts.PushFront(newCommitWaitTask(awg))
 		apc.awgs = append(apc.awgs, awg)
 	}
+	st.cwt = newCommitWaitTask(apc.awgs, len(apc.awgs))
 	st.awgs = apc.awgs
 }
 
@@ -215,7 +214,7 @@ func (lse *Executor) sendSequenceTask(ctx context.Context, st *sequenceTask) {
 	if err := lse.sq.send(ctx, st); err != nil {
 		st.wwg.done(err)
 		_ = st.wb.Close()
-		releaseCommitWaitTaskList(st.cwts)
+		st.cwt.release()
 		releaseReplicateTasks(st.rts.tasks)
 		releaseReplicateTaskSlice(st.rts)
 		st.release()

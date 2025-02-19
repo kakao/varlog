@@ -24,15 +24,13 @@ func TestCommitWaitQueue(t *testing.T) {
 	assert.Nil(t, iter.task())
 
 	assert.Panics(t, func() { _ = cwq.push(nil) })
-	assert.Panics(t, func() { _ = cwq.pushList(nil) })
-	assert.Panics(t, func() {
-		cwts := newListQueue()
-		_ = cwq.pushList(cwts)
-	})
 
 	for i := 0; i < n; i++ {
 		assert.Equal(t, i, cwq.size())
-		err := cwq.push(newCommitWaitTask(&appendWaitGroup{llsn: types.LLSN(i + 1)}))
+		cwt := newCommitWaitTask([]*appendWaitGroup{
+			{llsn: types.LLSN(i + 1)},
+		}, 1)
+		err := cwq.push(cwt)
 		assert.NoError(t, err)
 		assert.Equal(t, i+1, cwq.size())
 	}
@@ -40,14 +38,17 @@ func TestCommitWaitQueue(t *testing.T) {
 	iter = cwq.peekIterator()
 	for i := 0; i < n; i++ {
 		assert.True(t, iter.valid())
-		assert.Equal(t, types.LLSN(i+1), iter.task().awg.llsn)
+		cwt := iter.task()
+		assert.Len(t, cwt.awgs, 1)
+		assert.Equal(t, types.LLSN(i+1), cwt.awgs[0].llsn)
 		valid := iter.next()
 		assert.Equal(t, i < n-1, valid)
 	}
 
 	for i := 0; i < n; i++ {
 		cwt := cwq.pop()
-		assert.Equal(t, types.LLSN(i+1), cwt.awg.llsn)
+		assert.Len(t, cwt.awgs, 1)
+		assert.Equal(t, types.LLSN(i+1), cwt.awgs[0].llsn)
 		cwt.release()
 	}
 	assert.Nil(t, cwq.pop())
@@ -66,15 +67,13 @@ func TestCommitWaitQueueConcurrentPushPop(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < numRepeat; i++ {
-			cwts := newListQueue()
 			for j := 0; j < cwtsLength; j++ {
 				awg := newAppendWaitGroup(nil)
 				awg.llsn = types.LLSN(cwtsLength*i + j)
-				cwt := newCommitWaitTask(awg)
-				cwts.PushFront(cwt)
+				cwt := newCommitWaitTask([]*appendWaitGroup{awg}, 1)
+				err := cwq.push(cwt)
+				assert.NoError(t, err)
 			}
-			err := cwq.pushList(cwts)
-			assert.NoError(t, err)
 			runtime.Gosched()
 		}
 	}()

@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/pkg/types"
 )
 
 func TestCommitter_InvalidConfig(t *testing.T) {
@@ -49,31 +51,32 @@ func TestCommitter_ShouldNotAcceptTasksWhileNotAppendable(t *testing.T) {
 	cm.lse = lse
 	cm.logger = zap.NewNop()
 
-	// sendCommitWaitTask
-	cwts := newListQueue()
-	defer cwts.release()
-
 	lse.esm.store(executorStateAppendable)
 	assert.Panics(t, func() {
-		_ = cm.sendCommitWaitTask(context.Background(), cwts, false /*ignoreSealing*/)
+		_ = cm.sendCommitWaitTask(context.Background(), &commitWaitTask{}, false /*ignoreSealing*/)
 	})
 
 	assert.Panics(t, func() {
 		_ = cm.sendCommitWaitTask(context.Background(), nil, false /*ignoreSealing*/)
 	})
 
-	cwts.PushFront(&commitWaitTask{})
+	cwt := &commitWaitTask{
+		awgs: []*appendWaitGroup{{
+			llsn: types.MinLLSN,
+		}},
+		size: 1,
+	}
 
 	lse.esm.store(executorStateSealing)
-	err := cm.sendCommitWaitTask(context.Background(), cwts, false /*ignoreSealing*/)
+	err := cm.sendCommitWaitTask(context.Background(), cwt, false /*ignoreSealing*/)
 	assert.Error(t, err)
 
 	lse.esm.store(executorStateSealed)
-	err = cm.sendCommitWaitTask(context.Background(), cwts, false /*ignoreSealing*/)
+	err = cm.sendCommitWaitTask(context.Background(), cwt, false /*ignoreSealing*/)
 	assert.Error(t, err)
 
 	lse.esm.store(executorStateClosed)
-	err = cm.sendCommitWaitTask(context.Background(), cwts, false /*ignoreSealing*/)
+	err = cm.sendCommitWaitTask(context.Background(), cwt, false /*ignoreSealing*/)
 	assert.Error(t, err)
 
 	// sendCommitTask
@@ -141,9 +144,9 @@ func TestCommitter_DrainCommitWaitQ(t *testing.T) {
 	cm.lse = lse
 	cm.logger = zap.NewNop()
 
-	cwts := newListQueue()
-	cwts.PushFront(newCommitWaitTask(newAppendWaitGroup(newWriteWaitGroup())))
-	err := cm.sendCommitWaitTask(context.Background(), cwts, false /*ignoreSealing*/)
+	awg := newAppendWaitGroup(newWriteWaitGroup())
+	cwt := newCommitWaitTask([]*appendWaitGroup{awg}, 1)
+	err := cm.sendCommitWaitTask(context.Background(), cwt, false /*ignoreSealing*/)
 	assert.NoError(t, err)
 
 	assert.EqualValues(t, 1, cm.inflightCommitWait.Load())

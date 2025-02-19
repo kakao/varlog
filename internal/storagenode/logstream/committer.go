@@ -46,25 +46,24 @@ func newCommitter(cfg committerConfig) (*committer, error) {
 	return cm, nil
 }
 
-// sendCommitWaitTask sends a list of commit wait tasks to the committer.
+// sendCommitWaitTask sends a commit wait task to the committer.
 // The commit wait task is pushed into commitWaitQ in the committer.
-// The writer calls this method internally to push commit wait tasks to the committer.
-// If the input list of commit wait tasks are nil or empty, it panics.
-func (cm *committer) sendCommitWaitTask(_ context.Context, cwts *listQueue, ignoreSealing bool) (err error) {
-	if cwts == nil {
-		panic("log stream: committer: commit wait task list is nil")
+// The writer calls this method internally to push a commit wait task to the committer.
+// If the input commit wait task is nil or empty, it panics.
+func (cm *committer) sendCommitWaitTask(_ context.Context, cwt *commitWaitTask, ignoreSealing bool) (err error) {
+	if cwt == nil {
+		panic("log stream: committer: commit wait task is nil")
 	}
-	cnt := cwts.Len()
-	if cnt == 0 {
-		panic("log stream: committer: commit wait task list is empty")
+	if cwt.size == 0 {
+		panic("log stream: committer: commit wait task is empty")
 	}
 
-	inflight := cm.inflightCommitWait.Add(int64(cnt))
+	inflight := cm.inflightCommitWait.Add(1)
 	defer func() {
 		if err != nil {
-			inflight = cm.inflightCommitWait.Add(-int64(cnt))
+			inflight = cm.inflightCommitWait.Add(-1)
 		}
-		if ce := cm.logger.Check(zap.DebugLevel, "send committer commit wait tasks"); ce != nil {
+		if ce := cm.logger.Check(zap.DebugLevel, "send committer commit wait task"); ce != nil {
 			ce.Write(
 				zap.Int64("inflight", inflight),
 				zap.Error(err),
@@ -86,7 +85,7 @@ func (cm *committer) sendCommitWaitTask(_ context.Context, cwts *listQueue, igno
 		return err
 	}
 
-	_ = cm.commitWaitQ.pushList(cwts)
+	_ = cm.commitWaitQ.push(cwt)
 	return nil
 }
 
@@ -260,40 +259,56 @@ func (cm *committer) commitInternal(cc storage.CommitContext) (err error) {
 	}()
 
 	iter := cm.commitWaitQ.peekIterator()
-	for i := 0; i < numCommits; i++ {
-		llsn := cc.CommittedLLSNBegin + types.LLSN(i)
-		glsn := cc.CommittedGLSNBegin + types.GLSN(i)
-
-		if uncommttedLLSNBegin+types.LLSN(i) != llsn {
-			err = errors.New("log stream: committer: llsn mismatch")
-			return err
-		}
-
-		// Since the number of tasks in commitWaitQ is inspected above, cwt
-		// must exist.
+	numLogEntries := 0
+	numCWTs := 0
+	for numLogEntries < numCommits && iter.valid() {
 		cwt := iter.task()
-		cwt.awg.setGLSN(glsn)
 
-		err = cb.Set(llsn, glsn)
-		if err != nil {
-			return err
+		// invariant: numCommits-numLogEntries >= cwt.size
+		for i := range cwt.size {
+			llsn := cc.CommittedLLSNBegin + types.LLSN(numLogEntries)
+			glsn := cc.CommittedGLSNBegin + types.GLSN(numLogEntries)
+
+			if uncommttedLLSNBegin+types.LLSN(numLogEntries) != llsn {
+				err = errors.New("log stream: committer: llsn mismatch")
+				return err
+			}
+
+			if len(cwt.awgs) > 0 {
+				cwt.awgs[i].setGLSN(glsn)
+			}
+
+			err = cb.Set(llsn, glsn)
+			if err != nil {
+				return err
+			}
+
+			numLogEntries++
 		}
 
 		iter.next()
+		numCWTs++
+	}
+	if numLogEntries != numCommits {
+		cm.logger.Panic("commit corrupted: not matched between commit wait tasks and commit message",
+			zap.Int("numCommits", numCommits),
+			zap.Int("numLogEntries", numLogEntries),
+			zap.Any("uncommittedBegin", uncommittedBegin),
+			zap.Any("commitContext", cc),
+		)
 	}
 	err = cb.Apply()
 	if err != nil {
 		return err
 	}
 
-	committedTasks := make([]*commitWaitTask, 0, numCommits)
-	for i := 0; i < numCommits; i++ {
+	committedTasks := make([]*commitWaitTask, 0, numCWTs)
+	for i := 0; i < numCWTs; i++ {
 		// NOTE: This cwt should not be nil, because the size of commitWaitQ is inspected
 		// above.
 		cwt := cm.commitWaitQ.pop()
 		committedTasks = append(committedTasks, cwt)
 	}
-
 	if numCommits > 0 {
 		// only the first commit changes local low watermark
 		cm.lse.lsc.localLWM.CompareAndSwap(varlogpb.LogSequenceNumber{}, varlogpb.LogSequenceNumber{
@@ -310,12 +325,14 @@ func (cm *committer) commitInternal(cc storage.CommitContext) (err error) {
 	})
 
 	for _, cwt := range committedTasks {
-		cwt.awg.commitDone(nil)
+		for _, awg := range cwt.awgs {
+			awg.commitDone(nil)
+		}
 		cwt.release()
 	}
 
 	if len(committedTasks) > 0 {
-		cm.inflightCommitWait.Add(int64(-numCommits))
+		cm.inflightCommitWait.Add(int64(-numCWTs))
 	}
 
 	return nil
@@ -335,7 +352,9 @@ func (cm *committer) drainCommitWaitQ(cause error) {
 		if cwt == nil {
 			continue
 		}
-		cwt.awg.commitDone(cause)
+		for _, awg := range cwt.awgs {
+			awg.commitDone(cause)
+		}
 		cwt.release()
 		inflight := cm.inflightCommitWait.Add(-1)
 		if ce := cm.logger.Check(zap.DebugLevel, "discard a commit wait task"); ce != nil {
@@ -401,27 +420,28 @@ var commitWaitTaskPool = sync.Pool{
 }
 
 type commitWaitTask struct {
-	awg *appendWaitGroup
+	// In the primary replica's commit operation, the size and the length of
+	// awgs are the same. However, in the backup replica's commit operation,
+	// the length of args is 0, and size indicates the number of log entries to
+	// be committed. When committing log entries during the bootstrap's
+	// recovery process, the length of args is 0, and the size is 1.
+	//
+	// TODO(jun): Next refactoring phase, we will reduce awgs into a single
+	// awg, that is, a single awg for an append batch.
+	awgs []*appendWaitGroup
+	size int // the number of log entries to be committed
 }
 
-func newCommitWaitTask(awg *appendWaitGroup) *commitWaitTask {
-	// Backup replica has no awg.
+func newCommitWaitTask(awgs []*appendWaitGroup, size int) *commitWaitTask {
 	cwt := commitWaitTaskPool.Get().(*commitWaitTask)
-	cwt.awg = awg
+	cwt.awgs = awgs
+	cwt.size = size
 	return cwt
 }
 
 func (cwt *commitWaitTask) release() {
-	cwt.awg = nil
+	*cwt = commitWaitTask{}
 	commitWaitTaskPool.Put(cwt)
-}
-
-func releaseCommitWaitTaskList(cwts *listQueue) {
-	cnt := cwts.Len()
-	for i := 0; i < cnt; i++ {
-		cwt := cwts.RemoveBack().(*commitWaitTask)
-		cwt.release()
-	}
 }
 
 var commitTaskPool = sync.Pool{

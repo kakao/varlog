@@ -30,8 +30,9 @@ func (iter commitWaitQueueIterator) valid() bool {
 }
 
 type commitWaitQueue struct {
-	queue *listQueue
-	mu    sync.Mutex
+	queue         *listQueue
+	numLogEntries int
+	mu            sync.Mutex
 }
 
 func newCommitWaitQueue() *commitWaitQueue {
@@ -46,21 +47,8 @@ func (cwq *commitWaitQueue) push(cwt *commitWaitTask) error {
 	}
 	cwq.mu.Lock()
 	cwq.queue.PushFront(cwt)
+	cwq.numLogEntries += cwt.size
 	cwq.mu.Unlock()
-	return nil
-}
-
-func (cwq *commitWaitQueue) pushList(cwts *listQueue) error {
-	if cwts == nil {
-		panic("log stream: commit wait queue: task is nil")
-	}
-	if cwts.Len() == 0 {
-		panic("log stream: commit wait queue: empty tasks")
-	}
-	cwq.mu.Lock()
-	cwq.queue.ConcatFront(cwts)
-	cwq.mu.Unlock()
-	cwts.release()
 	return nil
 }
 
@@ -80,12 +68,14 @@ func (cwq *commitWaitQueue) pop() *commitWaitTask {
 	if elem := cwq.queue.Back(); elem == nil {
 		return nil
 	}
-	return cwq.queue.RemoveBack().(*commitWaitTask)
+	cwt := cwq.queue.RemoveBack().(*commitWaitTask)
+	cwq.numLogEntries -= cwt.size
+	return cwt
 }
 
 func (cwq *commitWaitQueue) size() int {
 	cwq.mu.Lock()
-	ret := cwq.queue.Len()
+	ret := cwq.numLogEntries
 	cwq.mu.Unlock()
 	return ret
 }
