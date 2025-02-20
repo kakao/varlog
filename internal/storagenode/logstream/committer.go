@@ -274,8 +274,9 @@ func (cm *committer) commitInternal(cc storage.CommitContext) (err error) {
 				return err
 			}
 
-			if len(cwt.awgs) > 0 {
-				cwt.awgs[i].setGLSN(glsn)
+			if i == 0 && cwt.awg != nil {
+				// set GLSN of the first log entry in the batch
+				cwt.awg.beginLSN.GLSN = glsn
 			}
 
 			err = cb.Set(llsn, glsn)
@@ -325,9 +326,7 @@ func (cm *committer) commitInternal(cc storage.CommitContext) (err error) {
 	})
 
 	for _, cwt := range committedTasks {
-		for _, awg := range cwt.awgs {
-			awg.commitDone(nil)
-		}
+		cwt.awg.commitDone(nil)
 		cwt.release()
 	}
 
@@ -352,9 +351,7 @@ func (cm *committer) drainCommitWaitQ(cause error) {
 		if cwt == nil {
 			continue
 		}
-		for _, awg := range cwt.awgs {
-			awg.commitDone(cause)
-		}
+		cwt.awg.commitDone(cause)
 		cwt.release()
 		inflight := cm.inflightCommitWait.Add(-1)
 		if ce := cm.logger.Check(zap.DebugLevel, "discard a commit wait task"); ce != nil {
@@ -420,21 +417,18 @@ var commitWaitTaskPool = sync.Pool{
 }
 
 type commitWaitTask struct {
-	// In the primary replica's commit operation, the size and the length of
-	// awgs are the same. However, in the backup replica's commit operation,
-	// the length of args is 0, and size indicates the number of log entries to
+	// In the primary replica's commit operation, the size and the awg.batchLen
+	// are the same. However, in the backup replica's commit operation,
+	// the awg.batchLen is 0, and size indicates the number of log entries to
 	// be committed. When committing log entries during the bootstrap's
-	// recovery process, the length of args is 0, and the size is 1.
-	//
-	// TODO(jun): Next refactoring phase, we will reduce awgs into a single
-	// awg, that is, a single awg for an append batch.
-	awgs []*appendWaitGroup
+	// recovery process, the awg.batchLen is 0, and the size is 1.
+	awg  *appendWaitGroup
 	size int // the number of log entries to be committed
 }
 
-func newCommitWaitTask(awgs []*appendWaitGroup, size int) *commitWaitTask {
+func newCommitWaitTask(awg *appendWaitGroup, size int) *commitWaitTask {
 	cwt := commitWaitTaskPool.Get().(*commitWaitTask)
-	cwt.awgs = awgs
+	cwt.awg = awg
 	cwt.size = size
 	return cwt
 }
