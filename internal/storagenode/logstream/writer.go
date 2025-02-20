@@ -8,6 +8,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/verrors"
 )
@@ -85,7 +86,7 @@ func (w *writer) writeLoop(ctx context.Context) {
 func (w *writer) writeLoopInternal(_ context.Context, st *sequenceTask) {
 	startTime := time.Now()
 	var err error
-	cnt := len(st.awgs)
+	cnt := len(st.dataBatch)
 	defer func() {
 		st.wwg.done(err)
 		_ = st.wb.Close()
@@ -106,7 +107,7 @@ func (w *writer) writeLoopInternal(_ context.Context, st *sequenceTask) {
 		return
 	}
 
-	oldLLSN, newLLSN := st.awgs[0].llsn, st.awgs[cnt-1].llsn+1
+	oldLLSN, newLLSN := st.awg.beginLSN.LLSN, st.awg.beginLSN.LLSN+types.LLSN(cnt)
 	if !w.lse.lsc.uncommittedLLSNEnd.CompareAndSwap(oldLLSN, newLLSN) {
 		// NOTE: If this panic occurs, it may be very subtle.
 		// We can't simply guarantee whether unexpected LLSNs are
@@ -149,9 +150,7 @@ func (w *writer) waitForDrainage(cause error, forceDrain bool) {
 		case <-timer.C:
 			timer.Reset(tick)
 		case st := <-w.queue:
-			for i := 0; i < len(st.awgs); i++ {
-				st.awgs[i].writeDone(cause)
-			}
+			st.awg.writeDone(cause)
 			st.release()
 			w.inflight.Add(-1)
 		}

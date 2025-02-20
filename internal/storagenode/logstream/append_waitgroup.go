@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 var writeWaitGroupPool = sync.Pool{
@@ -51,37 +52,41 @@ var appendWaitGroupPool = &sync.Pool{
 }
 
 type appendWaitGroup struct {
-	glsn      types.GLSN
-	llsn      types.LLSN
+	// beginLSN is the first log sequence number of the batch.
+	beginLSN varlogpb.LogSequenceNumber
+	// batchLen is the number of log entries in the batch.
+	batchLen  int
 	wwg       *writeWaitGroup
 	cwg       sync.WaitGroup
 	commitErr error
 }
 
-func newAppendWaitGroup(wwg *writeWaitGroup) *appendWaitGroup {
+func newAppendWaitGroup(wwg *writeWaitGroup, batchLen int) *appendWaitGroup {
 	awg := appendWaitGroupPool.Get().(*appendWaitGroup)
+	awg.batchLen = batchLen
 	awg.wwg = wwg
 	awg.cwg.Add(1)
 	return awg
 }
 
 func (awg *appendWaitGroup) release() {
-	awg.glsn = types.InvalidGLSN
-	awg.llsn = types.InvalidLLSN
+	awg.beginLSN.GLSN = types.InvalidGLSN
+	awg.beginLSN.LLSN = types.InvalidLLSN
+	awg.batchLen = 0
 	awg.wwg = nil
 	awg.cwg = sync.WaitGroup{}
 	appendWaitGroupPool.Put(awg)
 }
 
-func (awg *appendWaitGroup) setGLSN(glsn types.GLSN) {
+func (awg *appendWaitGroup) setBeginGLSN(glsn types.GLSN) {
 	if awg != nil {
-		awg.glsn = glsn
+		awg.beginLSN.GLSN = glsn
 	}
 }
 
-func (awg *appendWaitGroup) setLLSN(llsn types.LLSN) {
+func (awg *appendWaitGroup) setBeginLLSN(llsn types.LLSN) {
 	if awg != nil {
-		awg.llsn = llsn
+		awg.beginLSN.LLSN = llsn
 	}
 }
 
