@@ -102,9 +102,11 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 
 	startTime = time.Now()
 
-	for dataIdx := 0; dataIdx < len(st.awgs); dataIdx++ {
+	for dataIdx := 0; dataIdx < len(st.dataBatch); dataIdx++ {
 		sq.llsn++
-		st.awgs[dataIdx].setLLSN(sq.llsn)
+		if dataIdx == 0 {
+			st.awg.setBeginLLSN(sq.llsn)
+		}
 		if ce := sq.logger.Check(zap.DebugLevel, "sequencer: issued llsn"); ce != nil {
 			ce.Write(zap.Uint64("llsn", uint64(sq.llsn)))
 		}
@@ -205,10 +207,8 @@ func (sq *sequencer) waitForDrainage(cause error, forceDrain bool) {
 		case <-timer.C:
 			timer.Reset(tick)
 		case st := <-sq.queue:
-			for i := 0; i < len(st.awgs); i++ {
-				st.awgs[i].writeDone(cause)
-				st.awgs[i].commitDone(nil)
-			}
+			st.awg.writeDone(cause)
+			st.awg.commitDone(nil)
 			sq.inflight.Add(-1)
 		}
 	}
@@ -249,7 +249,7 @@ var sequenceTaskPool = sync.Pool{
 
 type sequenceTask struct {
 	wwg       *writeWaitGroup
-	awgs      []*appendWaitGroup
+	awg       *appendWaitGroup
 	wb        *storage.WriteBatch
 	dataBatch [][]byte
 	cwt       *commitWaitTask
@@ -263,7 +263,7 @@ func newSequenceTask() *sequenceTask {
 
 func (st *sequenceTask) release() {
 	st.wwg = nil
-	st.awgs = nil
+	st.awg = nil
 	st.wb = nil
 	st.dataBatch = nil
 	st.cwt = nil
