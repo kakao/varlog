@@ -69,27 +69,23 @@ func (at *AppendTask) WaitForCompletion(ctx context.Context) ([]snpb.AppendResul
 	go func() {
 		defer close(done)
 
-		// TODO(jun): We will reduce appendWaitGroups to a single object for
-		// each append batch.
-		for i, awg := range at.apc.awgs {
-			cerr := awg.wait(cctx)
-			if cerr != nil {
-				if err == nil {
-					err = cerr
-				}
-				if cctx.Err() == nil {
-					// Since it's neither canceled nor timed out, we can
-					// release awg.
-					at.apc.awgs[i].release()
-				}
-				continue
+		err = at.apc.awg.wait(cctx)
+		if err != nil {
+			if cctx.Err() == nil {
+				// Since it's neither canceled nor timed out, we can release
+				// awg.
+				at.apc.awg.release()
 			}
+			return
+		}
+
+		for i := range at.apc.awg.batchLen {
 			res[i].Meta.TopicID = at.lse.tpid
 			res[i].Meta.LogStreamID = at.lse.lsid
-			res[i].Meta.GLSN = at.apc.awgs[i].glsn
-			res[i].Meta.LLSN = at.apc.awgs[i].llsn
-			at.apc.awgs[i].release()
+			res[i].Meta.GLSN = at.apc.awg.beginLSN.GLSN + types.GLSN(i)
+			res[i].Meta.LLSN = at.apc.awg.beginLSN.LLSN + types.LLSN(i)
 		}
+		at.apc.awg.release()
 	}()
 
 	select {
@@ -116,15 +112,9 @@ func appendTaskDeferredFunc(at *AppendTask) {
 }
 
 type appendContext struct {
-	st  *sequenceTask
-	wwg *writeWaitGroup
-	// NOTE(jun): awgs represents a collection of wait groups corresponding to
-	// each log entry in the batch. While storage typically writes log entries
-	// in a batch simultaneously, the commit operation, although expected to
-	// handle all entries in a batch, is not strictly enforced to do so.
-	// Therefore, we should maintain awgs until we can guarantee batch-level
-	// atomic commits.
-	awgs       []*appendWaitGroup
+	st         *sequenceTask
+	wwg        *writeWaitGroup
+	awg        *appendWaitGroup
 	totalBytes int64
 }
 
@@ -148,10 +138,6 @@ func (lse *Executor) AppendAsync(ctx context.Context, dataBatch [][]byte, append
 	}
 	if !lse.isPrimary() {
 		return snerrors.ErrNotPrimary
-	}
-
-	appendTask.apc = appendContext{
-		awgs: make([]*appendWaitGroup, 0, dataBatchLen),
 	}
 
 	var preparationDuration time.Duration
@@ -204,11 +190,11 @@ func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext
 			// TODO: Set the correct status code.
 			lse.lsm.LogRPCServerLogEntrySize.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, logEntrySize)
 		}
-		awg := newAppendWaitGroup(st.wwg)
-		apc.awgs = append(apc.awgs, awg)
 	}
-	st.cwt = newCommitWaitTask(apc.awgs, len(apc.awgs))
-	st.awgs = apc.awgs
+	awg := newAppendWaitGroup(st.wwg, len(dataBatch))
+	apc.awg = awg
+	st.cwt = newCommitWaitTask(awg, len(dataBatch))
+	st.awg = awg
 }
 
 func (lse *Executor) sendSequenceTask(ctx context.Context, st *sequenceTask) {
