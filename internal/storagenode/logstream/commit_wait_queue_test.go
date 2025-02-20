@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 func TestCommitWaitQueue(t *testing.T) {
@@ -27,8 +28,11 @@ func TestCommitWaitQueue(t *testing.T) {
 
 	for i := 0; i < n; i++ {
 		assert.Equal(t, i, cwq.size())
-		cwt := newCommitWaitTask([]*appendWaitGroup{
-			{llsn: types.LLSN(i + 1)},
+		cwt := newCommitWaitTask(&appendWaitGroup{
+			beginLSN: varlogpb.LogSequenceNumber{
+				LLSN: types.LLSN(i + 1),
+			},
+			batchLen: 1,
 		}, 1)
 		err := cwq.push(cwt)
 		assert.NoError(t, err)
@@ -39,16 +43,16 @@ func TestCommitWaitQueue(t *testing.T) {
 	for i := 0; i < n; i++ {
 		assert.True(t, iter.valid())
 		cwt := iter.task()
-		assert.Len(t, cwt.awgs, 1)
-		assert.Equal(t, types.LLSN(i+1), cwt.awgs[0].llsn)
+		assert.Equal(t, 1, cwt.awg.batchLen)
+		assert.Equal(t, types.LLSN(i+1), cwt.awg.beginLSN.LLSN)
 		valid := iter.next()
 		assert.Equal(t, i < n-1, valid)
 	}
 
 	for i := 0; i < n; i++ {
 		cwt := cwq.pop()
-		assert.Len(t, cwt.awgs, 1)
-		assert.Equal(t, types.LLSN(i+1), cwt.awgs[0].llsn)
+		assert.Equal(t, 1, cwt.awg.batchLen)
+		assert.Equal(t, types.LLSN(i+1), cwt.awg.beginLSN.LLSN)
 		cwt.release()
 	}
 	assert.Nil(t, cwq.pop())
@@ -68,9 +72,9 @@ func TestCommitWaitQueueConcurrentPushPop(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < numRepeat; i++ {
 			for j := 0; j < cwtsLength; j++ {
-				awg := newAppendWaitGroup(nil)
-				awg.llsn = types.LLSN(cwtsLength*i + j)
-				cwt := newCommitWaitTask([]*appendWaitGroup{awg}, 1)
+				awg := newAppendWaitGroup(nil, 1)
+				awg.setBeginGLSN(types.GLSN(cwtsLength*i + j))
+				cwt := newCommitWaitTask(awg, 1)
 				err := cwq.push(cwt)
 				assert.NoError(t, err)
 			}

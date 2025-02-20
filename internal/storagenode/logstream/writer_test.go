@@ -121,7 +121,7 @@ func TestWriter_UnexpectedLLSN(t *testing.T) {
 
 	assert.Panics(t, func() {
 		st := testSequenceTask(stg)
-		st.awgs[0].llsn = uncommittedLLSNEnd - 1 // not expected LLSN
+		st.awg.setBeginLLSN(uncommittedLLSNEnd - 1) // not expected LLSN
 		wr.writeLoopInternal(context.Background(), st)
 	})
 }
