@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.25.0](https://github.com/kakao/varlog/compare/v0.24.0...v0.25.0) (2025-02-21)
+
+
+### Features
+
+* **logstream:** use beginLLSN in Replicate method ([f2edf66](https://github.com/kakao/varlog/commit/f2edf66f7ae3136ea4e6ab8d14eaf2a79ae94956))
+
 ## [0.24.0](https://github.com/kakao/varlog/compare/v0.23.0...v0.24.0) (2025-02-03)
 
 
