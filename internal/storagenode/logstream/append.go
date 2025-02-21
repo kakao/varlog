@@ -112,10 +112,9 @@ func appendTaskDeferredFunc(at *AppendTask) {
 }
 
 type appendContext struct {
-	st         *sequenceTask
-	wwg        *writeWaitGroup
-	awg        *appendWaitGroup
-	totalBytes int64
+	st  *sequenceTask
+	wwg *writeWaitGroup
+	awg *appendWaitGroup
 }
 
 func (lse *Executor) AppendAsync(ctx context.Context, dataBatch [][]byte, appendTask *AppendTask) error {
@@ -140,26 +139,27 @@ func (lse *Executor) AppendAsync(ctx context.Context, dataBatch [][]byte, append
 		return snerrors.ErrNotPrimary
 	}
 
+	var totalBytes int64
 	var preparationDuration time.Duration
 	defer func() {
 		if lse.lsm != nil {
 			lse.lsm.AppendLogs.Add(int64(dataBatchLen))
-			lse.lsm.AppendBytes.Add(appendTask.apc.totalBytes)
+			lse.lsm.AppendBytes.Add(totalBytes)
 			lse.lsm.AppendOperations.Add(1)
 			lse.lsm.AppendPreparationMicro.Add(preparationDuration.Microseconds())
 
-			lse.lsm.LogRPCServerBatchSize.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, appendTask.apc.totalBytes)
+			lse.lsm.LogRPCServerBatchSize.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, totalBytes)
 			lse.lsm.LogRPCServerLogEntriesPerBatch.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, int64(dataBatchLen))
 		}
 	}()
 
-	lse.prepareAppendContext(dataBatch, &appendTask.apc)
+	totalBytes = lse.prepareAppendContext(dataBatch, &appendTask.apc)
 	preparationDuration = time.Since(startTime)
 	lse.sendSequenceTask(ctx, appendTask.apc.st)
 	return nil
 }
 
-func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext) {
+func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext) int64 {
 	numBackups := len(lse.primaryBackups) - 1
 
 	st := newSequenceTask()
@@ -182,10 +182,11 @@ func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext
 	st.wwg = newWriteWaitGroup()
 	apc.wwg = st.wwg
 
+	var totalBytes int64
 	st.wb = lse.stg.NewWriteBatch()
 	for i := 0; i < len(dataBatch); i++ {
 		logEntrySize := int64(len(dataBatch[i]))
-		apc.totalBytes += logEntrySize
+		totalBytes += logEntrySize
 		if lse.lsm != nil {
 			// TODO: Set the correct status code.
 			lse.lsm.LogRPCServerLogEntrySize.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, logEntrySize)
@@ -195,6 +196,7 @@ func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext
 	apc.awg = awg
 	st.cwt = newCommitWaitTask(awg, len(dataBatch))
 	st.awg = awg
+	return totalBytes
 }
 
 func (lse *Executor) sendSequenceTask(ctx context.Context, st *sequenceTask) {
