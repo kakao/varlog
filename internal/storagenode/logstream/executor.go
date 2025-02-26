@@ -775,12 +775,15 @@ func (lse *Executor) FillHole(req *snpb.FillHoleRequest) error {
 		dataKeyLength = 9 // prefix(1) + LLSN(8)
 	)
 
+	lse.muAdmin.Lock()
+	defer lse.muAdmin.Unlock()
+
 	dataDB, _ := storage.GetUnderlyingDB(lse.stg)
 	batch := dataDB.NewBatch()
 	defer func() {
 		_ = batch.Close()
 	}()
-	for llsn := req.BeginLLSN; llsn < req.EndLLSN; llsn++ {
+	for llsn := req.FirstLLSN; llsn <= req.LastLLSN; llsn++ {
 		dk := make([]byte, dataKeyLength)
 		dk[0] = dataKeyPrefix
 		binary.BigEndian.PutUint64(dk[1:], uint64(llsn))
@@ -791,10 +794,32 @@ func (lse *Executor) FillHole(req *snpb.FillHoleRequest) error {
 	if err := batch.Commit(pebble.Sync); err != nil {
 		return err
 	}
+
+	rp, err := lse.stg.ReadRecoveryPoints()
+	if err != nil {
+		return err
+	}
+
+	if cc := rp.LastCommitContext; cc != nil {
+		uncommittedBegin := varlogpb.LogSequenceNumber{
+			LLSN: rp.CommittedLogEntry.Last.LLSN + 1,
+			GLSN: rp.CommittedLogEntry.Last.GLSN + 1,
+		}
+		lse.lsc.uncommittedLLSNEnd.Store(uncommittedBegin.LLSN)
+		lse.lsc.storeReportCommitBase(cc.Version, cc.HighWatermark, uncommittedBegin, false)
+	}
+
+	lse.logger.Info("fill hole",
+		zap.String("request", req.String()),
+	)
+
 	return nil
 }
 
 func (lse *Executor) GetLogEntryRange() (*snpb.GetLogEntryRangeResponse, error) {
+	lse.muAdmin.Lock()
+	defer lse.muAdmin.Unlock()
+
 	const (
 		dataKeyPrefix         = byte(0x40)
 		dataKeySentinelPrefix = byte(0x41)

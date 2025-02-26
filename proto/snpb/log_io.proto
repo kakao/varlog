@@ -95,13 +95,13 @@ message FillHoleRequest {
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
     (gogoproto.customname) = "LogStreamID"
   ];
-  uint64 begin_llsn = 3 [
+  uint64 first_llsn = 3 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
-    (gogoproto.customname) = "BeginLLSN"
+    (gogoproto.customname) = "FirstLLSN"
   ];
-  uint64 end_llsn = 4 [
+  uint64 last_llsn = 4 [
     (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
-    (gogoproto.customname) = "EndLLSN"
+    (gogoproto.customname) = "LastLLSN"
   ];
 }
 message FillHoleResponse {}

@@ -8,6 +8,7 @@ import (
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"go.uber.org/multierr"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -201,6 +202,7 @@ func (ls *logServer) appendStreamSendLoop(stream snpb.LogIO_AppendServer, cq <-c
 				}
 			}
 			if err != nil {
+				ls.sn.logger.Error("append error", zap.Any("lsid", lsid), zap.Error(err))
 				return err
 			}
 		}
