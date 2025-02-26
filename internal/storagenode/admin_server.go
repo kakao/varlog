@@ -4,7 +4,6 @@ import (
 	"context"
 
 	pbtypes "github.com/gogo/protobuf/types"
-	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -85,7 +84,6 @@ func (as *adminServer) Seal(ctx context.Context, req *snpb.SealRequest) (*snpb.S
 		default:
 			code = status.FromContextError(err).Code()
 		}
-		as.sn.logger.Error("could not seal", zap.Any("code", code.String()), zap.Error(err))
 		return nil, status.Error(code, err.Error())
 	}
 	return &snpb.SealResponse{
@@ -110,7 +108,6 @@ func (as *adminServer) Unseal(ctx context.Context, req *snpb.UnsealRequest) (*pb
 		default:
 			code = status.FromContextError(err).Code()
 		}
-		as.sn.logger.Error("could not unseal", zap.Any("code", code.String()), zap.Error(err))
 		return nil, status.Error(code, err.Error())
 	}
 	return &pbtypes.Empty{}, nil
