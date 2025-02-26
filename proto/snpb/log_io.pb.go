@@ -192,6 +192,273 @@ func (m *AppendResponse) GetResults() []AppendResult {
 	return nil
 }
 
+type GetLogEntryRangeRequest struct {
+	TopicID     github_com_kakao_varlog_pkg_types.TopicID     `protobuf:"varint,1,opt,name=topic_id,json=topicId,proto3,casttype=github.com/kakao/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+	LogStreamID github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+}
+
+func (m *GetLogEntryRangeRequest) Reset()         { *m = GetLogEntryRangeRequest{} }
+func (m *GetLogEntryRangeRequest) String() string { return proto.CompactTextString(m) }
+func (*GetLogEntryRangeRequest) ProtoMessage()    {}
+func (*GetLogEntryRangeRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_7692726f23e518ee, []int{3}
+}
+func (m *GetLogEntryRangeRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetLogEntryRangeRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetLogEntryRangeRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetLogEntryRangeRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetLogEntryRangeRequest.Merge(m, src)
+}
+func (m *GetLogEntryRangeRequest) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *GetLogEntryRangeRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetLogEntryRangeRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetLogEntryRangeRequest proto.InternalMessageInfo
+
+func (m *GetLogEntryRangeRequest) GetTopicID() github_com_kakao_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
+func (m *GetLogEntryRangeRequest) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
+	if m != nil {
+		return m.LogStreamID
+	}
+	return 0
+}
+
+type GetLogEntryRangeResponse struct {
+	// commit context
+	Version            github_com_kakao_varlog_pkg_types.Version `protobuf:"varint,5,opt,name=version,proto3,casttype=github.com/kakao/varlog/pkg/types.Version" json:"version,omitempty"`
+	HighWatermark      github_com_kakao_varlog_pkg_types.GLSN    `protobuf:"varint,6,opt,name=high_watermark,json=highWatermark,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"high_watermark,omitempty"`
+	CommittedGLSNBegin github_com_kakao_varlog_pkg_types.GLSN    `protobuf:"varint,7,opt,name=committed_glsn_begin,json=committedGlsnBegin,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"committed_glsn_begin,omitempty"`
+	CommittedGLSNEnd   github_com_kakao_varlog_pkg_types.GLSN    `protobuf:"varint,8,opt,name=committed_glsn_end,json=committedGlsnEnd,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"committed_glsn_end,omitempty"`
+	CommittedLLSNBegin github_com_kakao_varlog_pkg_types.LLSN    `protobuf:"varint,9,opt,name=committed_llsn_begin,json=committedLlsnBegin,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"committed_llsn_begin,omitempty"`
+	// data
+	DataFirst varlogpb.LogSequenceNumber `protobuf:"bytes,1,opt,name=data_first,json=dataFirst,proto3" json:"data_first"`
+	DataLast  varlogpb.LogSequenceNumber `protobuf:"bytes,2,opt,name=data_last,json=dataLast,proto3" json:"data_last"`
+	// commit
+	CommitFirst varlogpb.LogSequenceNumber `protobuf:"bytes,3,opt,name=commit_first,json=commitFirst,proto3" json:"commit_first"`
+	CommitLast  varlogpb.LogSequenceNumber `protobuf:"bytes,4,opt,name=commit_last,json=commitLast,proto3" json:"commit_last"`
+}
+
+func (m *GetLogEntryRangeResponse) Reset()         { *m = GetLogEntryRangeResponse{} }
+func (m *GetLogEntryRangeResponse) String() string { return proto.CompactTextString(m) }
+func (*GetLogEntryRangeResponse) ProtoMessage()    {}
+func (*GetLogEntryRangeResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_7692726f23e518ee, []int{4}
+}
+func (m *GetLogEntryRangeResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetLogEntryRangeResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetLogEntryRangeResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetLogEntryRangeResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetLogEntryRangeResponse.Merge(m, src)
+}
+func (m *GetLogEntryRangeResponse) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *GetLogEntryRangeResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetLogEntryRangeResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetLogEntryRangeResponse proto.InternalMessageInfo
+
+func (m *GetLogEntryRangeResponse) GetVersion() github_com_kakao_varlog_pkg_types.Version {
+	if m != nil {
+		return m.Version
+	}
+	return 0
+}
+
+func (m *GetLogEntryRangeResponse) GetHighWatermark() github_com_kakao_varlog_pkg_types.GLSN {
+	if m != nil {
+		return m.HighWatermark
+	}
+	return 0
+}
+
+func (m *GetLogEntryRangeResponse) GetCommittedGLSNBegin() github_com_kakao_varlog_pkg_types.GLSN {
+	if m != nil {
+		return m.CommittedGLSNBegin
+	}
+	return 0
+}
+
+func (m *GetLogEntryRangeResponse) GetCommittedGLSNEnd() github_com_kakao_varlog_pkg_types.GLSN {
+	if m != nil {
+		return m.CommittedGLSNEnd
+	}
+	return 0
+}
+
+func (m *GetLogEntryRangeResponse) GetCommittedLLSNBegin() github_com_kakao_varlog_pkg_types.LLSN {
+	if m != nil {
+		return m.CommittedLLSNBegin
+	}
+	return 0
+}
+
+func (m *GetLogEntryRangeResponse) GetDataFirst() varlogpb.LogSequenceNumber {
+	if m != nil {
+		return m.DataFirst
+	}
+	return varlogpb.LogSequenceNumber{}
+}
+
+func (m *GetLogEntryRangeResponse) GetDataLast() varlogpb.LogSequenceNumber {
+	if m != nil {
+		return m.DataLast
+	}
+	return varlogpb.LogSequenceNumber{}
+}
+
+func (m *GetLogEntryRangeResponse) GetCommitFirst() varlogpb.LogSequenceNumber {
+	if m != nil {
+		return m.CommitFirst
+	}
+	return varlogpb.LogSequenceNumber{}
+}
+
+func (m *GetLogEntryRangeResponse) GetCommitLast() varlogpb.LogSequenceNumber {
+	if m != nil {
+		return m.CommitLast
+	}
+	return varlogpb.LogSequenceNumber{}
+}
+
+type FillHoleRequest struct {
+	TopicID     github_com_kakao_varlog_pkg_types.TopicID     `protobuf:"varint,1,opt,name=topic_id,json=topicId,proto3,casttype=github.com/kakao/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+	LogStreamID github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+	BeginLLSN   github_com_kakao_varlog_pkg_types.LLSN        `protobuf:"varint,3,opt,name=begin_llsn,json=beginLlsn,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"begin_llsn,omitempty"`
+	EndLLSN     github_com_kakao_varlog_pkg_types.LLSN        `protobuf:"varint,4,opt,name=end_llsn,json=endLlsn,proto3,casttype=github.com/kakao/varlog/pkg/types.LLSN" json:"end_llsn,omitempty"`
+}
+
+func (m *FillHoleRequest) Reset()         { *m = FillHoleRequest{} }
+func (m *FillHoleRequest) String() string { return proto.CompactTextString(m) }
+func (*FillHoleRequest) ProtoMessage()    {}
+func (*FillHoleRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_7692726f23e518ee, []int{5}
+}
+func (m *FillHoleRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *FillHoleRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_FillHoleRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *FillHoleRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_FillHoleRequest.Merge(m, src)
+}
+func (m *FillHoleRequest) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *FillHoleRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_FillHoleRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_FillHoleRequest proto.InternalMessageInfo
+
+func (m *FillHoleRequest) GetTopicID() github_com_kakao_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
+func (m *FillHoleRequest) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
+	if m != nil {
+		return m.LogStreamID
+	}
+	return 0
+}
+
+func (m *FillHoleRequest) GetBeginLLSN() github_com_kakao_varlog_pkg_types.LLSN {
+	if m != nil {
+		return m.BeginLLSN
+	}
+	return 0
+}
+
+func (m *FillHoleRequest) GetEndLLSN() github_com_kakao_varlog_pkg_types.LLSN {
+	if m != nil {
+		return m.EndLLSN
+	}
+	return 0
+}
+
+type FillHoleResponse struct {
+}
+
+func (m *FillHoleResponse) Reset()         { *m = FillHoleResponse{} }
+func (m *FillHoleResponse) String() string { return proto.CompactTextString(m) }
+func (*FillHoleResponse) ProtoMessage()    {}
+func (*FillHoleResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_7692726f23e518ee, []int{6}
+}
+func (m *FillHoleResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *FillHoleResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_FillHoleResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *FillHoleResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_FillHoleResponse.Merge(m, src)
+}
+func (m *FillHoleResponse) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *FillHoleResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_FillHoleResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_FillHoleResponse proto.InternalMessageInfo
+
 // ReadRequest asks a storage node to retrieve log entry at the GLSN.
 type ReadRequest struct {
 	GLSN        github_com_kakao_varlog_pkg_types.GLSN        `protobuf:"varint,1,opt,name=glsn,proto3,casttype=github.com/kakao/varlog/pkg/types.GLSN" json:"glsn,omitempty"`
@@ -203,7 +470,7 @@ func (m *ReadRequest) Reset()         { *m = ReadRequest{} }
 func (m *ReadRequest) String() string { return proto.CompactTextString(m) }
 func (*ReadRequest) ProtoMessage()    {}
 func (*ReadRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7692726f23e518ee, []int{3}
+	return fileDescriptor_7692726f23e518ee, []int{7}
 }
 func (m *ReadRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -265,7 +532,7 @@ func (m *ReadResponse) Reset()         { *m = ReadResponse{} }
 func (m *ReadResponse) String() string { return proto.CompactTextString(m) }
 func (*ReadResponse) ProtoMessage()    {}
 func (*ReadResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7692726f23e518ee, []int{4}
+	return fileDescriptor_7692726f23e518ee, []int{8}
 }
 func (m *ReadResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -328,7 +595,7 @@ func (m *SubscribeRequest) Reset()         { *m = SubscribeRequest{} }
 func (m *SubscribeRequest) String() string { return proto.CompactTextString(m) }
 func (*SubscribeRequest) ProtoMessage()    {}
 func (*SubscribeRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7692726f23e518ee, []int{5}
+	return fileDescriptor_7692726f23e518ee, []int{9}
 }
 func (m *SubscribeRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -396,7 +663,7 @@ func (m *SubscribeResponse) Reset()         { *m = SubscribeResponse{} }
 func (m *SubscribeResponse) String() string { return proto.CompactTextString(m) }
 func (*SubscribeResponse) ProtoMessage()    {}
 func (*SubscribeResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7692726f23e518ee, []int{6}
+	return fileDescriptor_7692726f23e518ee, []int{10}
 }
 func (m *SubscribeResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -457,7 +724,7 @@ func (m *SubscribeToRequest) Reset()         { *m = SubscribeToRequest{} }
 func (m *SubscribeToRequest) String() string { return proto.CompactTextString(m) }
 func (*SubscribeToRequest) ProtoMessage()    {}
 func (*SubscribeToRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7692726f23e518ee, []int{7}
+	return fileDescriptor_7692726f23e518ee, []int{11}
 }
 func (m *SubscribeToRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -522,7 +789,7 @@ func (m *SubscribeToResponse) Reset()         { *m = SubscribeToResponse{} }
 func (m *SubscribeToResponse) String() string { return proto.CompactTextString(m) }
 func (*SubscribeToResponse) ProtoMessage()    {}
 func (*SubscribeToResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7692726f23e518ee, []int{8}
+	return fileDescriptor_7692726f23e518ee, []int{12}
 }
 func (m *SubscribeToResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -570,7 +837,7 @@ func (m *TrimDeprecatedRequest) Reset()         { *m = TrimDeprecatedRequest{} }
 func (m *TrimDeprecatedRequest) String() string { return proto.CompactTextString(m) }
 func (*TrimDeprecatedRequest) ProtoMessage()    {}
 func (*TrimDeprecatedRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7692726f23e518ee, []int{9}
+	return fileDescriptor_7692726f23e518ee, []int{13}
 }
 func (m *TrimDeprecatedRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -622,7 +889,7 @@ func (m *LogStreamMetadataRequest) Reset()         { *m = LogStreamMetadataReque
 func (m *LogStreamMetadataRequest) String() string { return proto.CompactTextString(m) }
 func (*LogStreamMetadataRequest) ProtoMessage()    {}
 func (*LogStreamMetadataRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7692726f23e518ee, []int{10}
+	return fileDescriptor_7692726f23e518ee, []int{14}
 }
 func (m *LogStreamMetadataRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -673,7 +940,7 @@ func (m *LogStreamMetadataResponse) Reset()         { *m = LogStreamMetadataResp
 func (m *LogStreamMetadataResponse) String() string { return proto.CompactTextString(m) }
 func (*LogStreamMetadataResponse) ProtoMessage()    {}
 func (*LogStreamMetadataResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7692726f23e518ee, []int{11}
+	return fileDescriptor_7692726f23e518ee, []int{15}
 }
 func (m *LogStreamMetadataResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -718,7 +985,7 @@ func (m *LogStreamReplicaMetadataRequest) Reset()         { *m = LogStreamReplic
 func (m *LogStreamReplicaMetadataRequest) String() string { return proto.CompactTextString(m) }
 func (*LogStreamReplicaMetadataRequest) ProtoMessage()    {}
 func (*LogStreamReplicaMetadataRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7692726f23e518ee, []int{12}
+	return fileDescriptor_7692726f23e518ee, []int{16}
 }
 func (m *LogStreamReplicaMetadataRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -769,7 +1036,7 @@ func (m *LogStreamReplicaMetadataResponse) Reset()         { *m = LogStreamRepli
 func (m *LogStreamReplicaMetadataResponse) String() string { return proto.CompactTextString(m) }
 func (*LogStreamReplicaMetadataResponse) ProtoMessage()    {}
 func (*LogStreamReplicaMetadataResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_7692726f23e518ee, []int{13}
+	return fileDescriptor_7692726f23e518ee, []int{17}
 }
 func (m *LogStreamReplicaMetadataResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -809,6 +1076,10 @@ func init() {
 	proto.RegisterType((*AppendRequest)(nil), "varlog.snpb.AppendRequest")
 	proto.RegisterType((*AppendResult)(nil), "varlog.snpb.AppendResult")
 	proto.RegisterType((*AppendResponse)(nil), "varlog.snpb.AppendResponse")
+	proto.RegisterType((*GetLogEntryRangeRequest)(nil), "varlog.snpb.GetLogEntryRangeRequest")
+	proto.RegisterType((*GetLogEntryRangeResponse)(nil), "varlog.snpb.GetLogEntryRangeResponse")
+	proto.RegisterType((*FillHoleRequest)(nil), "varlog.snpb.FillHoleRequest")
+	proto.RegisterType((*FillHoleResponse)(nil), "varlog.snpb.FillHoleResponse")
 	proto.RegisterType((*ReadRequest)(nil), "varlog.snpb.ReadRequest")
 	proto.RegisterType((*ReadResponse)(nil), "varlog.snpb.ReadResponse")
 	proto.RegisterType((*SubscribeRequest)(nil), "varlog.snpb.SubscribeRequest")
@@ -825,65 +1096,86 @@ func init() {
 func init() { proto.RegisterFile("proto/snpb/log_io.proto", fileDescriptor_7692726f23e518ee) }
 
 var fileDescriptor_7692726f23e518ee = []byte{
-	// 923 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x57, 0x41, 0x8f, 0xdb, 0x44,
-	0x14, 0xce, 0x24, 0xde, 0x66, 0xf3, 0xb2, 0xad, 0xca, 0x2c, 0xa5, 0x59, 0x57, 0x8d, 0x23, 0x0b,
-	0xa1, 0x45, 0x62, 0xed, 0x6a, 0x11, 0x2a, 0xa0, 0x22, 0x41, 0xb4, 0xdb, 0x6a, 0x45, 0xba, 0x20,
-	0x67, 0xd5, 0x03, 0x12, 0xac, 0xec, 0x78, 0x30, 0xd6, 0x4e, 0x3c, 0xc6, 0x76, 0x90, 0x22, 0x2e,
-	0xdc, 0xb8, 0xf6, 0x27, 0xec, 0x8f, 0xe0, 0xd0, 0x0b, 0xf7, 0x1e, 0x7b, 0x41, 0xe2, 0x80, 0x72,
-	0xc8, 0x5e, 0x38, 0x73, 0x01, 0x7a, 0x42, 0x33, 0x1e, 0x3b, 0xf6, 0x36, 0x51, 0x37, 0xa2, 0x39,
-	0x74, 0x6f, 0x9e, 0x99, 0xf7, 0xbe, 0x79, 0xef, 0x7b, 0x9f, 0xde, 0x3c, 0xc3, 0xcd, 0x30, 0x62,
-	0x09, 0x33, 0xe3, 0x20, 0x74, 0x4c, 0xca, 0xbc, 0x63, 0x9f, 0x19, 0x62, 0x07, 0x37, 0x7f, 0xb0,
-	0x23, 0xca, 0x3c, 0x83, 0x9f, 0xa8, 0x3b, 0x9e, 0x9f, 0x7c, 0x37, 0x72, 0x8c, 0x01, 0x1b, 0x9a,
-	0x1e, 0xf3, 0x98, 0x29, 0x6c, 0x9c, 0xd1, 0xb7, 0x62, 0x95, 0x42, 0xf0, 0xaf, 0xd4, 0x57, 0xbd,
-	0xe5, 0x31, 0xe6, 0x51, 0x32, 0xb3, 0x22, 0xc3, 0x30, 0x19, 0xcb, 0xc3, 0x9b, 0x29, 0x70, 0xe8,
-	0x98, 0x43, 0x92, 0xd8, 0xae, 0x9d, 0xd8, 0xf2, 0x60, 0x53, 0x04, 0x51, 0xde, 0xd4, 0xff, 0x42,
-	0x70, 0xf5, 0xb3, 0x30, 0x24, 0x81, 0x6b, 0x91, 0xef, 0x47, 0x24, 0x4e, 0x70, 0x1f, 0xd6, 0x13,
-	0x16, 0xfa, 0x83, 0x63, 0xdf, 0x6d, 0xa1, 0x0e, 0xda, 0x5e, 0xeb, 0x7e, 0x38, 0x9d, 0x68, 0xf5,
-	0x23, 0xbe, 0x77, 0xb0, 0xf7, 0x7c, 0xa2, 0xbd, 0x5b, 0x08, 0xf6, 0xc4, 0x3e, 0xb1, 0x99, 0x99,
-	0xde, 0x68, 0x86, 0x27, 0x9e, 0x99, 0x8c, 0x43, 0x12, 0x1b, 0xd2, 0xd8, 0xaa, 0x0b, 0xa4, 0x03,
-	0x17, 0xbb, 0x70, 0x95, 0x67, 0x1f, 0x27, 0x11, 0xb1, 0x87, 0x1c, 0xb9, 0x2a, 0x90, 0x3f, 0x9d,
-	0x4e, 0xb4, 0x66, 0x8f, 0x79, 0x7d, 0xb1, 0x2f, 0xd0, 0x77, 0x5e, 0x8e, 0x5e, 0x70, 0xb0, 0x9a,
-	0x34, 0x5f, 0xb8, 0xb8, 0x05, 0xf5, 0xd0, 0x1e, 0x53, 0x66, 0xbb, 0xad, 0x5a, 0xa7, 0xb6, 0xbd,
-	0x61, 0x65, 0xcb, 0x8f, 0x37, 0x9e, 0x9c, 0x6a, 0xe8, 0xcf, 0x53, 0x0d, 0xfd, 0x73, 0xaa, 0x21,
-	0xfd, 0x6b, 0xd8, 0xc8, 0x72, 0x8e, 0x47, 0x34, 0xc1, 0x77, 0x41, 0xe1, 0xb4, 0x88, 0x74, 0x9b,
-	0xbb, 0xb7, 0x0d, 0x59, 0x9a, 0x8c, 0x48, 0x7e, 0xe1, 0x7e, 0x90, 0x44, 0xe3, 0x87, 0x24, 0xb1,
-	0xbb, 0xca, 0xd3, 0x89, 0x56, 0xb1, 0x84, 0x03, 0x7e, 0x13, 0xd6, 0x48, 0x14, 0xb1, 0x48, 0xa4,
-	0xd3, 0xb0, 0xd2, 0x85, 0xfe, 0x39, 0x5c, 0xcb, 0xe1, 0x43, 0x16, 0xc4, 0x04, 0x7f, 0x04, 0xf5,
-	0x48, 0x5c, 0x15, 0xb7, 0x50, 0xa7, 0xb6, 0xdd, 0xdc, 0xdd, 0x32, 0x0a, 0xe5, 0x37, 0x8a, 0xc1,
-	0x48, 0xfc, 0xcc, 0x5e, 0x7f, 0x5c, 0x85, 0xa6, 0x45, 0xec, 0xbc, 0x3c, 0xf7, 0x41, 0xf1, 0x68,
-	0x1c, 0x88, 0x58, 0x95, 0xee, 0xee, 0x74, 0xa2, 0x29, 0x0f, 0x7a, 0xfd, 0xc3, 0xe7, 0x13, 0xed,
-	0x9d, 0x97, 0x33, 0xc7, 0x2d, 0x2d, 0xe1, 0x5f, 0x2a, 0x73, 0x75, 0x65, 0x65, 0xae, 0xad, 0xa0,
-	0xcc, 0xfa, 0x13, 0x04, 0x1b, 0x29, 0x25, 0x92, 0xde, 0x57, 0xc5, 0xc9, 0x7d, 0x50, 0x28, 0xc7,
-	0xa9, 0xce, 0x70, 0x7a, 0x17, 0xc6, 0xe9, 0x09, 0x1c, 0xee, 0x5f, 0xd6, 0x21, 0x2a, 0xe8, 0x50,
-	0xff, 0xbb, 0x0a, 0xd7, 0xfb, 0x23, 0x27, 0x1e, 0x44, 0xbe, 0x43, 0xb2, 0x92, 0x3e, 0x02, 0xe0,
-	0xd7, 0x1f, 0x3b, 0xc4, 0xf3, 0xb3, 0x24, 0xee, 0x4e, 0x27, 0x5a, 0x83, 0x87, 0xd6, 0xe5, 0x9b,
-	0x4b, 0x64, 0xd2, 0xe0, 0x50, 0xc2, 0x09, 0x7f, 0x09, 0xeb, 0x02, 0x97, 0x04, 0xae, 0x4c, 0xe9,
-	0x03, 0x5e, 0x62, 0x6e, 0xb6, 0x1f, 0xb8, 0x4b, 0x60, 0xd6, 0x39, 0xcc, 0x7e, 0xe0, 0x96, 0x44,
-	0x53, 0x5b, 0x99, 0x68, 0x94, 0x55, 0x88, 0xe6, 0x57, 0x04, 0x6f, 0x14, 0x98, 0x7f, 0xed, 0x94,
-	0xf3, 0x6f, 0x15, 0x70, 0x1e, 0xff, 0x11, 0xbb, 0x04, 0xdd, 0xfa, 0x11, 0x00, 0x9d, 0xc9, 0xbe,
-	0x36, 0x93, 0x7d, 0x6f, 0x39, 0xd9, 0x0b, 0xfa, 0x1a, 0xb4, 0x28, 0x7b, 0x9a, 0xc9, 0x5e, 0x99,
-	0xc9, 0xbe, 0xb7, 0x8c, 0xec, 0x05, 0x66, 0x9d, 0xa6, 0xb2, 0xd7, 0xfb, 0xb0, 0x59, 0xa2, 0x5e,
-	0x8a, 0xe7, 0x1e, 0x34, 0x38, 0x4d, 0x84, 0x3f, 0x0d, 0xf2, 0xed, 0xd8, 0x5a, 0xf8, 0x76, 0xc8,
-	0xbe, 0xbe, 0x4e, 0xe5, 0x5a, 0xff, 0x05, 0xc1, 0x8d, 0xa3, 0xc8, 0x1f, 0xee, 0x91, 0x30, 0x22,
-	0x03, 0x3b, 0x21, 0xab, 0x7d, 0x81, 0x33, 0xa5, 0x57, 0xff, 0x9f, 0xd2, 0xf5, 0xdf, 0x10, 0xb4,
-	0xf2, 0x92, 0x3e, 0x94, 0xc3, 0xc4, 0xeb, 0xaf, 0x46, 0xfd, 0x47, 0xd8, 0x9a, 0x93, 0x96, 0xac,
-	0xf4, 0x37, 0x70, 0xa3, 0x10, 0x82, 0x4b, 0xb8, 0x14, 0xc2, 0x84, 0x45, 0xb2, 0xea, 0x6f, 0xcf,
-	0xab, 0x7a, 0x0a, 0xb5, 0x97, 0xdb, 0x4a, 0x01, 0x6c, 0xd2, 0x17, 0x8f, 0xf4, 0x3f, 0x10, 0x68,
-	0xb9, 0x8b, 0x45, 0x42, 0xea, 0x0f, 0xec, 0x4b, 0xc4, 0xed, 0xcf, 0x08, 0x3a, 0x8b, 0xd3, 0x93,
-	0x1c, 0x0f, 0x00, 0x17, 0x42, 0x89, 0x52, 0x2b, 0x49, 0xb0, 0x59, 0x1a, 0x97, 0x16, 0x41, 0xbd,
-	0xc0, 0xf5, 0x75, 0x7a, 0xce, 0x72, 0xf7, 0x27, 0x05, 0xd6, 0x7a, 0xcc, 0x3b, 0xf8, 0x02, 0x3f,
-	0x80, 0x2b, 0xe9, 0xd8, 0x85, 0xd5, 0xb9, 0xb3, 0x98, 0x20, 0x5d, 0xbd, 0x35, 0x7f, 0x4e, 0x13,
-	0x11, 0xeb, 0x95, 0x6d, 0x74, 0x07, 0xe1, 0x4f, 0x40, 0xe1, 0xc3, 0x08, 0x6e, 0x95, 0x4c, 0x0b,
-	0x23, 0x9b, 0xba, 0x35, 0xe7, 0x24, 0x83, 0xc0, 0x87, 0xd0, 0xc8, 0x7b, 0x0b, 0xbe, 0x5d, 0xb2,
-	0x3c, 0x3f, 0x28, 0xa8, 0xed, 0x45, 0xc7, 0x19, 0xda, 0x1d, 0x84, 0x8f, 0xa0, 0x59, 0xe8, 0x55,
-	0x58, 0x9b, 0xef, 0x92, 0x3f, 0x20, 0x6a, 0x67, 0xb1, 0x41, 0x01, 0xf5, 0x10, 0xae, 0x95, 0x7b,
-	0x15, 0xd6, 0x4b, 0x7e, 0x73, 0x1b, 0x99, 0xfa, 0x96, 0x91, 0xfe, 0xa8, 0x18, 0xd9, 0x8f, 0x8a,
-	0xb1, 0xcf, 0x7f, 0x54, 0xf4, 0x0a, 0x1e, 0x17, 0x9a, 0xc8, 0xb9, 0x2a, 0xe2, 0xf7, 0x2e, 0x54,
-	0xec, 0xec, 0x8e, 0x9d, 0x0b, 0x5a, 0x67, 0xc9, 0x74, 0xef, 0x3d, 0x9d, 0xb6, 0xd1, 0xb3, 0x69,
-	0x1b, 0x3d, 0x3e, 0x6b, 0x57, 0x4e, 0xcf, 0xda, 0xe8, 0xd9, 0x59, 0xbb, 0xf2, 0xfb, 0x59, 0xbb,
-	0xf2, 0x95, 0xbe, 0x50, 0xe2, 0xf9, 0x3f, 0x9c, 0x73, 0x45, 0x7c, 0xbf, 0xff, 0x5f, 0x00, 0x00,
-	0x00, 0xff, 0xff, 0x98, 0x1d, 0x9c, 0x2d, 0xd8, 0x0d, 0x00, 0x00,
+	// 1253 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x58, 0xcd, 0x6f, 0x1b, 0x45,
+	0x14, 0xf7, 0xd8, 0x9b, 0xd8, 0x7e, 0x4e, 0x82, 0x99, 0xb4, 0xc4, 0x71, 0xa9, 0xd7, 0x5a, 0x15,
+	0x14, 0x24, 0x62, 0x57, 0x41, 0xa8, 0x7c, 0x14, 0x04, 0x26, 0x8e, 0x1b, 0xd5, 0x0d, 0x95, 0x1d,
+	0x05, 0x09, 0x09, 0xac, 0xb5, 0x77, 0xba, 0x59, 0x65, 0xbd, 0xbb, 0xec, 0x8e, 0x8b, 0x2c, 0xfe,
+	0x00, 0xae, 0xfd, 0x13, 0xf2, 0x17, 0x70, 0xe2, 0xd0, 0x0b, 0x47, 0xa4, 0x1e, 0x7b, 0x00, 0x89,
+	0x03, 0xf2, 0xc1, 0xb9, 0x70, 0xe6, 0xc0, 0x47, 0x4f, 0x68, 0x66, 0x3f, 0xbc, 0xeb, 0xd8, 0x4a,
+	0xb6, 0x34, 0x87, 0xe6, 0xe6, 0xd9, 0x79, 0xef, 0xf7, 0xbe, 0x7e, 0xf3, 0xe6, 0x8d, 0x61, 0xcd,
+	0xb2, 0x4d, 0x6a, 0x56, 0x1d, 0xc3, 0xea, 0x56, 0x75, 0x53, 0xed, 0x68, 0x66, 0x85, 0x7f, 0xc1,
+	0xb9, 0x87, 0xb2, 0xad, 0x9b, 0x6a, 0x85, 0xed, 0x14, 0x37, 0x55, 0x8d, 0x1e, 0x0e, 0xba, 0x95,
+	0x9e, 0xd9, 0xaf, 0xaa, 0xa6, 0x6a, 0x56, 0xb9, 0x4c, 0x77, 0xf0, 0x80, 0xaf, 0x5c, 0x08, 0xf6,
+	0xcb, 0xd5, 0x2d, 0x5e, 0x53, 0x4d, 0x53, 0xd5, 0xc9, 0x44, 0x8a, 0xf4, 0x2d, 0x3a, 0xf4, 0x36,
+	0xd7, 0x5c, 0x60, 0xab, 0x5b, 0xed, 0x13, 0x2a, 0x2b, 0x32, 0x95, 0xbd, 0x8d, 0x55, 0xee, 0x44,
+	0xf4, 0xa3, 0xf4, 0x27, 0x82, 0xe5, 0x4f, 0x2d, 0x8b, 0x18, 0x4a, 0x8b, 0x7c, 0x33, 0x20, 0x0e,
+	0xc5, 0x6d, 0xc8, 0x50, 0xd3, 0xd2, 0x7a, 0x1d, 0x4d, 0x29, 0xa0, 0x32, 0xda, 0x58, 0xa8, 0xbd,
+	0x37, 0x1e, 0x89, 0xe9, 0x7d, 0xf6, 0x6d, 0x77, 0xfb, 0xd9, 0x48, 0x7c, 0x2b, 0xe4, 0xec, 0x91,
+	0x7c, 0x24, 0x9b, 0x55, 0xd7, 0x62, 0xd5, 0x3a, 0x52, 0xab, 0x74, 0x68, 0x11, 0xa7, 0xe2, 0x09,
+	0xb7, 0xd2, 0x1c, 0x69, 0x57, 0xc1, 0x0a, 0x2c, 0xb3, 0xe8, 0x1d, 0x6a, 0x13, 0xb9, 0xcf, 0x90,
+	0x93, 0x1c, 0xf9, 0x93, 0xf1, 0x48, 0xcc, 0x35, 0x4d, 0xb5, 0xcd, 0xbf, 0x73, 0xf4, 0xcd, 0xb3,
+	0xd1, 0x43, 0x0a, 0xad, 0x9c, 0x1e, 0x2c, 0x14, 0x5c, 0x80, 0xb4, 0x25, 0x0f, 0x75, 0x53, 0x56,
+	0x0a, 0xa9, 0x72, 0x6a, 0x63, 0xa9, 0xe5, 0x2f, 0x3f, 0x58, 0x7a, 0x7c, 0x2c, 0xa2, 0x3f, 0x8e,
+	0x45, 0xf4, 0xcf, 0xb1, 0x88, 0xa4, 0xaf, 0x60, 0xc9, 0x8f, 0xd9, 0x19, 0xe8, 0x14, 0xdf, 0x02,
+	0x81, 0xa5, 0x85, 0x87, 0x9b, 0xdb, 0xba, 0x5e, 0xf1, 0x4a, 0xe3, 0x27, 0x92, 0x19, 0xac, 0x1b,
+	0xd4, 0x1e, 0xde, 0x23, 0x54, 0xae, 0x09, 0x4f, 0x46, 0x62, 0xa2, 0xc5, 0x15, 0xf0, 0x15, 0x58,
+	0x20, 0xb6, 0x6d, 0xda, 0x3c, 0x9c, 0x6c, 0xcb, 0x5d, 0x48, 0x77, 0x61, 0x25, 0x80, 0xb7, 0x4c,
+	0xc3, 0x21, 0xf8, 0x7d, 0x48, 0xdb, 0xdc, 0x94, 0x53, 0x40, 0xe5, 0xd4, 0x46, 0x6e, 0x6b, 0xbd,
+	0x12, 0x2a, 0x7f, 0x25, 0xec, 0x8c, 0x87, 0xef, 0xcb, 0x4b, 0xbf, 0x20, 0x58, 0x6b, 0x10, 0xea,
+	0xbb, 0xd0, 0x92, 0x0d, 0x95, 0xbc, 0xfc, 0xa5, 0x92, 0x7e, 0x5e, 0x84, 0xc2, 0xe9, 0xb0, 0xbc,
+	0x74, 0x35, 0x20, 0xfd, 0x90, 0xd8, 0x8e, 0x66, 0x1a, 0x85, 0x85, 0x32, 0xda, 0x10, 0x6a, 0x9b,
+	0xe7, 0x8b, 0xe5, 0xc0, 0x55, 0x6a, 0xf9, 0xda, 0xb8, 0x0b, 0x2b, 0x87, 0x9a, 0x7a, 0xd8, 0xf9,
+	0x56, 0xa6, 0xc4, 0xee, 0xcb, 0xf6, 0x51, 0x61, 0x91, 0xe3, 0x7d, 0x38, 0x1e, 0x89, 0xcb, 0x77,
+	0x34, 0xf5, 0xf0, 0x0b, 0x7f, 0xe3, 0xd9, 0x48, 0x7c, 0xf3, 0x6c, 0x03, 0x8d, 0x66, 0x7b, 0xaf,
+	0xb5, 0x7c, 0x18, 0x56, 0xc4, 0x36, 0x5c, 0xe9, 0x99, 0xfd, 0xbe, 0x46, 0x29, 0x51, 0x3a, 0xaa,
+	0xee, 0x18, 0x9d, 0x2e, 0x51, 0x35, 0xa3, 0x90, 0xe6, 0x96, 0x58, 0xda, 0xf0, 0x67, 0xfe, 0x3e,
+	0xd3, 0xaf, 0xb1, 0xdd, 0x18, 0xe6, 0x70, 0x80, 0xde, 0xd0, 0x1d, 0x83, 0x6b, 0x63, 0x1d, 0xf0,
+	0x94, 0x4d, 0x62, 0x28, 0x85, 0x0c, 0xb7, 0xf8, 0xf1, 0x78, 0x24, 0xe6, 0x23, 0x16, 0xeb, 0x86,
+	0x12, 0xc3, 0x5e, 0x3e, 0x62, 0xaf, 0x6e, 0x28, 0xd1, 0x08, 0xf5, 0x49, 0x84, 0xd9, 0x19, 0x11,
+	0x36, 0xe3, 0x45, 0xd8, 0x8c, 0x46, 0xd8, 0x0c, 0x22, 0x6c, 0x00, 0xb0, 0x2e, 0xd5, 0x79, 0xa0,
+	0xd9, 0x0e, 0xf5, 0x0e, 0xa6, 0x34, 0xeb, 0x60, 0xb6, 0xd9, 0x59, 0x30, 0x7a, 0x64, 0x6f, 0xd0,
+	0xef, 0x12, 0xdb, 0x3b, 0x3d, 0x59, 0xa6, 0xbb, 0xc3, 0x54, 0x71, 0x1d, 0xf8, 0xa2, 0xa3, 0xcb,
+	0x0e, 0xe5, 0x54, 0x8e, 0x83, 0x93, 0x61, 0xaa, 0x4d, 0xd9, 0xa1, 0xf8, 0x2e, 0x2c, 0xb9, 0x5e,
+	0x7a, 0x1e, 0xa5, 0x62, 0x22, 0xe5, 0x5c, 0x6d, 0xd7, 0xa7, 0x5d, 0xf0, 0x96, 0xae, 0x57, 0x42,
+	0x4c, 0x2c, 0x70, 0x95, 0x99, 0x5f, 0xd2, 0x5f, 0x49, 0x78, 0x65, 0x47, 0xd3, 0xf5, 0x3b, 0xa6,
+	0x7e, 0x09, 0xda, 0x02, 0x3e, 0x00, 0xe0, 0xdc, 0xe2, 0x34, 0xe3, 0x49, 0x16, 0x6a, 0xb7, 0xc6,
+	0x23, 0x31, 0xcb, 0x59, 0xc1, 0xd8, 0x12, 0x83, 0x57, 0x59, 0x0e, 0xc5, 0x38, 0x85, 0xef, 0x43,
+	0x86, 0x18, 0x2e, 0x79, 0x79, 0xba, 0x85, 0xda, 0xbb, 0x2c, 0x25, 0x75, 0x43, 0x89, 0x89, 0x99,
+	0x26, 0x06, 0x67, 0xa9, 0x84, 0x21, 0x3f, 0xc9, 0xbb, 0xdb, 0xb7, 0xa4, 0x47, 0x49, 0xc8, 0xb5,
+	0x88, 0x1c, 0x5c, 0xa5, 0x3b, 0x20, 0xb0, 0xc3, 0xc9, 0x8b, 0x20, 0xd4, 0xb6, 0xc6, 0x23, 0x51,
+	0x68, 0x9c, 0xdb, 0x1c, 0x3f, 0x8c, 0x5c, 0x3f, 0x52, 0xd0, 0xe4, 0x85, 0x15, 0x34, 0x75, 0x11,
+	0x7d, 0xfe, 0x31, 0x82, 0x25, 0x37, 0x25, 0x5e, 0x6f, 0x7f, 0x51, 0x39, 0xd9, 0x01, 0x81, 0x57,
+	0x33, 0x39, 0xc1, 0x89, 0x59, 0x4a, 0xae, 0x1f, 0x9d, 0x19, 0x50, 0x68, 0x66, 0x90, 0xfe, 0x4e,
+	0x42, 0xbe, 0x3d, 0xe8, 0x3a, 0x3d, 0x5b, 0xeb, 0x06, 0x67, 0xeb, 0x00, 0x20, 0xd4, 0xe3, 0xd1,
+	0x84, 0xa0, 0xcf, 0xd3, 0xda, 0xb3, 0x6a, 0xd0, 0xef, 0xee, 0x43, 0x26, 0xe8, 0xe3, 0xc9, 0x09,
+	0x41, 0xe3, 0xb7, 0xef, 0xb4, 0xea, 0x75, 0xed, 0x30, 0x69, 0x52, 0x17, 0x46, 0x1a, 0xe1, 0x22,
+	0x48, 0xf3, 0x13, 0x82, 0x57, 0x43, 0x99, 0x7f, 0xe9, 0x98, 0xf3, 0x6f, 0x12, 0x70, 0xe0, 0xff,
+	0xbe, 0x79, 0x39, 0xfa, 0x72, 0xe8, 0xe2, 0x0f, 0xf5, 0xe5, 0xe7, 0xb9, 0xef, 0xb3, 0x7a, 0x98,
+	0xf6, 0xba, 0x4f, 0xfb, 0x50, 0x5f, 0x6e, 0xc6, 0xa1, 0xbd, 0xdb, 0x97, 0x75, 0x97, 0xf6, 0x52,
+	0x1b, 0x56, 0x23, 0xa9, 0xf7, 0xc8, 0x73, 0x1b, 0xb2, 0x2c, 0x4d, 0x84, 0x0d, 0x9b, 0xde, 0x38,
+	0xb1, 0x3e, 0x77, 0xce, 0xf7, 0x6f, 0x7f, 0xdd, 0x5b, 0x4b, 0x3f, 0x22, 0xb8, 0xba, 0x6f, 0x6b,
+	0xfd, 0x6d, 0x62, 0xd9, 0xa4, 0x27, 0x53, 0x72, 0xb1, 0xaf, 0x25, 0x9f, 0xe9, 0xc9, 0xff, 0xc7,
+	0x74, 0xe9, 0x57, 0x04, 0x85, 0xa0, 0xa4, 0xf7, 0xbc, 0x87, 0xdf, 0x25, 0x78, 0x3c, 0x7c, 0x07,
+	0xeb, 0x33, 0xc2, 0xf2, 0x2a, 0xfd, 0x35, 0x5c, 0x0d, 0xb9, 0xa0, 0x10, 0x46, 0x05, 0x8b, 0x9a,
+	0xb6, 0x57, 0xf5, 0x1b, 0x33, 0xc7, 0x2c, 0x2e, 0xbc, 0x1d, 0xc8, 0x7a, 0x04, 0x58, 0xd5, 0x4f,
+	0x6f, 0x49, 0xbf, 0x23, 0x10, 0x03, 0x95, 0x16, 0xb1, 0x74, 0xad, 0x27, 0x5f, 0xa2, 0xdc, 0x7e,
+	0x8f, 0xa0, 0x3c, 0x3f, 0x3c, 0x2f, 0xc7, 0x3d, 0xc0, 0x21, 0x57, 0x6c, 0x57, 0xca, 0x4b, 0x70,
+	0x35, 0xf2, 0xb4, 0x9d, 0x07, 0x75, 0x2a, 0xd7, 0x79, 0x7d, 0x4a, 0x72, 0xeb, 0x87, 0x05, 0x58,
+	0x68, 0x9a, 0xea, 0xee, 0xe7, 0xb8, 0x01, 0x8b, 0xee, 0x13, 0x19, 0x17, 0x67, 0xbe, 0x9b, 0x79,
+	0xd2, 0x8b, 0xd7, 0x66, 0xbf, 0xa9, 0xdd, 0xd1, 0x2c, 0xb1, 0x81, 0x6e, 0x22, 0x2c, 0x43, 0x7e,
+	0xfa, 0xd1, 0x89, 0x6f, 0x44, 0xd4, 0xe6, 0x3c, 0xb5, 0x8b, 0x6f, 0x9c, 0x21, 0xe5, 0x9b, 0xc1,
+	0xbb, 0x90, 0xf1, 0xe7, 0x42, 0xfc, 0x7a, 0x44, 0x69, 0x6a, 0x4c, 0x2f, 0x5e, 0x9f, 0xb3, 0x1b,
+	0x40, 0x7d, 0x04, 0x02, 0x1b, 0x9d, 0x70, 0x21, 0x22, 0x18, 0x1a, 0x30, 0x8b, 0xeb, 0x33, 0x76,
+	0x02, 0xf5, 0x3d, 0xc8, 0x06, 0x9d, 0x10, 0x47, 0x8d, 0x4d, 0x8f, 0x35, 0xc5, 0xd2, 0xbc, 0x6d,
+	0x1f, 0xed, 0x26, 0xc2, 0xfb, 0x90, 0x0b, 0x75, 0x56, 0x2c, 0xce, 0x56, 0x09, 0xae, 0xbb, 0x62,
+	0x79, 0xbe, 0x40, 0x08, 0x75, 0x0f, 0x56, 0xa2, 0x9d, 0x15, 0x4b, 0x11, 0xbd, 0x99, 0x6d, 0xb7,
+	0xf8, 0x5a, 0xc5, 0xfd, 0x0b, 0xac, 0xe2, 0xff, 0x05, 0x56, 0xa9, 0xf7, 0x2d, 0x3a, 0x94, 0x12,
+	0x78, 0x18, 0x6a, 0x79, 0x53, 0x9c, 0xc3, 0x6f, 0x9f, 0x8b, 0x9a, 0xbe, 0x8d, 0xcd, 0x73, 0x4a,
+	0xfb, 0xc1, 0xd4, 0x6e, 0x3f, 0x19, 0x97, 0xd0, 0xd3, 0x71, 0x09, 0x3d, 0x3a, 0x29, 0x25, 0x8e,
+	0x4f, 0x4a, 0xe8, 0xe9, 0x49, 0x29, 0xf1, 0xdb, 0x49, 0x29, 0xf1, 0xa5, 0x34, 0xf7, 0x40, 0x06,
+	0xff, 0x0e, 0x76, 0x17, 0xf9, 0xef, 0x77, 0xfe, 0x0b, 0x00, 0x00, 0xff, 0xff, 0xda, 0x4a, 0xd5,
+	0x29, 0x32, 0x14, 0x00, 0x00,
 }
 
 func (this *AppendRequest) Equal(that interface{}) bool {
@@ -954,6 +1246,8 @@ type LogIOClient interface {
 	//
 	// FIXME: Partial failures are not specified by the gRPC error codes.
 	Append(ctx context.Context, opts ...grpc.CallOption) (LogIO_AppendClient, error)
+	GetLogEntryRange(ctx context.Context, in *GetLogEntryRangeRequest, opts ...grpc.CallOption) (*GetLogEntryRangeResponse, error)
+	FillHole(ctx context.Context, in *FillHoleRequest, opts ...grpc.CallOption) (*FillHoleResponse, error)
 	// Read reads a log entry from the log stream specified by ReadRequest.
 	// Deprecated: Use Subscribe or SubscribeTo.
 	Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error)
@@ -1014,6 +1308,24 @@ func (x *logIOAppendClient) Recv() (*AppendResponse, error) {
 		return nil, err
 	}
 	return m, nil
+}
+
+func (c *logIOClient) GetLogEntryRange(ctx context.Context, in *GetLogEntryRangeRequest, opts ...grpc.CallOption) (*GetLogEntryRangeResponse, error) {
+	out := new(GetLogEntryRangeResponse)
+	err := c.cc.Invoke(ctx, "/varlog.snpb.LogIO/GetLogEntryRange", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *logIOClient) FillHole(ctx context.Context, in *FillHoleRequest, opts ...grpc.CallOption) (*FillHoleResponse, error) {
+	out := new(FillHoleResponse)
+	err := c.cc.Invoke(ctx, "/varlog.snpb.LogIO/FillHole", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *logIOClient) Read(ctx context.Context, in *ReadRequest, opts ...grpc.CallOption) (*ReadResponse, error) {
@@ -1129,6 +1441,8 @@ type LogIOServer interface {
 	//
 	// FIXME: Partial failures are not specified by the gRPC error codes.
 	Append(LogIO_AppendServer) error
+	GetLogEntryRange(context.Context, *GetLogEntryRangeRequest) (*GetLogEntryRangeResponse, error)
+	FillHole(context.Context, *FillHoleRequest) (*FillHoleResponse, error)
 	// Read reads a log entry from the log stream specified by ReadRequest.
 	// Deprecated: Use Subscribe or SubscribeTo.
 	Read(context.Context, *ReadRequest) (*ReadResponse, error)
@@ -1158,6 +1472,12 @@ type UnimplementedLogIOServer struct {
 
 func (*UnimplementedLogIOServer) Append(srv LogIO_AppendServer) error {
 	return status.Errorf(codes.Unimplemented, "method Append not implemented")
+}
+func (*UnimplementedLogIOServer) GetLogEntryRange(ctx context.Context, req *GetLogEntryRangeRequest) (*GetLogEntryRangeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetLogEntryRange not implemented")
+}
+func (*UnimplementedLogIOServer) FillHole(ctx context.Context, req *FillHoleRequest) (*FillHoleResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FillHole not implemented")
 }
 func (*UnimplementedLogIOServer) Read(ctx context.Context, req *ReadRequest) (*ReadResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Read not implemented")
@@ -1203,6 +1523,42 @@ func (x *logIOAppendServer) Recv() (*AppendRequest, error) {
 		return nil, err
 	}
 	return m, nil
+}
+
+func _LogIO_GetLogEntryRange_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLogEntryRangeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LogIOServer).GetLogEntryRange(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/varlog.snpb.LogIO/GetLogEntryRange",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LogIOServer).GetLogEntryRange(ctx, req.(*GetLogEntryRangeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LogIO_FillHole_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FillHoleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LogIOServer).FillHole(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/varlog.snpb.LogIO/FillHole",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LogIOServer).FillHole(ctx, req.(*FillHoleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _LogIO_Read_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -1305,6 +1661,14 @@ var _LogIO_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "varlog.snpb.LogIO",
 	HandlerType: (*LogIOServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetLogEntryRange",
+			Handler:    _LogIO_GetLogEntryRange_Handler,
+		},
+		{
+			MethodName: "FillHole",
+			Handler:    _LogIO_FillHole_Handler,
+		},
 		{
 			MethodName: "Read",
 			Handler:    _LogIO_Read_Handler,
@@ -1455,6 +1819,193 @@ func (m *AppendResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 			dAtA[i] = 0xa
 		}
 	}
+	return len(dAtA) - i, nil
+}
+
+func (m *GetLogEntryRangeRequest) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetLogEntryRangeRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetLogEntryRangeRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.LogStreamID != 0 {
+		i = encodeVarintLogIo(dAtA, i, uint64(m.LogStreamID))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.TopicID != 0 {
+		i = encodeVarintLogIo(dAtA, i, uint64(m.TopicID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *GetLogEntryRangeResponse) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetLogEntryRangeResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetLogEntryRangeResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.CommittedLLSNBegin != 0 {
+		i = encodeVarintLogIo(dAtA, i, uint64(m.CommittedLLSNBegin))
+		i--
+		dAtA[i] = 0x48
+	}
+	if m.CommittedGLSNEnd != 0 {
+		i = encodeVarintLogIo(dAtA, i, uint64(m.CommittedGLSNEnd))
+		i--
+		dAtA[i] = 0x40
+	}
+	if m.CommittedGLSNBegin != 0 {
+		i = encodeVarintLogIo(dAtA, i, uint64(m.CommittedGLSNBegin))
+		i--
+		dAtA[i] = 0x38
+	}
+	if m.HighWatermark != 0 {
+		i = encodeVarintLogIo(dAtA, i, uint64(m.HighWatermark))
+		i--
+		dAtA[i] = 0x30
+	}
+	if m.Version != 0 {
+		i = encodeVarintLogIo(dAtA, i, uint64(m.Version))
+		i--
+		dAtA[i] = 0x28
+	}
+	{
+		size, err := m.CommitLast.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintLogIo(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x22
+	{
+		size, err := m.CommitFirst.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintLogIo(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	{
+		size, err := m.DataLast.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintLogIo(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x12
+	{
+		size, err := m.DataFirst.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintLogIo(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *FillHoleRequest) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *FillHoleRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *FillHoleRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.EndLLSN != 0 {
+		i = encodeVarintLogIo(dAtA, i, uint64(m.EndLLSN))
+		i--
+		dAtA[i] = 0x20
+	}
+	if m.BeginLLSN != 0 {
+		i = encodeVarintLogIo(dAtA, i, uint64(m.BeginLLSN))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.LogStreamID != 0 {
+		i = encodeVarintLogIo(dAtA, i, uint64(m.LogStreamID))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.TopicID != 0 {
+		i = encodeVarintLogIo(dAtA, i, uint64(m.TopicID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *FillHoleResponse) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *FillHoleResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *FillHoleResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
 	return len(dAtA) - i, nil
 }
 
@@ -2018,6 +2569,83 @@ func (m *AppendResponse) ProtoSize() (n int) {
 	return n
 }
 
+func (m *GetLogEntryRangeRequest) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.TopicID != 0 {
+		n += 1 + sovLogIo(uint64(m.TopicID))
+	}
+	if m.LogStreamID != 0 {
+		n += 1 + sovLogIo(uint64(m.LogStreamID))
+	}
+	return n
+}
+
+func (m *GetLogEntryRangeResponse) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.DataFirst.ProtoSize()
+	n += 1 + l + sovLogIo(uint64(l))
+	l = m.DataLast.ProtoSize()
+	n += 1 + l + sovLogIo(uint64(l))
+	l = m.CommitFirst.ProtoSize()
+	n += 1 + l + sovLogIo(uint64(l))
+	l = m.CommitLast.ProtoSize()
+	n += 1 + l + sovLogIo(uint64(l))
+	if m.Version != 0 {
+		n += 1 + sovLogIo(uint64(m.Version))
+	}
+	if m.HighWatermark != 0 {
+		n += 1 + sovLogIo(uint64(m.HighWatermark))
+	}
+	if m.CommittedGLSNBegin != 0 {
+		n += 1 + sovLogIo(uint64(m.CommittedGLSNBegin))
+	}
+	if m.CommittedGLSNEnd != 0 {
+		n += 1 + sovLogIo(uint64(m.CommittedGLSNEnd))
+	}
+	if m.CommittedLLSNBegin != 0 {
+		n += 1 + sovLogIo(uint64(m.CommittedLLSNBegin))
+	}
+	return n
+}
+
+func (m *FillHoleRequest) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.TopicID != 0 {
+		n += 1 + sovLogIo(uint64(m.TopicID))
+	}
+	if m.LogStreamID != 0 {
+		n += 1 + sovLogIo(uint64(m.LogStreamID))
+	}
+	if m.BeginLLSN != 0 {
+		n += 1 + sovLogIo(uint64(m.BeginLLSN))
+	}
+	if m.EndLLSN != 0 {
+		n += 1 + sovLogIo(uint64(m.EndLLSN))
+	}
+	return n
+}
+
+func (m *FillHoleResponse) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
 func (m *ReadRequest) ProtoSize() (n int) {
 	if m == nil {
 		return 0
@@ -2498,6 +3126,547 @@ func (m *AppendResponse) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLogIo(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetLogEntryRangeRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLogIo
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetLogEntryRangeRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetLogEntryRangeRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogIo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_com_kakao_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
+			}
+			m.LogStreamID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogIo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LogStreamID |= github_com_kakao_varlog_pkg_types.LogStreamID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLogIo(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetLogEntryRangeResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLogIo
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetLogEntryRangeResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetLogEntryRangeResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DataFirst", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogIo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.DataFirst.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DataLast", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogIo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.DataLast.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommitFirst", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogIo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommitFirst.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommitLast", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogIo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommitLast.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
+			}
+			m.Version = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogIo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Version |= github_com_kakao_varlog_pkg_types.Version(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HighWatermark", wireType)
+			}
+			m.HighWatermark = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogIo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.HighWatermark |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommittedGLSNBegin", wireType)
+			}
+			m.CommittedGLSNBegin = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogIo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CommittedGLSNBegin |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommittedGLSNEnd", wireType)
+			}
+			m.CommittedGLSNEnd = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogIo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CommittedGLSNEnd |= github_com_kakao_varlog_pkg_types.GLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 9:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommittedLLSNBegin", wireType)
+			}
+			m.CommittedLLSNBegin = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogIo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.CommittedLLSNBegin |= github_com_kakao_varlog_pkg_types.LLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLogIo(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *FillHoleRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLogIo
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: FillHoleRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: FillHoleRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogIo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_com_kakao_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
+			}
+			m.LogStreamID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogIo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LogStreamID |= github_com_kakao_varlog_pkg_types.LogStreamID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field BeginLLSN", wireType)
+			}
+			m.BeginLLSN = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogIo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.BeginLLSN |= github_com_kakao_varlog_pkg_types.LLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EndLLSN", wireType)
+			}
+			m.EndLLSN = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowLogIo
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.EndLLSN |= github_com_kakao_varlog_pkg_types.LLSN(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipLogIo(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthLogIo
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *FillHoleResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowLogIo
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: FillHoleResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: FillHoleResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
 		default:
 			iNdEx = preIndex
 			skippy, err := skipLogIo(dAtA[iNdEx:])

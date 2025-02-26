@@ -2,12 +2,14 @@ package logstream
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/pebble"
 	"go.opentelemetry.io/otel/attribute"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
@@ -329,7 +331,7 @@ func (lse *Executor) Unseal(_ context.Context, replicas []varlogpb.LogStreamRepl
 				replica:       replicas[i],
 				rpcConn:       rpcConn,
 				queueCapacity: lse.replicateClientQueueCapacity,
-				//grpcDialOptions: lse.replicateClientGRPCOptions,
+				// grpcDialOptions: lse.replicateClientGRPCOptions,
 				lse:    lse,
 				logger: lse.logger.Named("replicate client"),
 			})
@@ -765,4 +767,105 @@ func (lse *Executor) restoreCommitWaitTasks(rp storage.RecoveryPoints) error {
 		return err
 	}
 	return nil
+}
+
+func (lse *Executor) FillHole(req *snpb.FillHoleRequest) error {
+	const (
+		dataKeyPrefix = byte(0x40)
+		dataKeyLength = 9 // prefix(1) + LLSN(8)
+	)
+
+	dataDB, _ := storage.GetUnderlyingDB(lse.stg)
+	batch := dataDB.NewBatch()
+	defer func() {
+		_ = batch.Close()
+	}()
+	for llsn := req.BeginLLSN; llsn < req.EndLLSN; llsn++ {
+		dk := make([]byte, dataKeyLength)
+		dk[0] = dataKeyPrefix
+		binary.BigEndian.PutUint64(dk[1:], uint64(llsn))
+		if err := batch.Set(dk, nil, pebble.Sync); err != nil {
+			return err
+		}
+	}
+	if err := batch.Commit(pebble.Sync); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (lse *Executor) GetLogEntryRange() (*snpb.GetLogEntryRangeResponse, error) {
+	const (
+		dataKeyPrefix         = byte(0x40)
+		dataKeySentinelPrefix = byte(0x41)
+
+		commitKeyPrefix         = byte(0x80)
+		commitKeySentinelPrefix = byte(0x81)
+	)
+
+	rsp := &snpb.GetLogEntryRangeResponse{}
+
+	rp, err := lse.stg.ReadRecoveryPoints()
+	if err != nil {
+		return nil, err
+	}
+	if cc := rp.LastCommitContext; cc != nil {
+		rsp.Version = cc.Version
+		rsp.HighWatermark = cc.HighWatermark
+		rsp.CommittedGLSNBegin = cc.CommittedGLSNBegin
+		rsp.CommittedGLSNEnd = cc.CommittedGLSNEnd
+		rsp.CommittedLLSNBegin = cc.CommittedLLSNBegin
+	}
+
+	dataDB, commitDB := storage.GetUnderlyingDB(lse.stg)
+	dataIter, err := dataDB.NewIter(&pebble.IterOptions{
+		LowerBound: []byte{dataKeyPrefix},
+		UpperBound: []byte{dataKeySentinelPrefix},
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = dataIter.Close()
+	}()
+	if dataIter.First() {
+		dk := dataIter.Key()
+		firstLLSN := types.LLSN(binary.BigEndian.Uint64(dk[1:]))
+		rsp.DataFirst.LLSN = firstLLSN
+
+		dataIter.Last()
+		dk = dataIter.Key()
+		lastLLSN := types.LLSN(binary.BigEndian.Uint64(dk[1:]))
+		rsp.DataLast.LLSN = lastLLSN
+	}
+
+	commitIter, err := commitDB.NewIter(&pebble.IterOptions{
+		LowerBound: []byte{commitKeyPrefix},
+		UpperBound: []byte{commitKeySentinelPrefix},
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = commitIter.Close()
+	}()
+
+	if commitIter.First() {
+		ck := commitIter.Key()
+		firstGLSN := types.GLSN(binary.BigEndian.Uint64(ck[1:]))
+		dk := commitIter.Value()
+		firstLLSN := types.LLSN(binary.BigEndian.Uint64(dk[1:]))
+		rsp.CommitFirst.LLSN = firstLLSN
+		rsp.CommitFirst.GLSN = firstGLSN
+
+		commitIter.Last()
+		ck = commitIter.Key()
+		lastGLSN := types.GLSN(binary.BigEndian.Uint64(ck[1:]))
+		dk = commitIter.Value()
+		lastLLSN := types.LLSN(binary.BigEndian.Uint64(dk[1:]))
+		rsp.CommitLast.LLSN = lastLLSN
+		rsp.CommitLast.GLSN = lastGLSN
+	}
+
+	return rsp, nil
 }
