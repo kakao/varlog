@@ -459,6 +459,14 @@ func TestStorageNode_Append(t *testing.T) {
 		testf func(t *testing.T, addr string, lc *client.LogClient)
 	}{
 		{
+			name: "NoPayload",
+			testf: func(t *testing.T, addr string, lc *client.LogClient) {
+				_, err := lc.Append(context.Background(), tpid, lsid, nil)
+				require.Error(t, err)
+				require.Equal(t, codes.InvalidArgument, status.Code(err))
+			},
+		},
+		{
 			name: "InvalidTopicID",
 			testf: func(t *testing.T, _ string, lc *client.LogClient) {
 				const invalidTopicID = types.TopicID(0)
