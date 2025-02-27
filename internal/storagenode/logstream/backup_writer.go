@@ -76,8 +76,12 @@ func (bw *backupWriter) writeLoop(ctx context.Context) {
 
 func (bw *backupWriter) writeLoopInternal(_ context.Context, bwt *backupWriteTask) {
 	startTime := time.Now()
+	var err error
 	wb, oldLLSN, newLLSN := bwt.wb, bwt.oldLLSN, bwt.newLLSN
 	defer func() {
+		if err != nil {
+			bw.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
+		}
 		_ = wb.Close()
 		bwt.release()
 		bw.inflight.Add(-1)
@@ -88,9 +92,20 @@ func (bw *backupWriter) writeLoopInternal(_ context.Context, bwt *backupWriteTas
 		bw.lse.lsm.WriterOperations.Add(1)
 	}()
 
-	if err := wb.Apply(); err != nil {
+	if uncommittedLLSNEnd := bw.lse.lsc.uncommittedLLSNEnd.Load(); uncommittedLLSNEnd != oldLLSN {
+		err = fmt.Errorf("unexpected LLSN: uncommittedLLSNEnd=%d, oldLLSN=%d, newLLSN=%d", uncommittedLLSNEnd, oldLLSN, newLLSN)
+		bw.logger.Error("try to write log entries at unexpected LLSN in the backup replica",
+			zap.Uint64("uncommittedLLSNEnd", uint64(uncommittedLLSNEnd)),
+			zap.Uint64("startOfBatch", uint64(oldLLSN)),
+			zap.Uint64("endOfBatch", uint64(newLLSN-1)),
+			zap.Error(err),
+		)
+		return
+	}
+
+	err = wb.Apply()
+	if err != nil {
 		bw.logger.Error("could not apply backup data", zap.Error(err))
-		bw.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
 		return
 	}
 
@@ -102,11 +117,14 @@ func (bw *backupWriter) writeLoopInternal(_ context.Context, bwt *backupWriteTas
 		// As a simple solution, we can use epoch issued by the
 		// metadata repository and incremented whenever unsealing to
 		// decide if the logs are stale or not.
-		bw.logger.Panic(
-			"uncommittedLLSNEnd swap failure",
-			zap.Uint64("uncommittedLLSNEnd", uint64(bw.lse.lsc.uncommittedLLSNEnd.Load())),
-			zap.Uint64("cas_old", uint64(oldLLSN)),
-			zap.Uint64("cas_new", uint64(newLLSN)),
+		uncommittedLLSNEnd := bw.lse.lsc.uncommittedLLSNEnd.Load()
+		err = fmt.Errorf("unexpected LLSN: uncommittedLLSNEnd=%d, oldLLSN=%d, newLLSN=%d", uncommittedLLSNEnd, oldLLSN, newLLSN)
+		bw.logger.DPanic(
+			"uncommittedLLSNEnd swap failure: unexpected batch was written into the backup replica",
+			zap.Uint64("uncommittedLLSNEnd", uint64(uncommittedLLSNEnd)),
+			zap.Uint64("startOfBatch", uint64(oldLLSN)),
+			zap.Uint64("endOfBatch", uint64(newLLSN-1)),
+			zap.Error(err),
 		)
 	}
 }
