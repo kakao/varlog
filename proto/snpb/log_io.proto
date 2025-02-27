@@ -45,6 +45,67 @@ message AppendResponse {
   repeated AppendResult results = 1 [(gogoproto.nullable) = false];
 }
 
+message GetLogEntryRangeRequest {
+  int32 topic_id = 1 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
+  int32 log_stream_id = 2 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
+}
+
+message GetLogEntryRangeResponse {
+  // commit context
+  uint64 version = 5
+    [(gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.Version"];
+  uint64 high_watermark = 6 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
+    (gogoproto.customname) = "HighWatermark"
+  ];
+  uint64 committed_glsn_begin = 7 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
+    (gogoproto.customname) = "CommittedGLSNBegin"
+  ];
+  uint64 committed_glsn_end = 8 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
+    (gogoproto.customname) = "CommittedGLSNEnd"
+  ];
+  uint64 committed_llsn_begin = 9 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "CommittedLLSNBegin"
+  ];
+
+  // data
+  varlogpb.LogSequenceNumber data_first = 1 [(gogoproto.nullable) = false];
+  varlogpb.LogSequenceNumber data_last = 2 [(gogoproto.nullable) = false];
+
+  // commit
+  varlogpb.LogSequenceNumber commit_first = 3 [(gogoproto.nullable) = false];
+  varlogpb.LogSequenceNumber commit_last = 4 [(gogoproto.nullable) = false];
+}
+
+message FillHoleRequest {
+  int32 topic_id = 1 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
+  int32 log_stream_id = 2 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
+  uint64 first_llsn = 3 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "FirstLLSN"
+  ];
+  uint64 last_llsn = 4 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
+    (gogoproto.customname) = "LastLLSN"
+  ];
+}
+message FillHoleResponse {}
+
 // ReadRequest asks a storage node to retrieve log entry at the GLSN.
 message ReadRequest {
   uint64 glsn = 1 [
@@ -199,6 +260,10 @@ service LogIO {
   //
   // FIXME: Partial failures are not specified by the gRPC error codes.
   rpc Append(stream AppendRequest) returns (stream AppendResponse) {}
+
+  rpc GetLogEntryRange(GetLogEntryRangeRequest)
+    returns (GetLogEntryRangeResponse) {}
+  rpc FillHole(FillHoleRequest) returns (FillHoleResponse) {}
 
   // Read reads a log entry from the log stream specified by ReadRequest.
   // Deprecated: Use Subscribe or SubscribeTo.

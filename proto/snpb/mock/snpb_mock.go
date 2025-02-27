@@ -385,6 +385,46 @@ func (mr *MockLogIOClientMockRecorder) Append(arg0 any, arg1 ...any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Append", reflect.TypeOf((*MockLogIOClient)(nil).Append), varargs...)
 }
 
+// FillHole mocks base method.
+func (m *MockLogIOClient) FillHole(arg0 context.Context, arg1 *snpb.FillHoleRequest, arg2 ...grpc.CallOption) (*snpb.FillHoleResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "FillHole", varargs...)
+	ret0, _ := ret[0].(*snpb.FillHoleResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FillHole indicates an expected call of FillHole.
+func (mr *MockLogIOClientMockRecorder) FillHole(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FillHole", reflect.TypeOf((*MockLogIOClient)(nil).FillHole), varargs...)
+}
+
+// GetLogEntryRange mocks base method.
+func (m *MockLogIOClient) GetLogEntryRange(arg0 context.Context, arg1 *snpb.GetLogEntryRangeRequest, arg2 ...grpc.CallOption) (*snpb.GetLogEntryRangeResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetLogEntryRange", varargs...)
+	ret0, _ := ret[0].(*snpb.GetLogEntryRangeResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLogEntryRange indicates an expected call of GetLogEntryRange.
+func (mr *MockLogIOClientMockRecorder) GetLogEntryRange(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogEntryRange", reflect.TypeOf((*MockLogIOClient)(nil).GetLogEntryRange), varargs...)
+}
+
 // LogStreamReplicaMetadata mocks base method.
 func (m *MockLogIOClient) LogStreamReplicaMetadata(arg0 context.Context, arg1 *snpb.LogStreamReplicaMetadataRequest, arg2 ...grpc.CallOption) (*snpb.LogStreamReplicaMetadataResponse, error) {
 	m.ctrl.T.Helper()
@@ -520,6 +560,36 @@ func (m *MockLogIOServer) Append(arg0 snpb.LogIO_AppendServer) error {
 func (mr *MockLogIOServerMockRecorder) Append(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Append", reflect.TypeOf((*MockLogIOServer)(nil).Append), arg0)
+}
+
+// FillHole mocks base method.
+func (m *MockLogIOServer) FillHole(arg0 context.Context, arg1 *snpb.FillHoleRequest) (*snpb.FillHoleResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FillHole", arg0, arg1)
+	ret0, _ := ret[0].(*snpb.FillHoleResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FillHole indicates an expected call of FillHole.
+func (mr *MockLogIOServerMockRecorder) FillHole(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FillHole", reflect.TypeOf((*MockLogIOServer)(nil).FillHole), arg0, arg1)
+}
+
+// GetLogEntryRange mocks base method.
+func (m *MockLogIOServer) GetLogEntryRange(arg0 context.Context, arg1 *snpb.GetLogEntryRangeRequest) (*snpb.GetLogEntryRangeResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLogEntryRange", arg0, arg1)
+	ret0, _ := ret[0].(*snpb.GetLogEntryRangeResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLogEntryRange indicates an expected call of GetLogEntryRange.
+func (mr *MockLogIOServerMockRecorder) GetLogEntryRange(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogEntryRange", reflect.TypeOf((*MockLogIOServer)(nil).GetLogEntryRange), arg0, arg1)
 }
 
 // LogStreamReplicaMetadata mocks base method.

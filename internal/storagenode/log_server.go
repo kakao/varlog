@@ -26,6 +26,26 @@ type logServer struct {
 
 var _ snpb.LogIOServer = (*logServer)(nil)
 
+func (ls *logServer) FillHole(ctx context.Context, req *snpb.FillHoleRequest) (*snpb.FillHoleResponse, error) {
+	lse, loaded := ls.sn.executors.Load(req.TopicID, req.LogStreamID)
+	if !loaded {
+		return nil, status.Error(codes.NotFound, "no such log stream")
+	}
+	if err := lse.FillHole(req); err != nil {
+		return nil, err
+	}
+	return &snpb.FillHoleResponse{}, nil
+}
+
+func (ls *logServer) GetLogEntryRange(ctx context.Context, req *snpb.GetLogEntryRangeRequest) (*snpb.GetLogEntryRangeResponse, error) {
+	lse, loaded := ls.sn.executors.Load(req.TopicID, req.LogStreamID)
+	if !loaded {
+		return nil, status.Error(codes.NotFound, "no such log stream")
+	}
+
+	return lse.GetLogEntryRange()
+}
+
 func (ls *logServer) Append(stream snpb.LogIO_AppendServer) error {
 	// Avoid race of Add and Wait of wgAppenders.
 	rt := ls.sn.mu.RLock()

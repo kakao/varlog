@@ -25,6 +25,10 @@ func TestNewStorage(tb testing.TB, opts ...Option) *Storage {
 	return s
 }
 
+func GetUnderlyingDB(stg *Storage) (dataDB, commitDB *pebble.DB) {
+	return stg.dataDB, stg.commitDB
+}
+
 // TestGetUnderlyingDB returns a pebble that is an internal database in the
 // storage.
 func TestGetUnderlyingDB(tb testing.TB, stg *Storage) (dataDB, commitDB *pebble.DB) {
