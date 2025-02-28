@@ -79,6 +79,7 @@ func newStartCommand() *cli.Command {
 			flags.LogFileCompression,
 			flags.LogHumanReadable,
 			flags.LogLevel,
+			flags.EnableDevelopmentMode,
 
 			// telemetry
 			flags.TelemetryExporter,
@@ -101,7 +102,6 @@ func start(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	logOpts = append(logOpts, log.WithZapLoggerOptions(zap.AddStacktrace(zap.DPanicLevel)))
 	logger, err := log.New(logOpts...)
 	if err != nil {
 		return err

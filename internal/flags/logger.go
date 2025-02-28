@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/urfave/cli/v2"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
 	"github.com/kakao/varlog/pkg/util/log"
@@ -113,6 +114,14 @@ var (
 		Value:    DefaultLogLevel,
 		Usage:    "Log levels, either debug, info, warn, or error case-insensitively.",
 	}
+
+	EnableDevelopmentMode = &cli.BoolFlag{
+		Name:     "enable-development-mode",
+		Category: CategoryLogger,
+		EnvVars:  []string{"ENABLE_DEVELOPMENT_MODE"},
+		Value:    false,
+		Usage:    "Enable development mode for the logger. Panics on DPanic-level logs if true.",
+	}
 )
 
 func ParseLoggerFlags(c *cli.Context, maybeLogFileName string) (opts []log.Option, err error) {
@@ -151,6 +160,12 @@ func ParseLoggerFlags(c *cli.Context, maybeLogFileName string) (opts []log.Optio
 		return nil, err
 	}
 	opts = append(opts, log.WithLogLevel(level))
+
+	var zapOpts []zap.Option
+	if c.Bool(EnableDevelopmentMode.Name) {
+		zapOpts = append(zapOpts, zap.Development())
+	}
+	opts = append(opts, log.WithZapLoggerOptions(zapOpts...))
 
 	return opts, nil
 }
