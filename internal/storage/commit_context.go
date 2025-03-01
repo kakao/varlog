@@ -1,6 +1,10 @@
 package storage
 
-import "github.com/kakao/varlog/pkg/types"
+import (
+	"go.uber.org/zap/zapcore"
+
+	"github.com/kakao/varlog/pkg/types"
+)
 
 // CommitContext is metadata that represents the environment in which the
 // commit is issued; for instance, the commit's version, the largest GLSN
@@ -126,4 +130,13 @@ func (cc CommitContext) Equal(other CommitContext) bool {
 		cc.CommittedGLSNBegin == other.CommittedGLSNBegin &&
 		cc.CommittedGLSNEnd == other.CommittedGLSNEnd &&
 		cc.CommittedLLSNBegin == other.CommittedLLSNBegin
+}
+
+func (cc CommitContext) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddUint64("version", uint64(cc.Version))
+	enc.AddUint64("highWatermark", uint64(cc.HighWatermark))
+	enc.AddUint64("committedGLSNBegin", uint64(cc.CommittedGLSNBegin))
+	enc.AddUint64("committedGLSNEnd", uint64(cc.CommittedGLSNEnd))
+	enc.AddUint64("committedLLSNBegin", uint64(cc.CommittedLLSNBegin))
+	return nil
 }
