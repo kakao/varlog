@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.26.0](https://github.com/kakao/varlog/compare/v0.25.0...v0.26.0) (2025-03-03)
+
+
+### Features
+
+* **logstream:** introduce commit wait task for append batch ([30645f0](https://github.com/kakao/varlog/commit/30645f04005bd9a36431c27cf337a7ae9ea83a99))
+* **logstream:** remove deprecated LLSN field from ReplicateRequest ([c2663cc](https://github.com/kakao/varlog/commit/c2663cc620500e963219dedddd453b58d36c404e))
+* **storagenode:** remove package internal/batchlet ([42003ae](https://github.com/kakao/varlog/commit/42003ae73cba59f4eea0a884f61a1003ddedfbc7))
+
+
+### Performance Improvements
+
+* **logstream:** remove llsnList from replicateTask ([2ce0a9d](https://github.com/kakao/varlog/commit/2ce0a9dd68cc94d18babe1e99ae2a4178fd718ec))
+
 ## [0.25.0](https://github.com/kakao/varlog/compare/v0.24.0...v0.25.0) (2025-02-21)
 
 
