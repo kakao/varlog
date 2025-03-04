@@ -155,7 +155,12 @@ func (s *Storage) newDB(path string, cfg *dbConfig, cache *Cache) (*pebble.DB, e
 		pebbleOpts.ReadOnly = true
 	}
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "opening database: path=%s\n%s", path, pebbleOpts.String())
+	sb.WriteString("opening database: path=")
+	sb.WriteString(path)
+	if s.verbose {
+		sb.WriteString("\n")
+		sb.WriteString(pebbleOpts.String())
+	}
 	s.logger.Info(sb.String())
 	return pebble.Open(path, pebbleOpts)
 }
