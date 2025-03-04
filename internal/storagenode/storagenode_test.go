@@ -161,6 +161,10 @@ func TestStorageNode(t *testing.T) {
 			}()
 		}
 
+		// Unsealing log streams that are already appendable should not be harmful.
+		TestUnsealLogStreamReplica(t, cid, sn1.snid, tpid, lsid, replicas, sn1.advertise)
+		TestUnsealLogStreamReplica(t, cid, sn2.snid, tpid, lsid, replicas, sn2.advertise)
+
 		appendWg.Add(1)
 		go func() {
 			defer appendWg.Done()
