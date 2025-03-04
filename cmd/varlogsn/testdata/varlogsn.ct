@@ -42,6 +42,7 @@ OPTIONS:
 
    Logger:
 
+   --enable-development-mode            Enable development mode for the logger. Panics on DPanic-level logs if true. (default: false) [$ENABLE_DEVELOPMENT_MODE]
    --log-human-readable                 Human-readable output. (default: false) [$LOG_HUMAN_READABLE]
    --logdir value, --log-dir value      Directory for the log files. [$LOGDIR, $LOG_DIR]
    --logfile-compression                Compress backup log files. (default: false) [$LOGFILE_COMPRESSION]
