@@ -161,6 +161,10 @@ func TestStorageNode(t *testing.T) {
 			}()
 		}
 
+		// Unsealing log streams that are already appendable should not be harmful.
+		TestUnsealLogStreamReplica(t, cid, sn1.snid, tpid, lsid, replicas, sn1.advertise)
+		TestUnsealLogStreamReplica(t, cid, sn2.snid, tpid, lsid, replicas, sn2.advertise)
+
 		appendWg.Add(1)
 		go func() {
 			defer appendWg.Done()
@@ -2514,6 +2518,33 @@ func TestStorageNode_Unseal(t *testing.T) {
 				_, err := mc.Unseal(context.Background(), &snpb.UnsealRequest{
 					ClusterID:     cid,
 					StorageNodeID: snid,
+					TopicID:       tpid + 1,
+					LogStreamID:   lsid + 1,
+					Replicas: []varlogpb.LogStreamReplica{
+						{
+							StorageNode: varlogpb.StorageNode{
+								StorageNodeID: snid,
+								Address:       sn.advertise,
+							},
+							TopicLogStream: varlogpb.TopicLogStream{
+								TopicID:     tpid + 1,
+								LogStreamID: lsid + 1,
+							},
+						},
+					},
+				})
+				require.Error(t, err)
+				require.Equal(t, codes.NotFound, status.Code(err))
+			},
+		},
+		{
+			name: "Closed",
+			testf: func(t *testing.T, sn *StorageNode, mc snpb.ManagementClient) {
+				assert.NoError(t, sn.Close())
+
+				_, err := mc.Unseal(context.Background(), &snpb.UnsealRequest{
+					ClusterID:     cid,
+					StorageNodeID: snid,
 					TopicID:       tpid,
 					LogStreamID:   lsid,
 					Replicas: []varlogpb.LogStreamReplica{
@@ -2530,7 +2561,87 @@ func TestStorageNode_Unseal(t *testing.T) {
 					},
 				})
 				require.Error(t, err)
-				require.Equal(t, codes.NotFound, status.Code(err))
+				require.Equal(t, codes.Unavailable, status.Code(err))
+			},
+		},
+		{
+			name: "InvalidState_Sealing",
+			testf: func(t *testing.T, sn *StorageNode, mc snpb.ManagementClient) {
+				_, err := mc.Unseal(context.Background(), &snpb.UnsealRequest{
+					ClusterID:     cid,
+					StorageNodeID: snid,
+					TopicID:       tpid,
+					LogStreamID:   lsid,
+					Replicas: []varlogpb.LogStreamReplica{
+						{
+							StorageNode: varlogpb.StorageNode{
+								StorageNodeID: snid,
+								Address:       sn.advertise,
+							},
+							TopicLogStream: varlogpb.TopicLogStream{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+							},
+						},
+					},
+				})
+				require.Error(t, err)
+			},
+		},
+		{
+			name: "Succeed",
+			testf: func(t *testing.T, sn *StorageNode, mc snpb.ManagementClient) {
+				status, _ := TestSealLogStreamReplica(t, cid, snid, tpid, lsid, types.GLSN(0), sn.advertise)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+				_, err := mc.Unseal(context.Background(), &snpb.UnsealRequest{
+					ClusterID:     cid,
+					StorageNodeID: snid,
+					TopicID:       tpid,
+					LogStreamID:   lsid,
+					Replicas: []varlogpb.LogStreamReplica{
+						{
+							StorageNode: varlogpb.StorageNode{
+								StorageNodeID: snid,
+								Address:       sn.advertise,
+							},
+							TopicLogStream: varlogpb.TopicLogStream{
+								TopicID:     tpid,
+								LogStreamID: lsid,
+							},
+						},
+					},
+				})
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "UnsealAgain",
+			testf: func(t *testing.T, sn *StorageNode, mc snpb.ManagementClient) {
+				status, _ := TestSealLogStreamReplica(t, cid, snid, tpid, lsid, types.GLSN(0), sn.advertise)
+				require.Equal(t, varlogpb.LogStreamStatusSealed, status)
+
+				for range 2 {
+					_, err := mc.Unseal(context.Background(), &snpb.UnsealRequest{
+						ClusterID:     cid,
+						StorageNodeID: snid,
+						TopicID:       tpid,
+						LogStreamID:   lsid,
+						Replicas: []varlogpb.LogStreamReplica{
+							{
+								StorageNode: varlogpb.StorageNode{
+									StorageNodeID: snid,
+									Address:       sn.advertise,
+								},
+								TopicLogStream: varlogpb.TopicLogStream{
+									TopicID:     tpid,
+									LogStreamID: lsid,
+								},
+							},
+						},
+					})
+					require.NoError(t, err)
+				}
 			},
 		},
 	}
@@ -2557,6 +2668,10 @@ func TestStorageNode_Unseal(t *testing.T) {
 				require.NoError(t, err)
 			}()
 			mc := snpb.NewManagementClient(rpcConn.Conn)
+
+			TestAddLogStreamReplica(t, cid, sn.snid, tpid, lsid, sn.snPaths[0], sn.advertise)
+			snmd := TestGetStorageNodeMetadataDescriptor(t, cid, sn.snid, sn.advertise)
+			require.Equal(t, varlogpb.LogStreamStatusSealing, snmd.LogStreamReplicas[0].Status)
 
 			tc.testf(t, sn, mc)
 		})
