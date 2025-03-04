@@ -1318,10 +1318,12 @@ func (mr *RaftMetadataRepository) GetMetadata(context.Context) (*varlogpb.Metada
 	}
 
 	m := mr.storage.GetMetadata()
-	mr.logger.Info("GetMetadata",
-		zap.Int("SN", len(m.GetStorageNodes())),
-		zap.Int("LS", len(m.GetLogStreams())),
-	)
+	if ce := mr.logger.Check(zap.DebugLevel, "GetMetadata"); ce != nil {
+		ce.Write(
+			zap.Int("SN", len(m.GetStorageNodes())),
+			zap.Int("LS", len(m.GetLogStreams())),
+		)
+	}
 	return m, nil
 }
 
