@@ -1231,18 +1231,18 @@ type LogIOClient interface {
 	// is, some of the log entries could not be stored due to failures.
 	//
 	// It returns the following gRPC errors:
-	// - InvalidArgument: AppendRequest has invalid fields; for instance, TopicID
-	// is invalid.
-	// - NotFound: The log stream replica specified by the AppendRequest does not
-	// exist in the storage node. Note that it does not mean that the log stream
-	// does not exist in the cluster.
-	// - FailedPrecondition: The log stream may be sealed; thus, clients cannot
-	// write the log entry. Clients should unseal the log stream to append a log
-	// entry to the log stream.
-	// - Unavailable: The storage node is shutting down, or the log stream replica
-	// is not primary.
-	// - Canceled: The client canceled the request.
-	// - DeadlineExceeded: The client's timeout has expired.
+	//   - InvalidArgument: AppendRequest has invalid fields; for instance,
+	//   TopicID or LogStreamID is invalid, or there is no payload.
+	//   - NotFound: The log stream replica specified by the AppendRequest does
+	//   not exist in the storage node. Note that it does not mean that the log
+	//   stream does not exist in the cluster.
+	//   - FailedPrecondition: The log stream may be sealed; thus, clients cannot
+	//   write the log entry. Clients should unseal the log stream to append a log
+	//   entry to the log stream.
+	//   - Unavailable: The storage node is shutting down, or the log stream
+	//   replica is not primary.
+	//   - Canceled: The client canceled the request.
+	//   - DeadlineExceeded: The client's timeout has expired.
 	//
 	// FIXME: Partial failures are not specified by the gRPC error codes.
 	Append(ctx context.Context, opts ...grpc.CallOption) (LogIO_AppendClient, error)
@@ -1426,18 +1426,18 @@ type LogIOServer interface {
 	// is, some of the log entries could not be stored due to failures.
 	//
 	// It returns the following gRPC errors:
-	// - InvalidArgument: AppendRequest has invalid fields; for instance, TopicID
-	// is invalid.
-	// - NotFound: The log stream replica specified by the AppendRequest does not
-	// exist in the storage node. Note that it does not mean that the log stream
-	// does not exist in the cluster.
-	// - FailedPrecondition: The log stream may be sealed; thus, clients cannot
-	// write the log entry. Clients should unseal the log stream to append a log
-	// entry to the log stream.
-	// - Unavailable: The storage node is shutting down, or the log stream replica
-	// is not primary.
-	// - Canceled: The client canceled the request.
-	// - DeadlineExceeded: The client's timeout has expired.
+	//   - InvalidArgument: AppendRequest has invalid fields; for instance,
+	//   TopicID or LogStreamID is invalid, or there is no payload.
+	//   - NotFound: The log stream replica specified by the AppendRequest does
+	//   not exist in the storage node. Note that it does not mean that the log
+	//   stream does not exist in the cluster.
+	//   - FailedPrecondition: The log stream may be sealed; thus, clients cannot
+	//   write the log entry. Clients should unseal the log stream to append a log
+	//   entry to the log stream.
+	//   - Unavailable: The storage node is shutting down, or the log stream
+	//   replica is not primary.
+	//   - Canceled: The client canceled the request.
+	//   - DeadlineExceeded: The client's timeout has expired.
 	//
 	// FIXME: Partial failures are not specified by the gRPC error codes.
 	Append(LogIO_AppendServer) error
