@@ -82,17 +82,33 @@ var (
 		EnvVars:  []string{"EXPERIMENTAL_STORAGE_SEPARATE_DB"},
 		Usage:    "Separate databases of storage experimentally.",
 	}
-	flagStorageDisableWAL = &cli.BoolFlag{
-		Name:     "storage-disable-wal",
+
+	flagStorageDataDBDisableWAL = &cli.BoolFlag{
+		Name:     "storage-datadb-disable-wal",
 		Category: categoryStorage,
-		EnvVars:  []string{"STORAGE_DISABLE_WAL"},
+		EnvVars:  []string{"STORAGE_DATADB_DISABLE_WAL"},
+		Usage:    "Disable the Write-Ahead Logging (WAL) for the data database in storage. If --experimental-storage-separate-db is not used, this setting applies to both the data and commit databases.",
+	}
+	flagStorageDataDBNoSync = &cli.BoolFlag{
+		Name:     "storage-datadb-no-sync",
+		Category: categoryStorage,
+		EnvVars:  []string{"STORAGE_DATADB_NO_SYNC"},
+		Usage:    "Disable synchronization for the data database in storage. If true, written data might be lost on process termination. If --experimental-storage-separate-db is not used, this setting applies to both the data and commit databases.",
 	}
 
-	flagStorageNoSync = &cli.BoolFlag{
-		Name:     "storage-no-sync",
+	flagStorageCommitDBDisableWAL = &cli.BoolFlag{
+		Name:     "storage-commitdb-disable-wal",
 		Category: categoryStorage,
-		EnvVars:  []string{"STORAGE_NO_SYNC"},
+		EnvVars:  []string{"STORAGE_COMMITDB_DISABLE_WAL"},
+		Usage:    "Disable the Write-Ahead Logging (WAL) for the commit database in storage. If --experimental-storage-separate-db is not used, this setting is ignored.",
 	}
+	flagStorageCommitDBNoSync = &cli.BoolFlag{
+		Name:     "storage-commitdb-no-sync",
+		Category: categoryStorage,
+		EnvVars:  []string{"STORAGE_COMMITDB_NO_SYNC"},
+		Usage:    "Disable synchronization for the commit database in storage. If true, written data might be lost on process termination. If --experimental-storage-separate-db is not used, this setting is ignored.",
+	}
+
 	flagStorageVerbose = &cli.BoolFlag{
 		Name:     "storage-verbose",
 		Category: categoryStorage,
