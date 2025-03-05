@@ -291,8 +291,11 @@ func (lse *Executor) Unseal(_ context.Context, replicas []varlogpb.LogStreamRepl
 	lse.muAdmin.Lock()
 	defer lse.muAdmin.Unlock()
 
-	if lse.esm.load() == executorStateClosed {
+	switch lse.esm.load() {
+	case executorStateClosed:
 		return verrors.ErrClosed
+	case executorStateAppendable:
+		return nil
 	}
 
 	err = varlogpb.ValidReplicas(replicas)
