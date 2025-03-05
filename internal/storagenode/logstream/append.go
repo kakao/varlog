@@ -2,11 +2,9 @@ package logstream
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 
 	snerrors "github.com/kakao/varlog/internal/storagenode/errors"
@@ -55,55 +53,54 @@ func (at *AppendTask) ReleaseWriteWaitGroup() {
 	at.apc.wwg.release()
 }
 
-func (at *AppendTask) WaitForCompletion(ctx context.Context) (res []snpb.AppendResult, err error) {
+func (at *AppendTask) WaitForCompletion(ctx context.Context) ([]snpb.AppendResult, error) {
 	if at.err != nil {
 		return nil, at.err
 	}
 
-	// Append batch requests can succeed partially. In case of partial failure,
-	// failed log entries must be sequential. That is, suffixes of the batch
-	// can be failed to append, whose length can be from zero to the full size.
-	hasNonContextErr := false
-	res = make([]snpb.AppendResult, at.dataBatchLen)
-	for i := range at.apc.awgs {
-		cerr := at.apc.awgs[i].wait(ctx)
-		if cerr != nil {
-			if !hasNonContextErr {
-				hasNonContextErr = !errors.Is(cerr, context.Canceled) && !errors.Is(cerr, context.DeadlineExceeded)
-			}
+	// Append batch requests will eventually only succeed or fail atomically.
+	// This is a work in progress to resolve #843.
+	cctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-			res[i].Error = cerr.Error()
-			if err == nil {
-				err = cerr
+	var err error
+	res := make([]snpb.AppendResult, at.dataBatchLen)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+
+		err = at.apc.awg.wait(cctx)
+		if err != nil {
+			if cctx.Err() == nil {
+				// Since it's neither canceled nor timed out, we can release
+				// awg.
+				at.apc.awg.release()
 			}
-			continue
+			return
 		}
 
-		// It has not failed yet.
-		if err == nil {
+		for i := range at.apc.awg.batchLen {
 			res[i].Meta.TopicID = at.lse.tpid
 			res[i].Meta.LogStreamID = at.lse.lsid
-			res[i].Meta.GLSN = at.apc.awgs[i].glsn
-			res[i].Meta.LLSN = at.apc.awgs[i].llsn
-			at.apc.awgs[i].release()
-			continue
+			res[i].Meta.GLSN = at.apc.awg.beginLSN.GLSN + types.GLSN(i)
+			res[i].Meta.LLSN = at.apc.awg.beginLSN.LLSN + types.LLSN(i)
 		}
+		at.apc.awg.release()
+	}()
 
-		// It panics when the batch's success and failure are interleaved.
-		// However, context errors caused by clients can be ignored since
-		// the batch can succeed in the storage node, although clients
-		// canceled it.
-		// Once the codebase stabilizes, it is planned to be removed.
-		if hasNonContextErr {
-			at.lse.logger.Panic("Results of batch requests of Append RPC must not be interleaved with success and failure", zap.Error(err))
+	select {
+	case <-ctx.Done():
+		// NOTE: If the request is timed out or canceled by the peer, we cannot
+		// guarantee either success or failure.
+		cancel()
+		<-done
+		return nil, ctx.Err()
+	case <-done:
+		if err != nil {
+			return nil, err
 		}
-		res[i].Error = err.Error()
-		at.apc.awgs[i].release()
+		return res, nil
 	}
-	if res[0].Meta.GLSN.Invalid() {
-		return nil, err
-	}
-	return res, nil
 }
 
 func appendTaskDeferredFunc(at *AppendTask) {
@@ -117,14 +114,7 @@ func appendTaskDeferredFunc(at *AppendTask) {
 type appendContext struct {
 	st  *sequenceTask
 	wwg *writeWaitGroup
-	// NOTE(jun): awgs represents a collection of wait groups corresponding to
-	// each log entry in the batch. While storage typically writes log entries
-	// in a batch simultaneously, the commit operation, although expected to
-	// handle all entries in a batch, is not strictly enforced to do so.
-	// Therefore, we should maintain awgs until we can guarantee batch-level
-	// atomic commits.
-	awgs       []*appendWaitGroup
-	totalBytes int64
+	awg *appendWaitGroup
 }
 
 func (lse *Executor) AppendAsync(ctx context.Context, dataBatch [][]byte, appendTask *AppendTask) error {
@@ -149,30 +139,27 @@ func (lse *Executor) AppendAsync(ctx context.Context, dataBatch [][]byte, append
 		return snerrors.ErrNotPrimary
 	}
 
-	appendTask.apc = appendContext{
-		awgs: make([]*appendWaitGroup, 0, dataBatchLen),
-	}
-
+	var totalBytes int64
 	var preparationDuration time.Duration
 	defer func() {
 		if lse.lsm != nil {
 			lse.lsm.AppendLogs.Add(int64(dataBatchLen))
-			lse.lsm.AppendBytes.Add(appendTask.apc.totalBytes)
+			lse.lsm.AppendBytes.Add(totalBytes)
 			lse.lsm.AppendOperations.Add(1)
 			lse.lsm.AppendPreparationMicro.Add(preparationDuration.Microseconds())
 
-			lse.lsm.LogRPCServerBatchSize.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, appendTask.apc.totalBytes)
+			lse.lsm.LogRPCServerBatchSize.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, totalBytes)
 			lse.lsm.LogRPCServerLogEntriesPerBatch.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, int64(dataBatchLen))
 		}
 	}()
 
-	lse.prepareAppendContext(dataBatch, &appendTask.apc)
+	totalBytes = lse.prepareAppendContext(dataBatch, &appendTask.apc)
 	preparationDuration = time.Since(startTime)
 	lse.sendSequenceTask(ctx, appendTask.apc.st)
 	return nil
 }
 
-func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext) {
+func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext) int64 {
 	numBackups := len(lse.primaryBackups) - 1
 
 	st := newSequenceTask()
@@ -195,19 +182,21 @@ func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext
 	st.wwg = newWriteWaitGroup()
 	apc.wwg = st.wwg
 
+	var totalBytes int64
 	st.wb = lse.stg.NewWriteBatch()
 	for i := 0; i < len(dataBatch); i++ {
 		logEntrySize := int64(len(dataBatch[i]))
-		apc.totalBytes += logEntrySize
+		totalBytes += logEntrySize
 		if lse.lsm != nil {
 			// TODO: Set the correct status code.
 			lse.lsm.LogRPCServerLogEntrySize.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, logEntrySize)
 		}
-		awg := newAppendWaitGroup(st.wwg)
-		apc.awgs = append(apc.awgs, awg)
 	}
-	st.cwt = newCommitWaitTask(apc.awgs, len(apc.awgs))
-	st.awgs = apc.awgs
+	awg := newAppendWaitGroup(st.wwg, len(dataBatch))
+	apc.awg = awg
+	st.cwt = newCommitWaitTask(awg, len(dataBatch))
+	st.awg = awg
+	return totalBytes
 }
 
 func (lse *Executor) sendSequenceTask(ctx context.Context, st *sequenceTask) {
