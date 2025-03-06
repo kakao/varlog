@@ -5,14 +5,16 @@ package mrpb
 
 import (
 	fmt "fmt"
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
-	github_com_kakao_varlog_pkg_types "github.com/kakao/varlog/pkg/types"
-	snpb "github.com/kakao/varlog/proto/snpb"
-	varlogpb "github.com/kakao/varlog/proto/varlogpb"
 	io "io"
 	math "math"
 	math_bits "math/bits"
+
+	_ "github.com/gogo/protobuf/gogoproto"
+	proto "github.com/gogo/protobuf/proto"
+
+	github_com_kakao_varlog_pkg_types "github.com/kakao/varlog/pkg/types"
+	snpb "github.com/kakao/varlog/proto/snpb"
+	varlogpb "github.com/kakao/varlog/proto/varlogpb"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
