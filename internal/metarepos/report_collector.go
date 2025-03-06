@@ -21,7 +21,7 @@ import (
 
 const DefaultReportRefreshTime = time.Second
 const DefaultCatchupRefreshTime = 3 * time.Millisecond
-const DefaultSampleReportsRate = 1000
+const DefaultSampleReportsRate = 10000
 
 type sampleTracer struct {
 	m          sync.Map
@@ -705,10 +705,7 @@ func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse
 	}
 
 	for _, r := range diff.UncommitReports {
-		for i := uint64(0); i < r.UncommittedLLSNLength; i++ {
-			llsn := r.UncommittedLLSNOffset + types.LLSN(i)
-			rce.sampleTracer.report(r.LogStreamID, rce.storageNodeID, llsn)
-		}
+		rce.sampleTracer.report(r.LogStreamID, rce.storageNodeID, r)
 	}
 
 	return diff
@@ -961,11 +958,20 @@ func (rc *reportContext) setExpire() {
 	rc.reloadAt = time.Time{}
 }
 
-func (st *sampleTracer) report(lsID types.LogStreamID, snID types.StorageNodeID, llsn types.LLSN) {
-	if uint64(llsn)%st.sampleRate == 0 {
+func (st *sampleTracer) report(lsID types.LogStreamID, snID types.StorageNodeID, r snpb.LogStreamUncommitReport) {
+	if r.UncommittedLLSNLength == 0 {
+		return
+	}
+
+	llsn := r.UncommittedLLSNOffset + types.LLSN(st.sampleRate-1)
+	llsn = llsn - (llsn % types.LLSN(st.sampleRate))
+
+	for llsn < r.UncommittedLLSNEnd() {
 		f, _ := st.m.LoadOrStore(lsID, &sampleReports{llsn: llsn})
 		sample := f.(*sampleReports)
 		sample.report(snID, llsn)
+
+		llsn += types.LLSN(st.sampleRate)
 	}
 }
 
