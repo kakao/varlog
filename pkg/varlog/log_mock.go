@@ -129,13 +129,14 @@ func (mr *MockLogMockRecorder) NewLogStreamAppender(arg0, arg1 any, arg2 ...any)
 }
 
 // PeekLogStream mocks base method.
-func (m *MockLog) PeekLogStream(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID) (varlogpb.LogSequenceNumber, varlogpb.LogSequenceNumber, error) {
+func (m *MockLog) PeekLogStream(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID) (varlogpb.LogSequenceNumber, varlogpb.LogSequenceNumber, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PeekLogStream", arg0, arg1, arg2)
 	ret0, _ := ret[0].(varlogpb.LogSequenceNumber)
 	ret1, _ := ret[1].(varlogpb.LogSequenceNumber)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret2, _ := ret[2].(bool)
+	ret3, _ := ret[3].(error)
+	return ret0, ret1, ret2, ret3
 }
 
 // PeekLogStream indicates an expected call of PeekLogStream.
