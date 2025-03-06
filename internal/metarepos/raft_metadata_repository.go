@@ -779,17 +779,19 @@ func (mr *RaftMetadataRepository) applyReport(reports *mrpb.Reports) error {
 				s.UncommittedLLSNEnd() < u.UncommittedLLSNEnd()) ||
 				s.Version < u.Version {
 				if s.UncommittedLLSNEnd() > u.UncommittedLLSNEnd() {
-					mr.logger.Error("unexpeted report",
-						zap.Any("nodeID", reports.GetNodeID()),
-						zap.Any("sn", snID),
-						zap.Any("ls", u.GetLogStreamID()),
-						zap.Any("ver", u.GetVersion()),
-						zap.Any("off", u.GetUncommittedLLSNOffset()),
-						zap.Any("end", u.UncommittedLLSNEnd()),
-						zap.Any("cver", s.GetVersion()),
-						zap.Any("coff", s.GetUncommittedLLSNOffset()),
-						zap.Any("cend", s.UncommittedLLSNEnd()),
-					)
+					if ce := mr.logger.Check(zap.DebugLevel, "unexpected report"); ce != nil {
+						ce.Write(
+							zap.Any("nodeID", reports.GetNodeID()),
+							zap.Any("sn", snID),
+							zap.Any("ls", u.GetLogStreamID()),
+							zap.Any("ver", u.GetVersion()),
+							zap.Any("off", u.GetUncommittedLLSNOffset()),
+							zap.Any("end", u.UncommittedLLSNEnd()),
+							zap.Any("cver", s.GetVersion()),
+							zap.Any("coff", s.GetUncommittedLLSNOffset()),
+							zap.Any("cend", s.UncommittedLLSNEnd()),
+						)
+					}
 					continue LS
 				}
 				mr.storage.UpdateUncommitReport(u.LogStreamID, snID, u)

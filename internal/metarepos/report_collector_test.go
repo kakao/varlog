@@ -9,7 +9,9 @@ import (
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/kakao/varlog/internal/reportcommitter"
 	"github.com/kakao/varlog/internal/vtesting"
@@ -600,6 +602,74 @@ func TestReportDedup(t *testing.T) {
 			})
 		})
 	})
+}
+
+func TestReportHandleInvalidReport(t *testing.T) {
+	a := NewDummyStorageNodeClientFactory(1, true)
+	mr := NewDummyMetadataRepository(a)
+
+	logger := zaptest.NewLogger(t, zaptest.Level(zap.DebugLevel))
+	reportCollector := NewReportCollector(mr, DefaultRPCTimeout, newNopTelmetryStub(), logger)
+	require.NoError(t, reportCollector.Run())
+	defer reportCollector.Close()
+
+	sn := &varlogpb.StorageNodeDescriptor{
+		StorageNode: varlogpb.StorageNode{
+			StorageNodeID: types.MinStorageNodeID,
+		},
+	}
+
+	glsn := types.MinGLSN
+	version := types.MinVersion
+
+	require.NoError(t, reportCollector.RegisterStorageNode(sn))
+
+	r := <-mr.reportC
+	require.Equal(t, 1, r.Len())
+
+	// When increase the uncommitted length of logstream,
+	// report should reflect this.
+	reporterClient := a.lookupClient(sn.StorageNodeID)
+	reporterClient.increaseUncommitted(0)
+
+	r = <-mr.reportC
+	require.Equal(t, 1, r.Len())
+	require.Equal(t, types.MinLogStreamID, r.UncommitReports[0].LogStreamID)
+	require.Greater(t, r.UncommitReports[0].UncommittedLLSNLength, uint64(0))
+
+	// report should reflect committed version.
+	begin := glsn
+	glsn = begin + types.GLSN(r.UncommitReports[0].UncommittedLLSNLength)
+	version++
+
+	cr := snpb.CommitRequest{
+		StorageNodeID: r.StorageNodeID,
+		CommitResult: snpb.LogStreamCommitResult{
+			LogStreamID:         r.UncommitReports[0].LogStreamID,
+			CommittedLLSNOffset: r.UncommitReports[0].UncommittedLLSNOffset,
+			CommittedGLSNOffset: begin,
+			CommittedGLSNLength: r.UncommitReports[0].UncommittedLLSNLength,
+			HighWatermark:       glsn,
+			Version:             version,
+		},
+	}
+
+	require.NoError(t, reporterClient.Commit(cr))
+
+	r = <-mr.reportC
+	require.Equal(t, 1, r.Len())
+	require.Equal(t, types.MinLogStreamID, r.UncommitReports[0].LogStreamID)
+	require.Equal(t, r.UncommitReports[0].Version, version)
+	require.Equal(t, r.UncommitReports[0].UncommittedLLSNLength, uint64(0))
+
+	// make report invalid and check if the report collector handles it property.
+	reporterClient.setKnownVersion(0, version-1)
+
+	r = <-mr.reportC
+	require.Equal(t, 1, r.Len())
+	for _, ur := range r.UncommitReports {
+		require.NotEqual(t, version, ur.Version)
+	}
 }
 
 func TestReportCollectorSeal(t *testing.T) {

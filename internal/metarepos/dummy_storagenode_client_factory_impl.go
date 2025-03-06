@@ -408,6 +408,13 @@ func (r *DummyStorageNodeClient) getKnownVersion(idx int) types.Version {
 	return r.knownVersion[idx]
 }
 
+func (r *DummyStorageNodeClient) setKnownVersion(idx int, ver types.Version) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.knownVersion[idx] = ver
+}
+
 func (r *DummyStorageNodeClient) makeInvalid(idx int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
