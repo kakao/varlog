@@ -199,8 +199,9 @@ func TestClientAppend(t *testing.T) {
 	// })
 
 	for _, logStreamID := range clus.LogStreamIDs(topicID) {
-		first, last, err := client.PeekLogStream(context.Background(), topicID, logStreamID)
+		first, last, ok, err := client.PeekLogStream(context.Background(), topicID, logStreamID)
 		require.NoError(t, err)
+		require.True(t, ok)
 		require.Equal(t, types.MinLLSN, first.LLSN)
 		require.GreaterOrEqual(t, first.GLSN, types.MinGLSN)
 		require.GreaterOrEqual(t, last.LLSN, types.MinLLSN)
@@ -256,7 +257,7 @@ func TestClientAppendCancel(t *testing.T) {
 }
 
 func TestClientSubscribe(t *testing.T) {
-	//defer goleak.VerifyNone(t)
+	// defer goleak.VerifyNone(t)
 	const (
 		batchSize = 10
 		appendCnt = 10
@@ -394,7 +395,7 @@ func TestClientTrim(t *testing.T) {
 }
 
 func TestVarlogSubscribeWithSNFail(t *testing.T) {
-	//defer goleak.VerifyNone(t)
+	// defer goleak.VerifyNone(t)
 
 	opts := []it.Option{
 		it.WithReplicationFactor(2),
@@ -447,7 +448,7 @@ func TestVarlogSubscribeWithSNFail(t *testing.T) {
 }
 
 func TestVarlogSubscribeWithAddLS(t *testing.T) {
-	//defer goleak.VerifyNone(t)
+	// defer goleak.VerifyNone(t)
 	opts := []it.Option{
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(5),
@@ -510,7 +511,7 @@ func TestVarlogSubscribeWithAddLS(t *testing.T) {
 }
 
 func TestVarlogSubscribeWithUpdateLS(t *testing.T) {
-	//defer goleak.VerifyNone(t)
+	// defer goleak.VerifyNone(t)
 	opts := []it.Option{
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(5),
@@ -615,16 +616,18 @@ func TestClientPeekLogStream(t *testing.T) {
 	lsid := clus.LogStreamIDs(tpid)[0]
 	client := clus.ClientAtIndex(t, 0)
 
-	first, last, err := client.PeekLogStream(context.Background(), tpid, lsid)
+	first, last, ok, err := client.PeekLogStream(context.Background(), tpid, lsid)
 	require.NoError(t, err)
+	require.True(t, ok)
 	require.True(t, first.Invalid())
 	require.True(t, last.Invalid())
 
 	res := client.Append(context.Background(), tpid, [][]byte{nil})
 	require.NoError(t, res.Err)
 
-	first, last, err = client.PeekLogStream(context.Background(), tpid, lsid)
+	first, last, ok, err = client.PeekLogStream(context.Background(), tpid, lsid)
 	require.NoError(t, err)
+	require.True(t, ok)
 	require.Equal(t, varlogpb.LogSequenceNumber{
 		LLSN: 1, GLSN: 1,
 	}, first)
@@ -635,8 +638,9 @@ func TestClientPeekLogStream(t *testing.T) {
 	idx := int(time.Now().UnixNano() % 2)
 	clus.CloseSN(t, clus.StorageNodeIDAtIndex(t, idx))
 
-	first, last, err = client.PeekLogStream(context.Background(), tpid, lsid)
+	first, last, ok, err = client.PeekLogStream(context.Background(), tpid, lsid)
 	require.NoError(t, err)
+	require.True(t, ok)
 	require.Equal(t, varlogpb.LogSequenceNumber{
 		LLSN: 1, GLSN: 1,
 	}, first)
@@ -647,8 +651,9 @@ func TestClientPeekLogStream(t *testing.T) {
 	idx = (idx + 1) % 2
 	clus.CloseSN(t, clus.StorageNodeIDAtIndex(t, idx))
 
-	_, _, err = client.PeekLogStream(context.Background(), tpid, lsid)
+	_, _, ok, err = client.PeekLogStream(context.Background(), tpid, lsid)
 	require.Error(t, err)
+	require.False(t, ok)
 }
 
 func TestClientAppendWithAllowedLogStream(t *testing.T) {
