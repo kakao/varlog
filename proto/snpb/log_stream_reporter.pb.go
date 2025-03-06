@@ -6,17 +6,15 @@ package snpb
 import (
 	context "context"
 	fmt "fmt"
-	io "io"
-	math "math"
-	math_bits "math/bits"
-
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
+	github_com_kakao_varlog_pkg_types "github.com/kakao/varlog/pkg/types"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-
-	github_com_kakao_varlog_pkg_types "github.com/kakao/varlog/pkg/types"
+	io "io"
+	math "math"
+	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -204,92 +202,92 @@ func (m *GetReportResponse) GetUncommitReports() []LogStreamUncommitReport {
 // Here are examples for clarity. Assume that there are two log streams in a
 // topic.
 //
-//	// LogStream 1 has not committed any log entries, and LogStream 2 has
-//	// committed ten.
-//	LogStreamCommitResult{
-//	    TopicID: 1,
-//	    LogStreamID: 1,
-//	    Version: 1,
-//	    HighWatermark: 10,
-//	    CommittedLLSNOffset: 1,
-//	    CommittedGLSNOffset: 1,
-//	    CommittedGLSNLength: 0,
-//	}
-//	LogStreamCommitResult{
-//	    TopicID: 1,
-//	    LogStreamID: 2,
-//	    Version: 1,
-//	    HighWatermark: 10,
-//	    CommittedLLSNOffset: 1,
-//	    CommittedGLSNOffset: 1,
-//	    CommittedGLSNLength: 10,
-//	}
+//  // LogStream 1 has not committed any log entries, and LogStream 2 has
+//  // committed ten.
+//  LogStreamCommitResult{
+//      TopicID: 1,
+//      LogStreamID: 1,
+//      Version: 1,
+//      HighWatermark: 10,
+//      CommittedLLSNOffset: 1,
+//      CommittedGLSNOffset: 1,
+//      CommittedGLSNLength: 0,
+//  }
+//  LogStreamCommitResult{
+//      TopicID: 1,
+//      LogStreamID: 2,
+//      Version: 1,
+//      HighWatermark: 10,
+//      CommittedLLSNOffset: 1,
+//      CommittedGLSNOffset: 1,
+//      CommittedGLSNLength: 10,
+//  }
 //
-//	// LogStream 1 has not committed any log entries again, and LogStream 2 has
-//	// committed ten.
-//	// Note that the CommittedGLSNOffset of LogStream 1 is one even though the
-//	// GLSN 1 has already been issued to other log entries in LogStream 2.
-//	LogStreamCommitResult{
-//	    TopicID: 1,
-//	    LogStreamID: 1,
-//	    Version 2,
-//	    HighWatermark: 20,
-//	    CommittedLLSNOffset: 1,
-//	    CommittedGLSNOffset: 1,
-//	    CommittedGLSNLength: 0,
-//	}
-//	LogStreamCommitResult{
-//	    TopicID: 1,
-//	    LogStreamID: 2,
-//	    Version 2,
-//	    HighWatermark: 20,
-//	    CommittedLLSNOffset: 11,
-//	    CommittedGLSNOffset: 11,
-//	    CommittedGLSNLength: 10,
-//	}
+//  // LogStream 1 has not committed any log entries again, and LogStream 2 has
+//  // committed ten.
+//  // Note that the CommittedGLSNOffset of LogStream 1 is one even though the
+//  // GLSN 1 has already been issued to other log entries in LogStream 2.
+//  LogStreamCommitResult{
+//      TopicID: 1,
+//      LogStreamID: 1,
+//      Version 2,
+//      HighWatermark: 20,
+//      CommittedLLSNOffset: 1,
+//      CommittedGLSNOffset: 1,
+//      CommittedGLSNLength: 0,
+//  }
+//  LogStreamCommitResult{
+//      TopicID: 1,
+//      LogStreamID: 2,
+//      Version 2,
+//      HighWatermark: 20,
+//      CommittedLLSNOffset: 11,
+//      CommittedGLSNOffset: 11,
+//      CommittedGLSNLength: 10,
+//  }
 //
-//	// LogStream 1 has committed ten log entries, and LogStream 2 has committed
-//	// ten.
-//	LogStreamCommitResult{
-//	    TopicID: 1,
-//	    LogStreamID: 1,
-//	    Version 3,
-//	    HighWatermark: 40,
-//	    CommittedLLSNOffset: 1,
-//	    CommittedGLSNOffset: 21,
-//	    CommittedGLSNLength: 10,
-//	}
-//	LogStreamCommitResult{
-//	    TopicID: 1,
-//	    LogStreamID: 2,
-//	    Version 3,
-//	    HighWatermark: 40,
-//	    CommittedLLSNOffset: 21,
-//	    CommittedGLSNOffset: 31,
-//	    CommittedGLSNLength: 10,
-//	}
+//  // LogStream 1 has committed ten log entries, and LogStream 2 has committed
+//  // ten.
+//  LogStreamCommitResult{
+//      TopicID: 1,
+//      LogStreamID: 1,
+//      Version 3,
+//      HighWatermark: 40,
+//      CommittedLLSNOffset: 1,
+//      CommittedGLSNOffset: 21,
+//      CommittedGLSNLength: 10,
+//  }
+//  LogStreamCommitResult{
+//      TopicID: 1,
+//      LogStreamID: 2,
+//      Version 3,
+//      HighWatermark: 40,
+//      CommittedLLSNOffset: 21,
+//      CommittedGLSNOffset: 31,
+//      CommittedGLSNLength: 10,
+//  }
 //
-//	// LogStream 1 has committed ten log entries, and LogStream 2 has not.
-//	// Note that the CommittedGLSNOffset of LogStream 2 is next to the last
-//	// committed GLSN of itself, regardless of LogStream 1.
-//	LogStreamCommitResult{
-//	    TopicID: 1,
-//	    LogStreamID: 1,
-//	    Version 4,
-//	    HighWatermark: 50,
-//	    CommittedLLSNOffset: 11,
-//	    CommittedGLSNOffset: 41,
-//	    CommittedGLSNLength: 10,
-//	}
-//	LogStreamCommitResult{
-//	    TopicID: 1,
-//	    LogStreamID: 2,
-//	    Version 4,
-//	    HighWatermark: 50,
-//	    CommittedLLSNOffset: 31,
-//	    CommittedGLSNOffset: 41,
-//	    CommittedGLSNLength: 0,
-//	}
+//  // LogStream 1 has committed ten log entries, and LogStream 2 has not.
+//  // Note that the CommittedGLSNOffset of LogStream 2 is next to the last
+//  // committed GLSN of itself, regardless of LogStream 1.
+//  LogStreamCommitResult{
+//      TopicID: 1,
+//      LogStreamID: 1,
+//      Version 4,
+//      HighWatermark: 50,
+//      CommittedLLSNOffset: 11,
+//      CommittedGLSNOffset: 41,
+//      CommittedGLSNLength: 10,
+//  }
+//  LogStreamCommitResult{
+//      TopicID: 1,
+//      LogStreamID: 2,
+//      Version 4,
+//      HighWatermark: 50,
+//      CommittedLLSNOffset: 31,
+//      CommittedGLSNOffset: 41,
+//      CommittedGLSNLength: 0,
+//  }
 type LogStreamCommitResult struct {
 	// LogStreamID is the identifier for the log stream.
 	LogStreamID github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
