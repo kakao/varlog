@@ -6,19 +6,18 @@ package mrpb
 import (
 	context "context"
 	fmt "fmt"
-	io "io"
-	math "math"
-	math_bits "math/bits"
-
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	types "github.com/gogo/protobuf/types"
+	github_com_kakao_varlog_pkg_types "github.com/kakao/varlog/pkg/types"
+	snpb "github.com/kakao/varlog/proto/snpb"
+	varlogpb "github.com/kakao/varlog/proto/varlogpb"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-
-	github_com_kakao_varlog_pkg_types "github.com/kakao/varlog/pkg/types"
-	varlogpb "github.com/kakao/varlog/proto/varlogpb"
+	io "io"
+	math "math"
+	math_bits "math/bits"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -444,6 +443,190 @@ func (m *TopicRequest) GetTopicID() github_com_kakao_varlog_pkg_types.TopicID {
 	return 0
 }
 
+type GetCommitResultRequest struct {
+	TopicID     github_com_kakao_varlog_pkg_types.TopicID     `protobuf:"varint,1,opt,name=topic_id,json=topicId,proto3,casttype=github.com/kakao/varlog/pkg/types.TopicID" json:"topic_id,omitempty"`
+	LogStreamID github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,2,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+}
+
+func (m *GetCommitResultRequest) Reset()         { *m = GetCommitResultRequest{} }
+func (m *GetCommitResultRequest) String() string { return proto.CompactTextString(m) }
+func (*GetCommitResultRequest) ProtoMessage()    {}
+func (*GetCommitResultRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_0ffe516e0fdff161, []int{9}
+}
+func (m *GetCommitResultRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetCommitResultRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetCommitResultRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetCommitResultRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetCommitResultRequest.Merge(m, src)
+}
+func (m *GetCommitResultRequest) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *GetCommitResultRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetCommitResultRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetCommitResultRequest proto.InternalMessageInfo
+
+func (m *GetCommitResultRequest) GetTopicID() github_com_kakao_varlog_pkg_types.TopicID {
+	if m != nil {
+		return m.TopicID
+	}
+	return 0
+}
+
+func (m *GetCommitResultRequest) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
+	if m != nil {
+		return m.LogStreamID
+	}
+	return 0
+}
+
+type GetCommitResultResponse struct {
+	CommitResult snpb.LogStreamCommitResult `protobuf:"bytes,1,opt,name=commit_result,json=commitResult,proto3" json:"commit_result"`
+}
+
+func (m *GetCommitResultResponse) Reset()         { *m = GetCommitResultResponse{} }
+func (m *GetCommitResultResponse) String() string { return proto.CompactTextString(m) }
+func (*GetCommitResultResponse) ProtoMessage()    {}
+func (*GetCommitResultResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_0ffe516e0fdff161, []int{10}
+}
+func (m *GetCommitResultResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetCommitResultResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetCommitResultResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetCommitResultResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetCommitResultResponse.Merge(m, src)
+}
+func (m *GetCommitResultResponse) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *GetCommitResultResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetCommitResultResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetCommitResultResponse proto.InternalMessageInfo
+
+func (m *GetCommitResultResponse) GetCommitResult() snpb.LogStreamCommitResult {
+	if m != nil {
+		return m.CommitResult
+	}
+	return snpb.LogStreamCommitResult{}
+}
+
+type GetReportsRequest struct {
+	LogStreamID github_com_kakao_varlog_pkg_types.LogStreamID `protobuf:"varint,1,opt,name=log_stream_id,json=logStreamId,proto3,casttype=github.com/kakao/varlog/pkg/types.LogStreamID" json:"log_stream_id,omitempty"`
+}
+
+func (m *GetReportsRequest) Reset()         { *m = GetReportsRequest{} }
+func (m *GetReportsRequest) String() string { return proto.CompactTextString(m) }
+func (*GetReportsRequest) ProtoMessage()    {}
+func (*GetReportsRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_0ffe516e0fdff161, []int{11}
+}
+func (m *GetReportsRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetReportsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetReportsRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetReportsRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetReportsRequest.Merge(m, src)
+}
+func (m *GetReportsRequest) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *GetReportsRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetReportsRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetReportsRequest proto.InternalMessageInfo
+
+func (m *GetReportsRequest) GetLogStreamID() github_com_kakao_varlog_pkg_types.LogStreamID {
+	if m != nil {
+		return m.LogStreamID
+	}
+	return 0
+}
+
+type GetReportsResponse struct {
+	Reports LogStreamUncommitReports `protobuf:"bytes,1,opt,name=reports,proto3" json:"reports"`
+}
+
+func (m *GetReportsResponse) Reset()         { *m = GetReportsResponse{} }
+func (m *GetReportsResponse) String() string { return proto.CompactTextString(m) }
+func (*GetReportsResponse) ProtoMessage()    {}
+func (*GetReportsResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_0ffe516e0fdff161, []int{12}
+}
+func (m *GetReportsResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *GetReportsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_GetReportsResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *GetReportsResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_GetReportsResponse.Merge(m, src)
+}
+func (m *GetReportsResponse) XXX_Size() int {
+	return m.ProtoSize()
+}
+func (m *GetReportsResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_GetReportsResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_GetReportsResponse proto.InternalMessageInfo
+
+func (m *GetReportsResponse) GetReports() LogStreamUncommitReports {
+	if m != nil {
+		return m.Reports
+	}
+	return LogStreamUncommitReports{}
+}
+
 func init() {
 	proto.RegisterType((*GetMetadataRequest)(nil), "varlog.mrpb.GetMetadataRequest")
 	proto.RegisterType((*GetMetadataResponse)(nil), "varlog.mrpb.GetMetadataResponse")
@@ -454,6 +637,10 @@ func init() {
 	proto.RegisterType((*UnsealRequest)(nil), "varlog.mrpb.UnsealRequest")
 	proto.RegisterType((*UnsealResponse)(nil), "varlog.mrpb.UnsealResponse")
 	proto.RegisterType((*TopicRequest)(nil), "varlog.mrpb.TopicRequest")
+	proto.RegisterType((*GetCommitResultRequest)(nil), "varlog.mrpb.GetCommitResultRequest")
+	proto.RegisterType((*GetCommitResultResponse)(nil), "varlog.mrpb.GetCommitResultResponse")
+	proto.RegisterType((*GetReportsRequest)(nil), "varlog.mrpb.GetReportsRequest")
+	proto.RegisterType((*GetReportsResponse)(nil), "varlog.mrpb.GetReportsResponse")
 }
 
 func init() {
@@ -461,52 +648,62 @@ func init() {
 }
 
 var fileDescriptor_0ffe516e0fdff161 = []byte{
-	// 716 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x96, 0xcd, 0x4e, 0xdb, 0x4a,
-	0x14, 0xc7, 0xe3, 0x2b, 0x6e, 0x80, 0x13, 0x3e, 0x2e, 0x93, 0xdb, 0x16, 0x8c, 0x1a, 0x23, 0x17,
-	0xa1, 0x56, 0x15, 0x8e, 0x44, 0x37, 0x2c, 0xa8, 0xa8, 0x02, 0x2d, 0x0a, 0x4a, 0x69, 0x65, 0x97,
-	0x2e, 0x5a, 0x55, 0x91, 0x63, 0x4f, 0x5d, 0x0b, 0x3b, 0xe3, 0x7a, 0x26, 0x48, 0xbc, 0x45, 0xfb,
-	0x06, 0x7d, 0x8d, 0xbe, 0x01, 0x4b, 0xd4, 0x55, 0x57, 0x5e, 0x24, 0x6f, 0xc1, 0xaa, 0xf2, 0xd8,
-	0xe3, 0x0f, 0xc2, 0xc7, 0x02, 0x56, 0xdd, 0xd9, 0x73, 0xce, 0xf9, 0x9d, 0xff, 0xcc, 0xc9, 0xfc,
-	0x1d, 0x58, 0x0d, 0x42, 0xc2, 0x48, 0xd3, 0x0f, 0x83, 0x5e, 0xd3, 0xc7, 0xcc, 0xb4, 0x4d, 0x66,
-	0x76, 0x43, 0x1c, 0x10, 0xea, 0x32, 0x12, 0x9e, 0x68, 0x3c, 0x8c, 0x6a, 0xc7, 0x66, 0xe8, 0x11,
-	0x47, 0x8b, 0xd3, 0xe4, 0x75, 0xc7, 0x65, 0x5f, 0x06, 0x3d, 0xcd, 0x22, 0x7e, 0xd3, 0x21, 0x0e,
-	0x69, 0xf2, 0x9c, 0xde, 0xe0, 0x33, 0x7f, 0x4b, 0x78, 0xf1, 0x53, 0x52, 0x2b, 0x2f, 0x3b, 0x84,
-	0x38, 0x1e, 0xce, 0xb3, 0xb0, 0x1f, 0xb0, 0x14, 0x2c, 0x3f, 0x48, 0xc0, 0x85, 0xe6, 0x49, 0x40,
-	0xfd, 0x1f, 0xd0, 0x1e, 0x66, 0xaf, 0xd3, 0x45, 0x1d, 0x7f, 0x1d, 0x60, 0xca, 0xd4, 0xf7, 0x50,
-	0x2f, 0xad, 0xd2, 0x80, 0xf4, 0x29, 0x46, 0xdb, 0x30, 0x25, 0xca, 0x17, 0xa5, 0x15, 0xe9, 0x71,
-	0x6d, 0xe3, 0x91, 0x96, 0x2a, 0x16, 0x7c, 0x4d, 0x14, 0xed, 0x62, 0x6a, 0x85, 0x6e, 0xc0, 0x48,
-	0xa8, 0x67, 0x45, 0x2a, 0x06, 0x64, 0x30, 0x12, 0x9a, 0x0e, 0x3e, 0x20, 0x36, 0x4e, 0xbb, 0xa1,
-	0x37, 0x30, 0x43, 0x93, 0xd5, 0x6e, 0x9f, 0xd8, 0x38, 0x45, 0xaf, 0x8d, 0xa1, 0x0b, 0xa5, 0x39,
-	0xbd, 0x35, 0x71, 0x1a, 0x29, 0x92, 0x5e, 0xa3, 0x79, 0x50, 0xfd, 0x04, 0xff, 0x75, 0x88, 0x63,
-	0xb0, 0x10, 0x9b, 0xbe, 0x68, 0xd2, 0x06, 0xf0, 0x88, 0xd3, 0xa5, 0x7c, 0x31, 0x6d, 0xb1, 0x3a,
-	0xd6, 0x22, 0x2b, 0x1b, 0x6b, 0x30, 0xed, 0x89, 0x90, 0x7a, 0x26, 0x41, 0xcd, 0xc0, 0xa6, 0x27,
-	0xd0, 0x1f, 0x01, 0x2c, 0x6f, 0x40, 0x19, 0x0e, 0xbb, 0xae, 0xcd, 0xd1, 0xff, 0xb6, 0xb6, 0x86,
-	0x91, 0x32, 0xbd, 0x93, 0xac, 0xb6, 0x77, 0xcf, 0x23, 0xe5, 0x69, 0x61, 0x9a, 0x47, 0xe6, 0x91,
-	0x49, 0x9a, 0x49, 0xd3, 0x66, 0x70, 0xe4, 0x34, 0xd9, 0x49, 0x80, 0xa9, 0x96, 0xa5, 0xeb, 0xd3,
-	0x29, 0xaf, 0x6d, 0x23, 0x1b, 0x66, 0x73, 0xdd, 0x31, 0xff, 0x1f, 0xce, 0x7f, 0x31, 0x8c, 0x94,
-	0x5a, 0xa6, 0x96, 0x77, 0x58, 0xbf, 0xb9, 0x43, 0xa1, 0x40, 0xaf, 0x65, 0x1b, 0x6a, 0xdb, 0xea,
-	0x4f, 0x09, 0x66, 0x92, 0x2d, 0xa5, 0xa3, 0xde, 0x84, 0x2a, 0x65, 0x26, 0x1b, 0x50, 0xbe, 0x9f,
-	0xb9, 0x8d, 0x95, 0xab, 0x8f, 0xca, 0xe0, 0x79, 0x7a, 0x9a, 0x8f, 0x08, 0xd4, 0x3d, 0x93, 0xb2,
-	0xae, 0x45, 0x7c, 0xdf, 0x65, 0x0c, 0xdb, 0x5d, 0xc7, 0xa3, 0x7d, 0x2e, 0x7b, 0xa2, 0xb5, 0x3d,
-	0x8c, 0x94, 0x85, 0x8e, 0x49, 0xd9, 0x8e, 0x88, 0xee, 0x75, 0x8c, 0x83, 0xf3, 0x48, 0x59, 0xbb,
-	0x59, 0x7c, 0x9c, 0xa9, 0x2f, 0x78, 0xa5, 0x62, 0x8f, 0xf6, 0xd5, 0x5f, 0x12, 0xcc, 0x1e, 0xf6,
-	0xe9, 0xdf, 0x35, 0x90, 0x7d, 0x98, 0x13, 0x7b, 0xba, 0xed, 0x44, 0x54, 0x0b, 0x66, 0xde, 0x91,
-	0xc0, 0xb5, 0xc4, 0xf1, 0x18, 0x30, 0xc5, 0xe2, 0xf7, 0xfc, 0x70, 0x36, 0x87, 0x91, 0x32, 0xc9,
-	0x73, 0xb8, 0xf0, 0x27, 0x37, 0x0b, 0x4f, 0x93, 0xf5, 0x49, 0x4e, 0x6a, 0xdb, 0x1b, 0xdf, 0xab,
-	0xb0, 0x94, 0x1b, 0x86, 0xf0, 0x35, 0x03, 0x87, 0xc7, 0xae, 0x85, 0xd1, 0x5b, 0xa8, 0xeb, 0xd8,
-	0x71, 0xe3, 0x23, 0x2c, 0xdc, 0x62, 0xa4, 0x68, 0x05, 0xc3, 0xd3, 0xc6, 0xad, 0x41, 0xbe, 0xaf,
-	0x25, 0xae, 0xa6, 0x09, 0x57, 0xd3, 0x5e, 0xc6, 0xae, 0xa6, 0x56, 0x90, 0x0e, 0xf7, 0x0e, 0xfb,
-	0xe1, 0xdd, 0x32, 0x77, 0x61, 0x56, 0xa8, 0xe4, 0xfb, 0x43, 0x4b, 0x25, 0x56, 0xf1, 0x10, 0xaf,
-	0xa1, 0xbc, 0x82, 0xf9, 0x5c, 0xd9, 0x2d, 0x38, 0x1d, 0x58, 0x10, 0x6a, 0xb2, 0xc9, 0xa2, 0x87,
-	0x25, 0xd2, 0x45, 0x97, 0xbb, 0x86, 0x76, 0x00, 0xf5, 0x5c, 0xd5, 0x1d, 0xf0, 0xf6, 0x61, 0xfe,
-	0x30, 0xb0, 0x4d, 0x86, 0xef, 0x80, 0xa5, 0x43, 0xad, 0xf0, 0xb9, 0xb9, 0x30, 0xc1, 0xf1, 0xcf,
-	0x93, 0xbc, 0x72, 0x75, 0x42, 0x72, 0x59, 0xd4, 0x0a, 0x7a, 0x0e, 0x13, 0xb1, 0xa1, 0xa1, 0xc5,
-	0xf2, 0xcf, 0x21, 0x77, 0x09, 0x79, 0xe9, 0x92, 0x48, 0x56, 0xbe, 0x03, 0xd5, 0xe4, 0xfe, 0x21,
-	0xb9, 0x94, 0x56, 0x32, 0x1a, 0x79, 0xf9, 0xd2, 0x98, 0x80, 0xb4, 0xb6, 0x4e, 0x87, 0x0d, 0xe9,
-	0x6c, 0xd8, 0x90, 0xbe, 0x8d, 0x1a, 0x95, 0x1f, 0xa3, 0x86, 0x74, 0x36, 0x6a, 0x54, 0x7e, 0x8f,
-	0x1a, 0x95, 0x0f, 0xea, 0x95, 0x37, 0x2c, 0xfb, 0x9b, 0xd0, 0xab, 0xf2, 0xe7, 0x67, 0x7f, 0x02,
-	0x00, 0x00, 0xff, 0xff, 0x6e, 0x42, 0x36, 0x6f, 0x3b, 0x08, 0x00, 0x00,
+	// 875 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x56, 0xbd, 0x6e, 0xdc, 0x46,
+	0x10, 0x3e, 0x06, 0x8a, 0x64, 0xcd, 0x49, 0x56, 0xb4, 0x4a, 0x6c, 0x89, 0x46, 0x48, 0x81, 0x52,
+	0x8c, 0x04, 0x81, 0x49, 0x40, 0x69, 0x5c, 0x38, 0x70, 0x20, 0xc9, 0x11, 0xce, 0x90, 0xe5, 0x80,
+	0x17, 0xa5, 0x88, 0x91, 0x10, 0x3c, 0x72, 0x4d, 0x13, 0xe2, 0x71, 0x99, 0xdd, 0x3d, 0x03, 0x7a,
+	0x8b, 0x3c, 0x42, 0x5e, 0x23, 0x6d, 0x2a, 0x97, 0x42, 0xd2, 0xa4, 0xba, 0xe2, 0xee, 0x2d, 0x5c,
+	0x05, 0x5c, 0xee, 0xf2, 0xe7, 0x7e, 0x7c, 0x85, 0xa5, 0x14, 0xee, 0xc8, 0x9d, 0x6f, 0xbe, 0xf9,
+	0x66, 0x66, 0x39, 0x43, 0xd8, 0xcf, 0x28, 0xe1, 0xc4, 0xe9, 0xd3, 0xac, 0xe7, 0xf4, 0x31, 0xf7,
+	0x43, 0x9f, 0xfb, 0x1e, 0xc5, 0x19, 0x61, 0x31, 0x27, 0xf4, 0xd2, 0x16, 0x66, 0xd4, 0x7e, 0xed,
+	0xd3, 0x84, 0x44, 0x76, 0x0e, 0xd3, 0x1f, 0x44, 0x31, 0x7f, 0x35, 0xe8, 0xd9, 0x01, 0xe9, 0x3b,
+	0x11, 0x89, 0x88, 0x23, 0x30, 0xbd, 0xc1, 0x4b, 0xf1, 0x56, 0xf0, 0xe5, 0x4f, 0x85, 0xaf, 0x7e,
+	0x2f, 0x22, 0x24, 0x4a, 0x70, 0x85, 0xc2, 0xfd, 0x8c, 0x4b, 0x62, 0xfd, 0x6e, 0x41, 0x5c, 0x0b,
+	0x2e, 0x0d, 0x06, 0x4b, 0xb3, 0x9e, 0x93, 0x90, 0xc8, 0x63, 0x9c, 0x62, 0xbf, 0x2f, 0x34, 0x51,
+	0x8e, 0xa9, 0xb4, 0xef, 0x09, 0xc5, 0xd4, 0x7f, 0xc9, 0xbd, 0xb9, 0xb2, 0xad, 0x4f, 0x01, 0x9d,
+	0x60, 0xfe, 0x4c, 0xda, 0x5d, 0xfc, 0xdb, 0x00, 0x33, 0x6e, 0xfd, 0x04, 0x5b, 0x8d, 0x53, 0x96,
+	0x91, 0x94, 0x61, 0xf4, 0x18, 0x6e, 0x29, 0xa6, 0x6d, 0x6d, 0x57, 0xfb, 0xb2, 0x7d, 0xb0, 0x67,
+	0xcb, 0xb4, 0x95, 0x48, 0x5b, 0x39, 0x1d, 0x63, 0x16, 0xd0, 0x38, 0xe3, 0x84, 0xba, 0xa5, 0x93,
+	0x85, 0x01, 0x75, 0x39, 0xa1, 0x7e, 0x84, 0xcf, 0x48, 0x88, 0x65, 0x34, 0xf4, 0x1c, 0xd6, 0x58,
+	0x71, 0xea, 0xa5, 0x24, 0xc4, 0x92, 0xfa, 0xfe, 0x14, 0x75, 0xcd, 0xb5, 0x62, 0x3f, 0x5c, 0x7a,
+	0x33, 0x34, 0x35, 0xb7, 0xcd, 0x2a, 0xa3, 0xf5, 0x0b, 0x7c, 0x72, 0x4a, 0xa2, 0xae, 0xa8, 0x8a,
+	0x0a, 0xd2, 0x01, 0xa8, 0x4a, 0x25, 0x43, 0xec, 0x4f, 0x85, 0x28, 0xdd, 0xa6, 0x02, 0xac, 0x26,
+	0xca, 0x64, 0x5d, 0x69, 0xd0, 0xee, 0x62, 0x3f, 0x51, 0xd4, 0x2f, 0x00, 0x82, 0x64, 0xc0, 0x38,
+	0xa6, 0x5e, 0x1c, 0x0a, 0xea, 0x8f, 0x0f, 0x1f, 0x8d, 0x86, 0xe6, 0xea, 0x51, 0x71, 0xda, 0x39,
+	0x7e, 0x3b, 0x34, 0xbf, 0xae, 0x5d, 0x89, 0x0b, 0xff, 0xc2, 0x27, 0x4e, 0x11, 0xd4, 0xc9, 0x2e,
+	0x22, 0x87, 0x5f, 0x66, 0x98, 0xd9, 0x25, 0xdc, 0x5d, 0x95, 0x7c, 0x9d, 0x10, 0x85, 0xb0, 0x5e,
+	0x6b, 0x71, 0x1c, 0x6e, 0x7f, 0x24, 0xf8, 0xbf, 0x1b, 0x0d, 0xcd, 0x76, 0xa9, 0x56, 0x44, 0x78,
+	0xb0, 0x38, 0x42, 0xcd, 0xc1, 0x6d, 0x97, 0x09, 0x75, 0x42, 0xeb, 0x4f, 0x0d, 0xd6, 0x8a, 0x94,
+	0x64, 0xab, 0x1f, 0xc2, 0x32, 0xe3, 0x3e, 0x1f, 0x30, 0x91, 0xcf, 0xed, 0x83, 0xdd, 0xf9, 0xa5,
+	0xea, 0x0a, 0x9c, 0x2b, 0xf1, 0x88, 0xc0, 0x56, 0xe2, 0x33, 0xee, 0x05, 0xa4, 0xdf, 0x8f, 0x39,
+	0xc7, 0xa1, 0x17, 0x25, 0x2c, 0x15, 0xb2, 0x97, 0x0e, 0x1f, 0x8f, 0x86, 0xe6, 0xe6, 0xa9, 0xcf,
+	0xf8, 0x91, 0xb2, 0x9e, 0x9c, 0x76, 0xcf, 0xde, 0x0e, 0xcd, 0xfb, 0x8b, 0xc5, 0xe7, 0x48, 0x77,
+	0x33, 0x69, 0x38, 0x27, 0x2c, 0xb5, 0xfe, 0xd6, 0x60, 0xfd, 0x3c, 0x65, 0x1f, 0x56, 0x43, 0x9e,
+	0xc2, 0x6d, 0x95, 0xd3, 0xfb, 0x76, 0xc4, 0x0a, 0x60, 0xed, 0x47, 0x92, 0xc5, 0x81, 0x2a, 0x4f,
+	0x17, 0x6e, 0xf1, 0xfc, 0xbd, 0x2a, 0xce, 0xc3, 0xd1, 0xd0, 0x5c, 0x11, 0x18, 0x21, 0xfc, 0xab,
+	0xc5, 0xc2, 0x25, 0xd8, 0x5d, 0x11, 0x4c, 0x9d, 0xd0, 0xfa, 0x47, 0x83, 0x3b, 0x27, 0x58, 0xb6,
+	0xc6, 0xc5, 0x6c, 0x90, 0xf0, 0x9b, 0x8c, 0xf7, 0x3f, 0xb5, 0xe1, 0x15, 0xdc, 0x9d, 0x4a, 0x4a,
+	0xf6, 0xe3, 0x19, 0xac, 0x17, 0x57, 0xdc, 0xa3, 0xc2, 0x20, 0x67, 0x8a, 0xa5, 0xda, 0x92, 0x4f,
+	0xe7, 0x8a, 0xb8, 0x4e, 0x21, 0x26, 0x4a, 0xcb, 0x5d, 0x0b, 0x6a, 0x67, 0xd6, 0x25, 0x6c, 0x9e,
+	0x60, 0xee, 0x8a, 0x11, 0xce, 0x54, 0xe5, 0xa6, 0x92, 0xd4, 0x6e, 0x22, 0xc9, 0x17, 0x62, 0x07,
+	0x94, 0xa1, 0x65, 0x7e, 0x4f, 0x60, 0xa5, 0x58, 0x28, 0x4c, 0x66, 0xf6, 0x85, 0x5d, 0x5b, 0x71,
+	0x15, 0xdb, 0x79, 0xaa, 0xf2, 0x10, 0x60, 0x99, 0x9c, 0xf2, 0x3d, 0xf8, 0x6b, 0x05, 0x76, 0xaa,
+	0x45, 0xa2, 0xb6, 0x4f, 0x17, 0xd3, 0xd7, 0x71, 0x80, 0xd1, 0x0f, 0xb0, 0xe5, 0xe2, 0x28, 0xce,
+	0x3f, 0xad, 0xda, 0x74, 0x47, 0x66, 0x23, 0xd4, 0xf4, 0xca, 0xd0, 0xef, 0xd8, 0xc5, 0xca, 0xb4,
+	0xd5, 0xca, 0xb4, 0x9f, 0xe4, 0x2b, 0xd3, 0x6a, 0x21, 0x17, 0x3e, 0x3b, 0x4f, 0xe9, 0xf5, 0x72,
+	0x1e, 0xc3, 0xba, 0x52, 0x29, 0xee, 0x21, 0xda, 0x69, 0x70, 0xd5, 0x3f, 0xae, 0x77, 0xb0, 0x7c,
+	0x0f, 0x1b, 0x95, 0xb2, 0xf7, 0xe0, 0x39, 0x85, 0x4d, 0xa5, 0xa6, 0x6c, 0x02, 0xfa, 0x7c, 0x76,
+	0x73, 0x16, 0xb3, 0x9d, 0xc1, 0x56, 0xa5, 0xea, 0x1a, 0xf8, 0x9e, 0xc2, 0xc6, 0x79, 0x16, 0xfa,
+	0x1c, 0x5f, 0x03, 0x97, 0x0b, 0xed, 0xda, 0x6f, 0xc8, 0x44, 0x07, 0xa7, 0x7f, 0x5b, 0xf4, 0xdd,
+	0xf9, 0x80, 0xe2, 0x52, 0x5b, 0x2d, 0xf4, 0x2d, 0x2c, 0xe5, 0x8b, 0x0e, 0x6d, 0x37, 0xaf, 0x43,
+	0xb5, 0x3d, 0xf4, 0x9d, 0x19, 0x96, 0xd2, 0xfd, 0x08, 0x96, 0x8b, 0xb9, 0x8c, 0xf4, 0x06, 0xac,
+	0xb1, 0x80, 0xf4, 0x7b, 0x33, 0x6d, 0x25, 0xc9, 0xaf, 0xb0, 0x31, 0x31, 0x55, 0xd0, 0xde, 0xa4,
+	0xf4, 0x19, 0x83, 0x54, 0xdf, 0x7f, 0x37, 0xa8, 0xe4, 0x7f, 0x0e, 0x50, 0x7d, 0xd0, 0xc8, 0x98,
+	0xf4, 0x6a, 0x0e, 0x19, 0xdd, 0x9c, 0x6b, 0x57, 0x84, 0x87, 0x8f, 0xde, 0x8c, 0x0c, 0xed, 0x6a,
+	0x64, 0x68, 0xbf, 0x8f, 0x8d, 0xd6, 0x1f, 0x63, 0x43, 0xbb, 0x1a, 0x1b, 0xad, 0x7f, 0xc7, 0x46,
+	0xeb, 0x67, 0x6b, 0xee, 0xdc, 0x29, 0x7f, 0x9a, 0x7b, 0xcb, 0xe2, 0xf9, 0x9b, 0xff, 0x02, 0x00,
+	0x00, 0xff, 0xff, 0xbc, 0xb6, 0xa8, 0x25, 0x49, 0x0b, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -531,6 +728,8 @@ type MetadataRepositoryServiceClient interface {
 	GetMetadata(ctx context.Context, in *GetMetadataRequest, opts ...grpc.CallOption) (*GetMetadataResponse, error)
 	Seal(ctx context.Context, in *SealRequest, opts ...grpc.CallOption) (*SealResponse, error)
 	Unseal(ctx context.Context, in *UnsealRequest, opts ...grpc.CallOption) (*UnsealResponse, error)
+	GetCommitResult(ctx context.Context, in *GetCommitResultRequest, opts ...grpc.CallOption) (*GetCommitResultResponse, error)
+	GetReports(ctx context.Context, in *GetReportsRequest, opts ...grpc.CallOption) (*GetReportsResponse, error)
 }
 
 type metadataRepositoryServiceClient struct {
@@ -631,6 +830,24 @@ func (c *metadataRepositoryServiceClient) Unseal(ctx context.Context, in *Unseal
 	return out, nil
 }
 
+func (c *metadataRepositoryServiceClient) GetCommitResult(ctx context.Context, in *GetCommitResultRequest, opts ...grpc.CallOption) (*GetCommitResultResponse, error) {
+	out := new(GetCommitResultResponse)
+	err := c.cc.Invoke(ctx, "/varlog.mrpb.MetadataRepositoryService/GetCommitResult", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *metadataRepositoryServiceClient) GetReports(ctx context.Context, in *GetReportsRequest, opts ...grpc.CallOption) (*GetReportsResponse, error) {
+	out := new(GetReportsResponse)
+	err := c.cc.Invoke(ctx, "/varlog.mrpb.MetadataRepositoryService/GetReports", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MetadataRepositoryServiceServer is the server API for MetadataRepositoryService service.
 type MetadataRepositoryServiceServer interface {
 	RegisterStorageNode(context.Context, *StorageNodeRequest) (*types.Empty, error)
@@ -643,6 +860,8 @@ type MetadataRepositoryServiceServer interface {
 	GetMetadata(context.Context, *GetMetadataRequest) (*GetMetadataResponse, error)
 	Seal(context.Context, *SealRequest) (*SealResponse, error)
 	Unseal(context.Context, *UnsealRequest) (*UnsealResponse, error)
+	GetCommitResult(context.Context, *GetCommitResultRequest) (*GetCommitResultResponse, error)
+	GetReports(context.Context, *GetReportsRequest) (*GetReportsResponse, error)
 }
 
 // UnimplementedMetadataRepositoryServiceServer can be embedded to have forward compatible implementations.
@@ -678,6 +897,12 @@ func (*UnimplementedMetadataRepositoryServiceServer) Seal(ctx context.Context, r
 }
 func (*UnimplementedMetadataRepositoryServiceServer) Unseal(ctx context.Context, req *UnsealRequest) (*UnsealResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Unseal not implemented")
+}
+func (*UnimplementedMetadataRepositoryServiceServer) GetCommitResult(ctx context.Context, req *GetCommitResultRequest) (*GetCommitResultResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetCommitResult not implemented")
+}
+func (*UnimplementedMetadataRepositoryServiceServer) GetReports(ctx context.Context, req *GetReportsRequest) (*GetReportsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetReports not implemented")
 }
 
 func RegisterMetadataRepositoryServiceServer(s *grpc.Server, srv MetadataRepositoryServiceServer) {
@@ -864,6 +1089,42 @@ func _MetadataRepositoryService_Unseal_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MetadataRepositoryService_GetCommitResult_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCommitResultRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MetadataRepositoryServiceServer).GetCommitResult(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/varlog.mrpb.MetadataRepositoryService/GetCommitResult",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MetadataRepositoryServiceServer).GetCommitResult(ctx, req.(*GetCommitResultRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MetadataRepositoryService_GetReports_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetReportsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MetadataRepositoryServiceServer).GetReports(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/varlog.mrpb.MetadataRepositoryService/GetReports",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MetadataRepositoryServiceServer).GetReports(ctx, req.(*GetReportsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _MetadataRepositoryService_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "varlog.mrpb.MetadataRepositoryService",
 	HandlerType: (*MetadataRepositoryServiceServer)(nil),
@@ -907,6 +1168,14 @@ var _MetadataRepositoryService_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Unseal",
 			Handler:    _MetadataRepositoryService_Unseal_Handler,
+		},
+		{
+			MethodName: "GetCommitResult",
+			Handler:    _MetadataRepositoryService_GetCommitResult_Handler,
+		},
+		{
+			MethodName: "GetReports",
+			Handler:    _MetadataRepositoryService_GetReports_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -1196,6 +1465,133 @@ func (m *TopicRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *GetCommitResultRequest) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetCommitResultRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetCommitResultRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.LogStreamID != 0 {
+		i = encodeVarintMetadataRepository(dAtA, i, uint64(m.LogStreamID))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.TopicID != 0 {
+		i = encodeVarintMetadataRepository(dAtA, i, uint64(m.TopicID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *GetCommitResultResponse) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetCommitResultResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetCommitResultResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.CommitResult.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintMetadataRepository(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
+func (m *GetReportsRequest) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetReportsRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetReportsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.LogStreamID != 0 {
+		i = encodeVarintMetadataRepository(dAtA, i, uint64(m.LogStreamID))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *GetReportsResponse) Marshal() (dAtA []byte, err error) {
+	size := m.ProtoSize()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *GetReportsResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.ProtoSize()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *GetReportsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	{
+		size, err := m.Reports.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintMetadataRepository(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintMetadataRepository(dAtA []byte, offset int, v uint64) int {
 	offset -= sovMetadataRepository(v)
 	base := offset
@@ -1321,6 +1717,55 @@ func (m *TopicRequest) ProtoSize() (n int) {
 	if m.TopicID != 0 {
 		n += 1 + sovMetadataRepository(uint64(m.TopicID))
 	}
+	return n
+}
+
+func (m *GetCommitResultRequest) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.TopicID != 0 {
+		n += 1 + sovMetadataRepository(uint64(m.TopicID))
+	}
+	if m.LogStreamID != 0 {
+		n += 1 + sovMetadataRepository(uint64(m.LogStreamID))
+	}
+	return n
+}
+
+func (m *GetCommitResultResponse) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.CommitResult.ProtoSize()
+	n += 1 + l + sovMetadataRepository(uint64(l))
+	return n
+}
+
+func (m *GetReportsRequest) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.LogStreamID != 0 {
+		n += 1 + sovMetadataRepository(uint64(m.LogStreamID))
+	}
+	return n
+}
+
+func (m *GetReportsResponse) ProtoSize() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.Reports.ProtoSize()
+	n += 1 + l + sovMetadataRepository(uint64(l))
 	return n
 }
 
@@ -2019,6 +2464,329 @@ func (m *TopicRequest) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMetadataRepository(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetCommitResultRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMetadataRepository
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetCommitResultRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetCommitResultRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TopicID", wireType)
+			}
+			m.TopicID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMetadataRepository
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TopicID |= github_com_kakao_varlog_pkg_types.TopicID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
+			}
+			m.LogStreamID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMetadataRepository
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LogStreamID |= github_com_kakao_varlog_pkg_types.LogStreamID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMetadataRepository(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetCommitResultResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMetadataRepository
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetCommitResultResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetCommitResultResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CommitResult", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMetadataRepository
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.CommitResult.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMetadataRepository(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetReportsRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMetadataRepository
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetReportsRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetReportsRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LogStreamID", wireType)
+			}
+			m.LogStreamID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMetadataRepository
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.LogStreamID |= github_com_kakao_varlog_pkg_types.LogStreamID(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMetadataRepository(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *GetReportsResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMetadataRepository
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetReportsResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetReportsResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Reports", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMetadataRepository
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMetadataRepository
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.Reports.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMetadataRepository(dAtA[iNdEx:])

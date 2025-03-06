@@ -5,6 +5,8 @@ package varlog.mrpb;
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 import "google/protobuf/empty.proto";
 import "varlogpb/metadata.proto";
+import "snpb/log_stream_reporter.proto";
+import "mrpb/raft_metadata_repository.proto";
 
 option go_package = "github.com/kakao/varlog/proto/mrpb";
 
@@ -70,6 +72,32 @@ message TopicRequest {
   ];
 }
 
+message GetCommitResultRequest {
+  int32 topic_id = 1 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
+    (gogoproto.customname) = "TopicID"
+  ];
+  int32 log_stream_id = 2 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
+}
+
+message GetCommitResultResponse {
+  snpb.LogStreamCommitResult commit_result = 1 [(gogoproto.nullable) = false];
+}
+
+message GetReportsRequest {
+  int32 log_stream_id = 1 [
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
+    (gogoproto.customname) = "LogStreamID"
+  ];
+}
+
+message GetReportsResponse {
+  LogStreamUncommitReports reports = 1 [(gogoproto.nullable) = false];
+}
+
 service MetadataRepositoryService {
   rpc RegisterStorageNode(StorageNodeRequest) returns (google.protobuf.Empty) {}
   rpc UnregisterStorageNode(StorageNodeRequest)
@@ -82,4 +110,6 @@ service MetadataRepositoryService {
   rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse) {}
   rpc Seal(SealRequest) returns (SealResponse) {}
   rpc Unseal(UnsealRequest) returns (UnsealResponse) {}
+  rpc GetCommitResult(GetCommitResultRequest) returns (GetCommitResultResponse) {}
+  rpc GetReports(GetReportsRequest) returns (GetReportsResponse) {}
 }
