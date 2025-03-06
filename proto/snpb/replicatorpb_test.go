@@ -5,16 +5,18 @@ package snpb
 
 import (
 	fmt "fmt"
-	_ "github.com/gogo/protobuf/gogoproto"
-	github_com_gogo_protobuf_jsonpb "github.com/gogo/protobuf/jsonpb"
-	github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
-	proto "github.com/gogo/protobuf/proto"
-	_ "github.com/kakao/varlog/proto/varlogpb"
-	_ "google.golang.org/protobuf/types/known/timestamppb"
 	math "math"
 	math_rand "math/rand"
 	testing "testing"
 	time "time"
+
+	_ "github.com/gogo/protobuf/gogoproto"
+	github_com_gogo_protobuf_jsonpb "github.com/gogo/protobuf/jsonpb"
+	github_com_gogo_protobuf_proto "github.com/gogo/protobuf/proto"
+	proto "github.com/gogo/protobuf/proto"
+	_ "google.golang.org/protobuf/types/known/timestamppb"
+
+	_ "github.com/kakao/varlog/proto/varlogpb"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.

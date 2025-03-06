@@ -965,6 +965,9 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 			mr.storage.TrimLogStreamCommitHistory(trimVer) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		}
 
+		mr.tmStub.mb.Gauges("mr.commit.history.count").Record(ctx,
+			int64(mr.storage.getLastCommitResultsNoLock().GetVersion())-int64(mr.storage.getFirstCommitResultsNoLock().GetVersion())+1)
+
 		mr.reportCollector.Commit()
 
 		// TODO:: trigger next commit
