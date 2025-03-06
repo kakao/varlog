@@ -2,6 +2,7 @@ package varlog
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -112,9 +113,9 @@ func (v *logImpl) appendTo(ctx context.Context, tpid types.TopicID, lsid types.L
 	return res, nil
 }
 
-func (v *logImpl) peekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, err error) {
-	replicas, ok := v.replicasRetriever.Retrieve(tpid, lsid)
-	if !ok {
+func (v *logImpl) peekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, ok bool, err error) {
+	replicas, exist := v.replicasRetriever.Retrieve(tpid, lsid)
+	if !exist {
 		err = errNoLogStream
 		return
 	}
@@ -144,7 +145,7 @@ func (v *logImpl) peekLogStream(ctx context.Context, tpid types.TopicID, lsid ty
 				return
 			}
 			switch lsrmd.Status {
-			case varlogpb.LogStreamStatusRunning, varlogpb.LogStreamStatusSealed:
+			case varlogpb.LogStreamStatusRunning, varlogpb.LogStreamStatusSealed, varlogpb.LogStreamStatusSealing:
 				mu.Lock()
 				defer mu.Unlock()
 				if first.LLSN < lsrmd.LocalLowWatermark.LLSN {
@@ -154,6 +155,7 @@ func (v *logImpl) peekLogStream(ctx context.Context, tpid types.TopicID, lsid ty
 					last = lsrmd.LocalHighWatermark
 				}
 				found = true
+				ok = ok || lsrmd.Status == varlogpb.LogStreamStatusRunning || lsrmd.Status == varlogpb.LogStreamStatusSealed
 			default:
 				errs[idx] = fmt.Errorf("logstream replica snid=%v: invalid status: %s",
 					replicas[idx].StorageNodeID, lsrmd.Status,
@@ -164,8 +166,7 @@ func (v *logImpl) peekLogStream(ctx context.Context, tpid types.TopicID, lsid ty
 	wg.Wait()
 
 	if found {
-		return first, last, nil
+		return first, last, ok, nil
 	}
-	err = multierr.Combine(errs...)
-	return first, last, err
+	return varlogpb.LogSequenceNumber{}, varlogpb.LogSequenceNumber{}, false, errors.Join(errs...)
 }
