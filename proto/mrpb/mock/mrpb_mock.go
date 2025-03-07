@@ -194,6 +194,26 @@ func (m *MockMetadataRepositoryServiceClient) EXPECT() *MockMetadataRepositorySe
 	return m.recorder
 }
 
+// GetCommitResult mocks base method.
+func (m *MockMetadataRepositoryServiceClient) GetCommitResult(arg0 context.Context, arg1 *mrpb.GetCommitResultRequest, arg2 ...grpc.CallOption) (*mrpb.GetCommitResultResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetCommitResult", varargs...)
+	ret0, _ := ret[0].(*mrpb.GetCommitResultResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCommitResult indicates an expected call of GetCommitResult.
+func (mr *MockMetadataRepositoryServiceClientMockRecorder) GetCommitResult(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCommitResult", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).GetCommitResult), varargs...)
+}
+
 // GetMetadata mocks base method.
 func (m *MockMetadataRepositoryServiceClient) GetMetadata(arg0 context.Context, arg1 *mrpb.GetMetadataRequest, arg2 ...grpc.CallOption) (*mrpb.GetMetadataResponse, error) {
 	m.ctrl.T.Helper()
@@ -212,6 +232,26 @@ func (mr *MockMetadataRepositoryServiceClientMockRecorder) GetMetadata(arg0, arg
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).GetMetadata), varargs...)
+}
+
+// GetReports mocks base method.
+func (m *MockMetadataRepositoryServiceClient) GetReports(arg0 context.Context, arg1 *mrpb.GetReportsRequest, arg2 ...grpc.CallOption) (*mrpb.GetReportsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetReports", varargs...)
+	ret0, _ := ret[0].(*mrpb.GetReportsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetReports indicates an expected call of GetReports.
+func (mr *MockMetadataRepositoryServiceClientMockRecorder) GetReports(arg0, arg1 any, arg2 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReports", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).GetReports), varargs...)
 }
 
 // RegisterLogStream mocks base method.
@@ -417,6 +457,21 @@ func (m *MockMetadataRepositoryServiceServer) EXPECT() *MockMetadataRepositorySe
 	return m.recorder
 }
 
+// GetCommitResult mocks base method.
+func (m *MockMetadataRepositoryServiceServer) GetCommitResult(arg0 context.Context, arg1 *mrpb.GetCommitResultRequest) (*mrpb.GetCommitResultResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCommitResult", arg0, arg1)
+	ret0, _ := ret[0].(*mrpb.GetCommitResultResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCommitResult indicates an expected call of GetCommitResult.
+func (mr *MockMetadataRepositoryServiceServerMockRecorder) GetCommitResult(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCommitResult", reflect.TypeOf((*MockMetadataRepositoryServiceServer)(nil).GetCommitResult), arg0, arg1)
+}
+
 // GetMetadata mocks base method.
 func (m *MockMetadataRepositoryServiceServer) GetMetadata(arg0 context.Context, arg1 *mrpb.GetMetadataRequest) (*mrpb.GetMetadataResponse, error) {
 	m.ctrl.T.Helper()
@@ -430,6 +485,21 @@ func (m *MockMetadataRepositoryServiceServer) GetMetadata(arg0 context.Context, 
 func (mr *MockMetadataRepositoryServiceServerMockRecorder) GetMetadata(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockMetadataRepositoryServiceServer)(nil).GetMetadata), arg0, arg1)
+}
+
+// GetReports mocks base method.
+func (m *MockMetadataRepositoryServiceServer) GetReports(arg0 context.Context, arg1 *mrpb.GetReportsRequest) (*mrpb.GetReportsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReports", arg0, arg1)
+	ret0, _ := ret[0].(*mrpb.GetReportsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetReports indicates an expected call of GetReports.
+func (mr *MockMetadataRepositoryServiceServerMockRecorder) GetReports(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReports", reflect.TypeOf((*MockMetadataRepositoryServiceServer)(nil).GetReports), arg0, arg1)
 }
 
 // RegisterLogStream mocks base method.

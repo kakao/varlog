@@ -968,6 +968,9 @@ func (mr *RaftMetadataRepository) applyCommit(r *mrpb.Commit, appliedIndex uint6
 			mr.storage.TrimLogStreamCommitHistory(trimVer) //nolint:errcheck,revive // TODO:: Handle an error returned.
 		}
 
+		mr.tmStub.mb.Gauges("mr.commit.history.count").Record(ctx,
+			int64(mr.storage.getLastCommitResultsNoLock().GetVersion())-int64(mr.storage.getFirstCommitResultsNoLock().GetVersion())+1)
+
 		mr.reportCollector.Commit()
 
 		// TODO:: trigger next commit
@@ -1003,6 +1006,7 @@ func (mr *RaftMetadataRepository) applyUnseal(r *mrpb.Unseal, nodeIndex, request
 		ver = ver - 1
 	}
 	mr.reportCollector.Unseal(r.LogStreamID, ver)
+	mr.logger.Info("unseal", zap.Any("lsid", r.LogStreamID), zap.Any("ver", ver))
 
 	return nil
 }
@@ -1512,6 +1516,20 @@ func (mr *RaftMetadataRepository) GetLastCommitResults() *mrpb.LogStreamCommitRe
 
 func (mr *RaftMetadataRepository) LookupNextCommitResults(ver types.Version) (*mrpb.LogStreamCommitResults, error) {
 	return mr.storage.LookupNextCommitResults(ver)
+}
+
+func (mr *RaftMetadataRepository) GetCommitResult(_ context.Context, topicID types.TopicID, logStreamID types.LogStreamID) snpb.LogStreamCommitResult {
+	crs := mr.storage.GetLastCommitResults()
+
+	cr, _, _ := crs.LookupCommitResult(topicID, logStreamID, -1)
+	cr.HighWatermark, _ = crs.LastHighWatermark(topicID, -1)
+	cr.Version = crs.Version
+
+	return cr
+}
+
+func (mr *RaftMetadataRepository) GetReports(_ context.Context, lsID types.LogStreamID) mrpb.LogStreamUncommitReports {
+	return mr.storage.LookupUncommitReportsConcurrent(lsID)
 }
 
 type handler func(ctx context.Context) (interface{}, error)
