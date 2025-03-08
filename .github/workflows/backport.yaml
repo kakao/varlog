@@ -1,0 +1,16 @@
+name: backport
+on:
+  push:
+    branches:
+      - release/*
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: google-github-actions/release-please-action@v4.1.1
+        with:
+          token: ${{ secrets.VARLOG_GITHUB_TOKEN }}
+          release-type: go
+          package-name: varlog
+          versioning-strategy: always-bump-patch
+          target-branch: ${{ github.ref_name }}
