@@ -11,5 +11,4 @@ jobs:
         with:
           token: ${{ secrets.VARLOG_GITHUB_TOKEN }}
           release-type: go
-          versioning-strategy: always-bump-patch
           target-branch: ${{ github.ref_name }}
