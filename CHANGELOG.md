@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.0](https://github.com/kakao/varlog/compare/v0.22.1...v0.23.0) (2025-03-08)
+
+
+### Features
+
+* **telemetry:** Support both new and deprecated OpenTelemetry runtime metrics ([6531baa](https://github.com/kakao/varlog/commit/6531baa246c240ad20e94435bd1c9016e54b6deb))
+
 ## [0.22.1](https://github.com/kakao/varlog/compare/v0.22.0...v0.22.1) (2024-07-04)
 
 
