@@ -1,13 +1,14 @@
-name: release
+name: backport
 on:
   push:
     branches:
-      - main
+      - release/*
 jobs:
-  release:
+  backport:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4.2.0
         with:
           token: ${{ secrets.VARLOG_GITHUB_TOKEN }}
           release-type: go
+          target-branch: ${{ github.ref_name }}
