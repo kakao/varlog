@@ -5,8 +5,8 @@
       "changelog-path": "CHANGELOG.md",
       "release-type": "go",
       "package-name": "varlog",
-      "bump-minor-pre-major": false,
-      "bump-patch-for-minor-pre-major": false,
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true,
       "draft": false,
       "prerelease": false
     }
