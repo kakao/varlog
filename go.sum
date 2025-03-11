@@ -357,12 +357,12 @@ github.com/yusufpapurcu/wmi v1.2.4 h1:zFUKzehAFReQwLys1b/iSMl+JQGSCSjtVqQn9bBrPo
 github.com/yusufpapurcu/wmi v1.2.4/go.mod h1:SBZ9tNy3G9/m5Oi98Zks0QjeHVDvuK0qfxQmPyzfmi0=
 go.etcd.io/etcd/api/v3 v3.5.18 h1:Q4oDAKnmwqTo5lafvB+afbgCDF7E35E4EYV2g+FNGhs=
 go.etcd.io/etcd/api/v3 v3.5.18/go.mod h1:uY03Ob2H50077J7Qq0DeehjM/A9S8PhVfbQ1mSaMopU=
-go.etcd.io/etcd/client/pkg/v3 v3.5.18 h1:mZPOYw4h8rTk7TeJ5+3udUkfVGBqc+GCjOJYd68QgNM=
-go.etcd.io/etcd/client/pkg/v3 v3.5.18/go.mod h1:BxVf2o5wXG9ZJV+/Cu7QNUiJYk4A29sAhoI5tIRsCu4=
+go.etcd.io/etcd/client/pkg/v3 v3.5.19 h1:9VsyGhg0WQGjDWWlDI4VuaS9PZJGNbPkaHEIuLwtixk=
+go.etcd.io/etcd/client/pkg/v3 v3.5.19/go.mod h1:qaOi1k4ZA9lVLejXNvyPABrVEe7VymMF2433yyRQ7O0=
 go.etcd.io/etcd/pkg/v3 v3.5.18 h1:ny8rLA18/4AMdrILacOKwt7//TJjc7oS8JIJoLuNvbY=
 go.etcd.io/etcd/pkg/v3 v3.5.18/go.mod h1:gb4CDXuN/OgzUgj+VmUFumLYQ2FUMDC6r/plLIjHPI8=
-go.etcd.io/etcd/raft/v3 v3.5.18 h1:gueCda+9U76Lvk6rINjNc/mXalUp0u8OK5CVESDZh4I=
-go.etcd.io/etcd/raft/v3 v3.5.18/go.mod h1:XBaZHTJt3nLnpS8hMDR55Sxrq76cEC4xWYMBYSY3jcs=
+go.etcd.io/etcd/raft/v3 v3.5.19 h1:J6TlYpd/HOlHrn78I2h9o8kjOHL2fBdYL7krP02CL2E=
+go.etcd.io/etcd/raft/v3 v3.5.19/go.mod h1:WKCdvqs9USiM72tau3LZEyybDWKbyaQV0k135O3C4xw=
 go.etcd.io/etcd/server/v3 v3.5.18 h1:u67DmyYyGOu08OiO9O3wgCSQEjGBNzjhH+FM3BcabcI=
 go.etcd.io/etcd/server/v3 v3.5.18/go.mod h1:waeL2uw6TdXniXaus105tiK1aSbblIBi21uk8y7D6Ng=
 go.opencensus.io v0.21.0/go.mod h1:mSImk1erAIZhrmZN+AvHh14ztQfjbGwt4TtuofqLduU=
