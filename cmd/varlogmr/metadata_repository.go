@@ -9,7 +9,6 @@ import (
 
 	"github.com/urfave/cli/v2"
 	_ "go.uber.org/automaxprocs"
-	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/buildinfo"
 	"github.com/kakao/varlog/internal/flags"
@@ -31,7 +30,6 @@ func start(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	logOpts = append(logOpts, log.WithZapLoggerOptions(zap.AddStacktrace(zap.DPanicLevel)))
 	logger, err := log.New(logOpts...)
 	if err != nil {
 		return err
@@ -168,6 +166,7 @@ func initCLI() *cli.App {
 				flags.LogFileCompression,
 				flags.LogHumanReadable,
 				flags.LogLevel,
+				flags.EnableDevelopmentMode,
 			},
 		}},
 	}
