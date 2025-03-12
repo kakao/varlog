@@ -36,12 +36,12 @@ type Log interface {
 
 	Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error
 
-	// PeekLogStream returns the log sequence numbers at the first and the
-	// last. It fetches the metadata for each replica of a log stream lsid
-	// concurrently and takes a result from either appendable or sealed
-	// replica. If none of the replicas' statuses is either appendable or
-	// sealed, it returns an error.
-	PeekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, err error)
+	// PeekLogStream returns the first and last log sequence numbers of a log
+	// stream. It fetches metadata from each replica of the log stream (lsid)
+	// concurrently. If at least one replica's status is either appendable or
+	// sealed, ok is true. If all replicas' statuses are sealing, ok is false.
+	// If fetching metadata from all replicas fails, it returns an error.
+	PeekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, ok bool, err error)
 
 	// NewLogStreamAppender returns a new LogStreamAppender.
 	NewLogStreamAppender(tpid types.TopicID, lsid types.LogStreamID, opts ...LogStreamAppenderOption) (LogStreamAppender, error)
@@ -180,7 +180,7 @@ func (v *logImpl) Trim(ctx context.Context, topicID types.TopicID, until types.G
 	return v.trim(ctx, topicID, until, opts)
 }
 
-func (v *logImpl) PeekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, err error) {
+func (v *logImpl) PeekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, ok bool, err error) {
 	return v.peekLogStream(ctx, tpid, lsid)
 }
 
