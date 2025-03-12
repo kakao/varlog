@@ -294,19 +294,19 @@ func (c *testLog) Trim(ctx context.Context, topicID types.TopicID, until types.G
 	panic("not implemented")
 }
 
-func (c *testLog) PeekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, err error) {
+func (c *testLog) PeekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (first varlogpb.LogSequenceNumber, last varlogpb.LogSequenceNumber, _ bool, err error) {
 	if err = c.lock(); err != nil {
-		return first, last, err
+		return first, last, false, err
 	}
 	defer c.unlock()
 
 	topicDesc, ok := c.vt.topics[tpid]
 	if !ok {
-		return first, last, errors.New("no such topic")
+		return first, last, false, errors.New("no such topic")
 	}
 
 	if !topicDesc.HasLogStream(lsid) {
-		return first, last, errors.New("no such log stream")
+		return first, last, false, errors.New("no such log stream")
 	}
 
 	head, tail := c.vt.peek(tpid, lsid)
@@ -318,7 +318,7 @@ func (c *testLog) PeekLogStream(ctx context.Context, tpid types.TopicID, lsid ty
 		LLSN: tail.LLSN,
 		GLSN: tail.GLSN,
 	}
-	return first, last, nil
+	return first, last, true, nil
 }
 
 func (c *testLog) AppendableLogStreams(tpid types.TopicID) map[types.LogStreamID]struct{} {
