@@ -102,8 +102,10 @@ func NewExecutor(opts ...ExecutorOption) (lse *Executor, err error) {
 
 	rp, err := lse.stg.ReadRecoveryPoints()
 	if err != nil {
+		lse.logger.Error("could not read recovery points", zap.Error(err))
 		return nil, err
 	}
+	lse.logger.Info("read recovery points", zap.Object("recoveryPoints", rp))
 	lse.lsc = lse.restoreLogStreamContext(rp)
 
 	lse.decider = newDecidableCondition(lse.lsc)
@@ -648,7 +650,16 @@ func (lse *Executor) restoreLogStreamContext(rp storage.RecoveryPoints) *logStre
 	lsc := newLogStreamContext()
 	restoreMode := "init"
 	defer func() {
-		lse.logger.Info("restore log stream context", zap.String("mode", restoreMode))
+		lsn := lsc.localLWM.Load().(varlogpb.LogSequenceNumber)
+		lse.logger.Info("restore log stream context",
+			zap.String("mode", restoreMode),
+			zap.Uint64("reportCommitBase.commitVersion", uint64(lsc.base.commitVersion)),
+			zap.Uint64("reportCommitBase.highWatermark", uint64(lsc.base.highWatermark)),
+			zap.String("reportCommitBase.uncommittedBegin", lsc.base.uncommittedBegin.String()),
+			zap.Bool("reportCommitBase.invalid", lsc.base.invalid),
+			zap.Uint64("uncommittedLLSNEnd", uint64(lsc.uncommittedLLSNEnd.Load())),
+			zap.String("localLWM", lsn.String()),
+		)
 	}()
 
 	// Log stream replica that has not committed any logs yet. For example, a
