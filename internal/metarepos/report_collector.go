@@ -3,7 +3,6 @@ package metarepos
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -681,14 +680,10 @@ func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse
 			i++
 		} else {
 			if cur.Version < prev.Version {
-				fmt.Printf("invalid report prev:%v, cur:%v\n",
-					prev.Version, cur.Version)
-				rce.logger.Panic("invalid report",
+				rce.logger.Error("invalid report",
 					zap.Any("prev", prev.Version),
 					zap.Any("cur", cur.Version))
-			}
-
-			if cur.UncommittedLLSNOffset > prev.UncommittedLLSNOffset ||
+			} else if cur.UncommittedLLSNOffset > prev.UncommittedLLSNOffset ||
 				cur.UncommittedLLSNEnd() > prev.UncommittedLLSNEnd() {
 				diff.UncommitReports = append(diff.UncommitReports, cur)
 			}
