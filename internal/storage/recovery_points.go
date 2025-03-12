@@ -6,6 +6,7 @@ import (
 
 	"github.com/cockroachdb/pebble"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -21,6 +22,23 @@ type RecoveryPoints struct {
 		Begin types.LLSN
 		End   types.LLSN
 	}
+}
+
+func (rp RecoveryPoints) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	if rp.LastCommitContext != nil {
+		if err := enc.AddObject("lastCommitContext", rp.LastCommitContext); err != nil {
+			return err
+		}
+	}
+	if rp.CommittedLogEntry.First != nil {
+		enc.AddString("committedLogEntry.first", rp.CommittedLogEntry.First.String())
+	}
+	if rp.CommittedLogEntry.Last != nil {
+		enc.AddString("committedLogEntry.last", rp.CommittedLogEntry.Last.String())
+	}
+	enc.AddUint64("uncommittedLLSN.begin", uint64(rp.UncommittedLLSN.Begin))
+	enc.AddUint64("uncommittedLLSN.end", uint64(rp.UncommittedLLSN.End))
+	return nil
 }
 
 // ReadRecoveryPoints reads data necessary to restore the status of a log
@@ -108,6 +126,10 @@ func (s *Storage) getFirstLogSequenceNumber(cit, dit *pebble.Iterator) *varlogpb
 
 	cLLSN := decodeDataKey(cit.Value())
 	dLLSN := decodeDataKey(dit.Key())
+	s.logger.Info("read recovery points: try to get first log sequence number",
+		zap.Uint64("commitDB.firstLLSN", uint64(cLLSN)),
+		zap.Uint64("dataDB.firstLLSN", uint64(dLLSN)),
+	)
 	for cLLSN != dLLSN {
 		if dLLSN < cLLSN {
 			key := make([]byte, dataKeyLength)
@@ -144,6 +166,10 @@ func (s *Storage) getLastLogSequenceNumber(cit, dit *pebble.Iterator, first *var
 
 	cLLSN := decodeDataKey(cit.Value())
 	dLLSN := decodeDataKey(dit.Key())
+	s.logger.Info("read recovery points: try to get last log sequence number",
+		zap.Uint64("commitDB.lastLLSN", uint64(cLLSN)),
+		zap.Uint64("dataDB.lastLLSN", uint64(dLLSN)),
+	)
 
 	// If at least one LLSN of data or commit equals the LLSN of the first log
 	// entry, it should be the last since there is only one log entry.
