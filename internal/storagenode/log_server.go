@@ -103,6 +103,11 @@ func (ls *logServer) appendStreamRecvLoop(stream snpb.LogIO_AppendServer, cq cha
 			goto Out
 		}
 
+		if len(req.Payload) == 0 {
+			err = status.Error(codes.InvalidArgument, "no payload")
+			goto Out
+		}
+
 		if tpid.Invalid() && lsid.Invalid() {
 			err = snpb.ValidateTopicLogStream(req)
 			if err != nil {
