@@ -76,3 +76,13 @@ func (s *MetadataRepositoryService) Unseal(ctx context.Context, req *mrpb.Unseal
 	err := s.metaRepos.Unseal(ctx, req.GetLogStreamID())
 	return &mrpb.UnsealResponse{}, err
 }
+
+func (s *MetadataRepositoryService) GetCommitResult(ctx context.Context, req *mrpb.GetCommitResultRequest) (*mrpb.GetCommitResultResponse, error) {
+	cr := s.metaRepos.GetCommitResult(ctx, req.TopicID, req.LogStreamID)
+	return &mrpb.GetCommitResultResponse{CommitResult: cr}, nil
+}
+
+func (s *MetadataRepositoryService) GetReports(ctx context.Context, req *mrpb.GetReportsRequest) (*mrpb.GetReportsResponse, error) {
+	r := s.metaRepos.GetReports(ctx, req.LogStreamID)
+	return &mrpb.GetReportsResponse{Reports: r}, nil
+}
