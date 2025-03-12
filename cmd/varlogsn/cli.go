@@ -95,6 +95,7 @@ func newStartCommand() *cli.Command {
 			flags.LogFileCompression,
 			flags.LogHumanReadable,
 			flags.LogLevel,
+			flags.EnableDevelopmentMode,
 
 			// telemetry
 			flags.TelemetryExporter,
