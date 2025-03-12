@@ -116,6 +116,7 @@ type MetadataStorage struct {
 	nrUpdateSinceCommit uint64
 
 	lsMu sync.RWMutex // mutex for GlobalLogStream
+	urMu sync.RWMutex // mutex for UncommitReports
 	mtMu sync.RWMutex // mutex for Metadata
 	prMu sync.RWMutex // mutex for Peers
 	ssMu sync.RWMutex // mutex for Snapshot
@@ -474,7 +475,8 @@ func (ms *MetadataStorage) registerLogStream(ls *varlogpb.LogStreamDescriptor) e
 		}
 	}
 
-	cur.LogStream.UncommitReports[ls.LogStreamID] = lm
+	ms.setUncommitReports(ls.LogStreamID, lm)
+
 	ms.insertSortedLSIDs(ls.TopicID, ls.LogStreamID)
 
 	topic = proto.Clone(topic).(*varlogpb.TopicDescriptor)
@@ -518,7 +520,8 @@ func (ms *MetadataStorage) unregisterLogStream(lsID types.LogStreamID) error {
 	defer ms.mtMu.Unlock()
 
 	cur.Metadata.DeleteLogStream(lsID) //nolint:errcheck,revive // TODO:: Handle an error returned.
-	delete(cur.LogStream.UncommitReports, lsID)
+
+	ms.delUncommitReports(lsID)
 
 	if pre != cur {
 		deleted := &varlogpb.LogStreamDescriptor{
@@ -532,7 +535,7 @@ func (ms *MetadataStorage) unregisterLogStream(lsID types.LogStreamID) error {
 			Status: varlogpb.LogStreamStatusDeleted,
 		}
 
-		cur.LogStream.UncommitReports[lsID] = lm
+		ms.setUncommitReports(lsID, lm)
 	}
 
 	ms.deleteSortedLSIDs(ls.TopicID, lsID)
@@ -737,7 +740,7 @@ func (ms *MetadataStorage) unregisterTopic(topicID types.TopicID) error {
 	return nil
 }
 
-func (ms *MetadataStorage) updateUncommitReport(ls *varlogpb.LogStreamDescriptor) error {
+func (ms *MetadataStorage) reconfigureUncommitReport(ls *varlogpb.LogStreamDescriptor) error {
 	pre, cur := ms.getStateMachine()
 
 	newReports := &mrpb.LogStreamUncommitReports{
@@ -767,13 +770,13 @@ func (ms *MetadataStorage) updateUncommitReport(ls *varlogpb.LogStreamDescriptor
 
 	newReports.Status = ls.Status
 
+	ms.setUncommitReports(ls.LogStreamID, newReports)
+
 	ms.logger.Info("reconfigure uncommit report",
 		zap.Int32("lsid", int32(ls.GetLogStreamID())),
 		zap.String("as-is", oldReports.String()),
 		zap.String("to-be", newReports.String()),
 	)
-
-	cur.LogStream.UncommitReports[ls.LogStreamID] = newReports
 
 	return nil
 }
@@ -787,7 +790,7 @@ func (ms *MetadataStorage) UpdateLogStream(ls *varlogpb.LogStreamDescriptor, nod
 		return err
 	}
 
-	err = ms.updateUncommitReport(ls)
+	err = ms.reconfigureUncommitReport(ls)
 	if err != nil {
 		if ms.cacheCompleteCB != nil {
 			ms.cacheCompleteCB(nodeIndex, requestIndex, err)
@@ -831,8 +834,29 @@ func (ms *MetadataStorage) updateLogStreamDescStatus(lsID types.LogStreamID, st 
 	return nil
 }
 
+func (ms *MetadataStorage) setUncommitReports(lsID types.LogStreamID, reports *mrpb.LogStreamUncommitReports) {
+	_, cur := ms.getStateMachine()
+
+	ms.urMu.Lock()
+	defer ms.urMu.Unlock()
+
+	cur.LogStream.UncommitReports[lsID] = reports
+}
+
+func (ms *MetadataStorage) delUncommitReports(lsID types.LogStreamID) {
+	_, cur := ms.getStateMachine()
+
+	ms.urMu.Lock()
+	defer ms.urMu.Unlock()
+
+	delete(cur.LogStream.UncommitReports, lsID)
+}
+
 func (ms *MetadataStorage) updateUncommitReportStatus(lsID types.LogStreamID, st varlogpb.LogStreamStatus) error {
 	pre, cur := ms.getStateMachine()
+
+	ms.urMu.Lock()
+	defer ms.urMu.Unlock()
 
 	lls, ok := cur.LogStream.UncommitReports[lsID]
 	if !ok {
@@ -1144,6 +1168,15 @@ func (ms *MetadataStorage) LookupUncommitReports(lsID types.LogStreamID) *mrpb.L
 	return p
 }
 
+func (ms *MetadataStorage) LookupUncommitReportsConcurrent(lsID types.LogStreamID) mrpb.LogStreamUncommitReports {
+	ms.urMu.RLock()
+	defer ms.urMu.RUnlock()
+
+	r := ms.LookupUncommitReports(lsID)
+
+	return *proto.Clone(r).(*mrpb.LogStreamUncommitReports)
+}
+
 func (ms *MetadataStorage) LookupUncommitReport(lsID types.LogStreamID, snID types.StorageNodeID) (snpb.LogStreamUncommitReport, bool) {
 	pre, cur := ms.getStateMachine()
 
@@ -1191,6 +1224,9 @@ func (ms *MetadataStorage) verifyUncommitReport(s snpb.LogStreamUncommitReport) 
 
 func (ms *MetadataStorage) UpdateUncommitReport(lsID types.LogStreamID, snID types.StorageNodeID, s snpb.LogStreamUncommitReport) {
 	pre, cur := ms.getStateMachine()
+
+	ms.urMu.Lock()
+	defer ms.urMu.Unlock()
 
 	lm, ok := cur.LogStream.UncommitReports[lsID]
 	if !ok {
@@ -1762,7 +1798,10 @@ func (ms *MetadataStorage) mergeMetadata() {
 	ms.diffStateMachine.Metadata = &varlogpb.MetadataDescriptor{}
 }
 
-func (ms *MetadataStorage) mergeLogStream() {
+func (ms *MetadataStorage) mergeUncommitReports() {
+	ms.urMu.Lock()
+	defer ms.urMu.Unlock()
+
 	for lsID, lm := range ms.diffStateMachine.LogStream.UncommitReports {
 		if lm.Status.Deleted() {
 			delete(ms.origStateMachine.LogStream.UncommitReports, lsID)
@@ -1774,6 +1813,10 @@ func (ms *MetadataStorage) mergeLogStream() {
 	if len(ms.diffStateMachine.LogStream.UncommitReports) > 0 {
 		ms.diffStateMachine.LogStream.UncommitReports = make(map[types.LogStreamID]*mrpb.LogStreamUncommitReports)
 	}
+}
+
+func (ms *MetadataStorage) mergeLogStream() {
+	ms.mergeUncommitReports()
 
 	ms.lsMu.Lock()
 	defer ms.lsMu.Unlock()

@@ -11,6 +11,7 @@ type metricsBag struct {
 	requests metric.Int64UpDownCounter
 	records  sync.Map
 	counts   sync.Map
+	gauges   sync.Map
 }
 
 func newMetricsBag(mt metric.Meter) *metricsBag {
@@ -44,8 +45,21 @@ func (mb *metricsBag) Counts(name string) metric.Int64Counter {
 		if err != nil {
 			panic(err)
 		}
-		f, _ = mb.records.LoadOrStore(name, r)
+		f, _ = mb.counts.LoadOrStore(name, r)
 	}
 
 	return f.(metric.Int64Counter)
+}
+
+func (mb *metricsBag) Gauges(name string) metric.Int64Gauge {
+	f, ok := mb.gauges.Load(name)
+	if !ok {
+		r, err := mb.mt.Int64Gauge(name)
+		if err != nil {
+			panic(err)
+		}
+		f, _ = mb.gauges.LoadOrStore(name, r)
+	}
+
+	return f.(metric.Int64Gauge)
 }
