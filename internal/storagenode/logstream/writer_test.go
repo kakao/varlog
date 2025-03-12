@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/storage"
@@ -119,9 +120,10 @@ func TestWriter_UnexpectedLLSN(t *testing.T) {
 	wr.logger = zap.NewNop()
 	wr.lse = lse
 
-	assert.Panics(t, func() {
-		st := testSequenceTask(stg)
-		st.awgs[0].llsn = uncommittedLLSNEnd - 1 // not expected LLSN
-		wr.writeLoopInternal(context.Background(), st)
-	})
+	st := testSequenceTask(stg)
+	st.awgs[0].llsn = uncommittedLLSNEnd - 1 // not expected LLSN
+	wr.writeLoopInternal(context.Background(), st)
+
+	// Keep the uncommittedLLSNEnd unchanged.
+	require.Equal(t, uncommittedLLSNEnd, lse.lsc.uncommittedLLSNEnd.Load())
 }
