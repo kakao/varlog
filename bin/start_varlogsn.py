@@ -55,12 +55,11 @@ def fetch_storage_node_id(admin: str, advertise: str) -> Tuple[int, bool]:
     for snm in snms:
         if snm["address"] == advertise:
             return snm["storageNodeId"], True
-    return random.randint(1, 2 ** 10), False
+    return random.randint(1, 2**10), False
 
 
 def get_data_dirs(admin: str, snid: int) -> List[str]:
-    cmd = [f"{binpath}/varlogctl", "sn", "get", f"--admin={admin}",
-           f"--snid={snid}"]
+    cmd = [f"{binpath}/varlogctl", "sn", "get", f"--admin={admin}", f"--snid={snid}"]
     out = subprocess.check_output(cmd)
     snm = json.loads(out)
     logStreamReplicas = snm.get("logStreamReplicas")
@@ -80,8 +79,9 @@ def truncate(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
 
-def register_storage_node(admin: str, snid: int, advertise: str, retry: int,
-                          backoff: int) -> None:
+def register_storage_node(
+    admin: str, snid: int, advertise: str, retry: int, backoff: int
+) -> None:
     """Register storage node to cluster.
 
     Args:
@@ -138,8 +138,7 @@ def start(args: argparse.Namespace) -> None:
             procutil.kill(APP_NAME)
 
             snid, registered = fetch_storage_node_id(args.admin, args.advertise)
-            logger.info(
-                f"storage node id: {snid}, already registered: {registered}")
+            logger.info(f"storage node id: {snid}, already registered: {registered}")
 
             datadirs = set()
             if registered:
@@ -164,7 +163,7 @@ def start(args: argparse.Namespace) -> None:
                 f"--cluster-id={args.cluster_id}",
                 f"--storage-node-id={snid}",
                 f"--listen-address={args.listen}",
-                f"--advertise-address={args.advertise}"
+                f"--advertise-address={args.advertise}",
             ]
             for volume in volumes:
                 cmd.append(f"--volumes={volume}")
@@ -178,42 +177,52 @@ def start(args: argparse.Namespace) -> None:
             # storage options
             if args.experimental_storage_separate_db:
                 cmd.append("--experimental-storage-separate-db")
-            if args.storage_disable_wal:
-                cmd.append("--storage-disable-wal")
-            if args.storage_no_sync:
-                cmd.append("--storage-no-sync")
+            if args.storage_datadb_disable_wal:
+                cmd.append("--storage-datadb-disable-wal")
+            if args.storage_datadb_no_sync:
+                cmd.append("--storage-datadb-no-sync")
+            if args.storage_commitdb_disable_wal:
+                cmd.append("--storage-commitdb-disable-wal")
+            if args.storage_commitdb_no_sync:
+                cmd.append("--storage-commitdb-no-sync")
             if args.storage_l0_compaction_file_threshold:
                 cmd.append(
-                    f"--storage-l0-compaction-file-threshold={args.storage_l0_compaction_file_threshold}")
+                    f"--storage-l0-compaction-file-threshold={args.storage_l0_compaction_file_threshold}"
+                )
             if args.storage_l0_compaction_threshold:
                 cmd.append(
-                    f"--storage-l0-compaction-threshold={args.storage_l0_compaction_threshold}")
+                    f"--storage-l0-compaction-threshold={args.storage_l0_compaction_threshold}"
+                )
             if args.storage_l0_stop_writes_threshold:
                 cmd.append(
-                    f"--storage-l0-stop-writes-threshold={args.storage_l0_stop_writes_threshold}")
+                    f"--storage-l0-stop-writes-threshold={args.storage_l0_stop_writes_threshold}"
+                )
             if args.storage_l0_target_file_size:
                 cmd.append(
-                    f"--storage-l0-target-file-size={args.storage_l0_target_file_size}")
+                    f"--storage-l0-target-file-size={args.storage_l0_target_file_size}"
+                )
             if args.storage_flush_split_bytes:
                 cmd.append(
-                    f"--storage-flush-split-bytes={args.storage_flush_split_bytes}")
+                    f"--storage-flush-split-bytes={args.storage_flush_split_bytes}"
+                )
             if args.storage_lbase_max_bytes:
-                cmd.append(
-                    f"--storage-lbase-max-bytes={args.storage_lbase_max_bytes}")
+                cmd.append(f"--storage-lbase-max-bytes={args.storage_lbase_max_bytes}")
             if args.storage_max_open_files:
-                cmd.append(
-                    f"--storage-max-open-files={args.storage_max_open_files}")
+                cmd.append(f"--storage-max-open-files={args.storage_max_open_files}")
             if args.storage_mem_table_size:
-                cmd.append(
-                    f"--storage-mem-table-size={args.storage_mem_table_size}")
+                cmd.append(f"--storage-mem-table-size={args.storage_mem_table_size}")
             if args.storage_mem_table_stop_writes_threshold:
                 cmd.append(
-                    f"--storage-mem-table-stop-writes-threshold={args.storage_mem_table_stop_writes_threshold}")
+                    f"--storage-mem-table-stop-writes-threshold={args.storage_mem_table_stop_writes_threshold}"
+                )
             if args.storage_max_concurrent_compaction:
                 cmd.append(
-                    f"--storage-max-concurrent-compaction={args.storage_max_concurrent_compaction}")
+                    f"--storage-max-concurrent-compaction={args.storage_max_concurrent_compaction}"
+                )
             if args.storage_metrics_log_interval:
-                cmd.append(f"--storage-metrics-log-interval={args.storage_metrics_log_interval}")
+                cmd.append(
+                    f"--storage-metrics-log-interval={args.storage_metrics_log_interval}"
+                )
             if args.storage_verbose:
                 cmd.append("--storage-verbose")
 
@@ -228,9 +237,13 @@ def start(args: argparse.Namespace) -> None:
 
             time.sleep(args.add_after_seconds)
             if not registered:
-                register_storage_node(args.admin, snid, args.advertise,
-                                      args.retry_register,
-                                      args.retry_interval_seconds)
+                register_storage_node(
+                    args.admin,
+                    snid,
+                    args.advertise,
+                    args.retry_register,
+                    args.retry_interval_seconds,
+                )
                 logger.info("registered storage node to cluster")
             ok = True
         except (OSError, ValueError, subprocess.SubprocessError):
@@ -248,15 +261,18 @@ def main() -> None:
     parser.add_argument("--listen", default=f"0.0.0.0:{DEFAULT_PORT}")
     parser.add_argument("--advertise", default=f"{addr}:{DEFAULT_PORT}")
     parser.add_argument("--admin", required=True)
-    parser.add_argument("--volumes", nargs="+", required=True, action="extend",
-                        type=str)
+    parser.add_argument(
+        "--volumes", nargs="+", required=True, action="extend", type=str
+    )
     parser.add_argument("--ballast-size", type=str)
     parser.add_argument("--append-pipeline-size", type=int)
 
     # storage options
     parser.add_argument("--experimental-storage-separate-db", action="store_true")
-    parser.add_argument("--storage-disable-wal", action="store_true")
-    parser.add_argument("--storage-no-sync", action="store_true")
+    parser.add_argument("--storage-datadb-disable-wal", action="store_true")
+    parser.add_argument("--storage-datadb-no-sync", action="store_true")
+    parser.add_argument("--storage-commitdb-disable-wal", action="store_true")
+    parser.add_argument("--storage-commitdb-no-sync", action="store_true")
     parser.add_argument("--storage-l0-compaction-file-threshold", type=str)
     parser.add_argument("--storage-l0-compaction-threshold", type=str)
     parser.add_argument("--storage-l0-stop-writes-threshold", type=str)
@@ -275,15 +291,13 @@ def main() -> None:
     parser.add_argument("--log-dir")
 
     # start_varlogsn options
-    parser.add_argument("--add-after-seconds",
-                        default=DEFAULT_ADD_AFTER_SECONDS,
-                        type=int)
-    parser.add_argument("--retry-register",
-                        default=DEFAULT_RETRY_REGISTER,
-                        type=int)
-    parser.add_argument("--retry-interval-seconds",
-                        default=DEFAULT_RETRY_INTERVAL_SECONDS,
-                        type=int)
+    parser.add_argument(
+        "--add-after-seconds", default=DEFAULT_ADD_AFTER_SECONDS, type=int
+    )
+    parser.add_argument("--retry-register", default=DEFAULT_RETRY_REGISTER, type=int)
+    parser.add_argument(
+        "--retry-interval-seconds", default=DEFAULT_RETRY_INTERVAL_SECONDS, type=int
+    )
 
     args = parser.parse_args()
     logger.info(f"args: {args}")

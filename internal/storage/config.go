@@ -27,6 +27,8 @@ const (
 )
 
 type dbConfig struct {
+	wal                         bool
+	sync                        bool
 	l0CompactionFileThreshold   int
 	l0CompactionThreshold       int
 	l0StopWritesThreshold       int
@@ -39,8 +41,10 @@ type dbConfig struct {
 	maxConcurrentCompaction     int
 }
 
-func newDBConfig(dbOpts ...DBOption) dbConfig {
+func newDBConfig(dbOpts ...DBOption) (dbConfig, error) {
 	cfg := dbConfig{
+		wal:                         true,
+		sync:                        true,
 		l0CompactionFileThreshold:   DefaultL0CompactionFileThreshold,
 		l0CompactionThreshold:       DefaultL0CompactionThreshold,
 		l0StopWritesThreshold:       DefaultL0StopWritesThreshold,
@@ -55,7 +59,17 @@ func newDBConfig(dbOpts ...DBOption) dbConfig {
 	for _, dbOpt := range dbOpts {
 		dbOpt.apply(&cfg)
 	}
-	return cfg
+	if err := cfg.validate(); err != nil {
+		return dbConfig{}, err
+	}
+	return cfg, nil
+}
+
+func (cfg dbConfig) validate() error {
+	if cfg.sync && !cfg.wal {
+		return errors.New("storage: sync, but wal disabled")
+	}
+	return nil
 }
 
 type DBOption interface {
@@ -72,6 +86,18 @@ func newFuncDBOption(f func(*dbConfig)) *funcDBOption {
 
 func (fo *funcDBOption) apply(cfg *dbConfig) {
 	fo.f(cfg)
+}
+
+func WithWAL(wal bool) DBOption {
+	return newFuncDBOption(func(cfg *dbConfig) {
+		cfg.wal = wal
+	})
+}
+
+func WithSync(sync bool) DBOption {
+	return newFuncDBOption(func(cfg *dbConfig) {
+		cfg.sync = sync
+	})
 }
 
 func WithL0CompactionFileThreshold(l0CompactionFileThreshold int) DBOption {
@@ -136,11 +162,9 @@ func WithMaxConcurrentCompaction(maxConcurrentCompaction int) DBOption {
 
 type config struct {
 	path               string
-	wal                bool
-	sync               bool
 	separateDB         bool
-	dataDBConfig       dbConfig
-	commitDBConfig     dbConfig
+	dataDBOptions      []DBOption
+	commitDBOptions    []DBOption
 	verbose            bool
 	metricsLogInterval time.Duration
 	trimDelay          time.Duration
@@ -152,8 +176,6 @@ type config struct {
 
 func newConfig(opts []Option) (config, error) {
 	cfg := config{
-		wal:                true,
-		sync:               true,
 		metricsLogInterval: DefaultMetricsLogInterval,
 		logger:             zap.NewNop(),
 	}
@@ -172,9 +194,6 @@ func (cfg config) validate() error {
 	}
 	if cfg.logger == nil {
 		return errors.New("storage: no logger")
-	}
-	if cfg.sync && !cfg.wal {
-		return errors.New("storage: sync, but wal disabled")
 	}
 	return nil
 }
@@ -207,27 +226,15 @@ func SeparateDatabase() Option {
 	})
 }
 
-func WithoutSync() Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.sync = false
-	})
-}
-
-func WithoutWAL() Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.wal = false
-	})
-}
-
 func WithDataDBOptions(dataDBOpts ...DBOption) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.dataDBConfig = newDBConfig(dataDBOpts...)
+		cfg.dataDBOptions = dataDBOpts
 	})
 }
 
 func WithCommitDBOptions(commitDBOpts ...DBOption) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.commitDBConfig = newDBConfig(commitDBOpts...)
+		cfg.commitDBOptions = commitDBOpts
 	})
 }
 

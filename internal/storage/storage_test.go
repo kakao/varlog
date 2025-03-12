@@ -61,8 +61,11 @@ func TestStorage_New(t *testing.T) {
 
 				_, err := New(
 					WithPath(path),
-					WithoutWAL(),
 					WithCache(cache),
+					WithDataDBOptions(
+						WithWAL(false),
+						WithSync(true),
+					),
 				)
 				require.Error(t, err)
 			},

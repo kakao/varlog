@@ -17,8 +17,10 @@ func TestNewStorage(tb testing.TB, opts ...Option) *Storage {
 	defer cache.Unref()
 	defaultOpts := []Option{
 		WithPath(tb.TempDir()),
-		WithoutSync(), // FIXME: Use only in mac since sync is too slow in mac os.
 		WithCache(cache),
+		WithDataDBOptions(
+			WithSync(false), // Use only in mac since sync is too slow in mac os.
+		),
 	}
 	s, err := New(append(defaultOpts, opts...)...)
 	assert.NoError(tb, err)

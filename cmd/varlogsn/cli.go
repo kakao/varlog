@@ -67,8 +67,10 @@ func newStartCommand() *cli.Command {
 
 			// storage options
 			flagExperimentalStorageSeparateDB,
-			flagStorageDisableWAL,
-			flagStorageNoSync,
+			flagStorageDataDBDisableWAL,
+			flagStorageDataDBNoSync,
+			flagStorageCommitDBDisableWAL,
+			flagStorageCommitDBNoSync,
 			flagStorageL0CompactionFileThreshold,
 			flagStorageL0CompactionThreshold,
 			flagStorageL0StopWritesThreshold,
