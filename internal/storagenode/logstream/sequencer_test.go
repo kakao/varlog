@@ -70,13 +70,13 @@ func testSequenceTask(stg *storage.Storage) *sequenceTask {
 	st := newSequenceTask()
 
 	st.wwg = newWriteWaitGroup()
-	awg := newAppendWaitGroup(st.wwg)
-	st.awgs = append(st.awgs, awg)
+	awg := newAppendWaitGroup(st.wwg, 1)
+	st.awg = awg
 
 	st.wb = stg.NewWriteBatch()
 	st.dataBatch = [][]byte{nil}
 
-	st.cwt = newCommitWaitTask([]*appendWaitGroup{awg}, 1)
+	st.cwt = newCommitWaitTask(awg, 1)
 
 	st.rts = &replicateTaskSlice{}
 

@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 func TestCommitter_InvalidConfig(t *testing.T) {
@@ -61,9 +62,11 @@ func TestCommitter_ShouldNotAcceptTasksWhileNotAppendable(t *testing.T) {
 	})
 
 	cwt := &commitWaitTask{
-		awgs: []*appendWaitGroup{{
-			llsn: types.MinLLSN,
-		}},
+		awg: &appendWaitGroup{
+			beginLSN: varlogpb.LogSequenceNumber{
+				LLSN: types.MinLLSN,
+			},
+		},
 		size: 1,
 	}
 
@@ -144,8 +147,8 @@ func TestCommitter_DrainCommitWaitQ(t *testing.T) {
 	cm.lse = lse
 	cm.logger = zap.NewNop()
 
-	awg := newAppendWaitGroup(newWriteWaitGroup())
-	cwt := newCommitWaitTask([]*appendWaitGroup{awg}, 1)
+	awg := newAppendWaitGroup(newWriteWaitGroup(), 1)
+	cwt := newCommitWaitTask(awg, 1)
 	err := cm.sendCommitWaitTask(context.Background(), cwt, false /*ignoreSealing*/)
 	assert.NoError(t, err)
 
