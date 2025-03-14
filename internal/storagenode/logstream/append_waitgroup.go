@@ -44,43 +44,6 @@ func (wwg *writeWaitGroup) wait(ctx context.Context) error {
 	}
 }
 
-//var commitWaitGroupPool = sync.Pool{
-//	New: func() interface{} {
-//		return &commitWaitGroup{}
-//	},
-//}
-//
-//type commitWaitGroup struct {
-//	ch  chan struct{}
-//	err error
-//}
-//
-//func newCommitWaitGroup() *commitWaitGroup {
-//	cwg := commitWaitGroupPool.Get().(*commitWaitGroup)
-//	cwg.ch = make(chan struct{})
-//	return cwg
-//}
-//
-//func (cwg *commitWaitGroup) release() {
-//	cwg.ch = nil
-//	cwg.err = nil
-//	commitWaitGroupPool.Put(cwg)
-//}
-//
-//func (cwg *commitWaitGroup) done(err error) {
-//	cwg.err = err
-//	close(cwg.ch)
-//}
-//
-//func (cwg *commitWaitGroup) wait(ctx context.Context) error {
-//	select {
-//	case <-ctx.Done():
-//		return ctx.Err()
-//	case <-cwg.ch:
-//		return cwg.err
-//	}
-//}
-
 var appendWaitGroupPool = &sync.Pool{
 	New: func() interface{} {
 		return &appendWaitGroup{}
@@ -93,13 +56,11 @@ type appendWaitGroup struct {
 	wwg       *writeWaitGroup
 	cwg       sync.WaitGroup
 	commitErr error
-	//cwg  *commitWaitGroup
 }
 
 func newAppendWaitGroup(wwg *writeWaitGroup) *appendWaitGroup {
 	awg := appendWaitGroupPool.Get().(*appendWaitGroup)
 	awg.wwg = wwg
-	//awg.cwg = newCommitWaitGroup()
 	awg.cwg.Add(1)
 	return awg
 }
@@ -109,8 +70,6 @@ func (awg *appendWaitGroup) release() {
 	awg.llsn = types.InvalidLLSN
 	awg.wwg = nil
 	awg.cwg = sync.WaitGroup{}
-	//awg.cwg.release()
-	//awg.cwg = nil
 	appendWaitGroupPool.Put(awg)
 }
 
@@ -138,7 +97,6 @@ func (awg *appendWaitGroup) commitDone(err error) {
 	if awg != nil {
 		awg.commitErr = err
 		awg.cwg.Done()
-		//awg.cwg.done(err)
 	}
 }
 
@@ -156,5 +114,4 @@ func (awg *appendWaitGroup) wait(ctx context.Context) error {
 	}
 	awg.cwg.Wait()
 	return awg.commitErr
-	//return multierr.Append(awg.wwg.wait(ctx), awg.cwg.wait(ctx))
 }
