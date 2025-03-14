@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 
 	"github.com/urfave/cli/v2"
@@ -228,20 +229,24 @@ func parseStorageOptions(c *cli.Context) (opts []storage.Option, err error) {
 	}
 
 	opts = []storage.Option{
-		storage.WithDataDBOptions(getStorageDBOptions(0)...),
+		storage.WithDataDBOptions(
+			slices.Concat([]storage.DBOption{
+				storage.WithWAL(!c.Bool(flagStorageDataDBDisableWAL.Name)),
+				storage.WithSync(!c.Bool(flagStorageDataDBNoSync.Name)),
+			}, getStorageDBOptions(0))...,
+		),
 		storage.WithMetricsLogInterval(c.Duration(flagStorageMetricsLogInterval.Name)),
 	}
 	if c.Bool(flagExperimentalStorageSeparateDB.Name) {
 		opts = append(opts,
 			storage.SeparateDatabase(),
-			storage.WithCommitDBOptions(getStorageDBOptions(1)...),
+			storage.WithCommitDBOptions(
+				slices.Concat([]storage.DBOption{
+					storage.WithWAL(!c.Bool(flagStorageDataDBDisableWAL.Name)),
+					storage.WithSync(!c.Bool(flagStorageDataDBNoSync.Name)),
+				}, getStorageDBOptions(1))...,
+			),
 		)
-	}
-	if c.Bool(flagStorageDisableWAL.Name) {
-		opts = append(opts, storage.WithoutWAL())
-	}
-	if c.Bool(flagStorageNoSync.Name) {
-		opts = append(opts, storage.WithoutSync())
 	}
 	if c.Bool(flagStorageVerbose.Name) {
 		opts = append(opts, storage.WithVerboseLogging())
