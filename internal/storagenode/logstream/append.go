@@ -185,7 +185,6 @@ func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext
 	apc.wwg = st.wwg
 
 	var totalBytes int64
-	st.wb = lse.stg.NewWriteBatch()
 	for i := 0; i < len(dataBatch); i++ {
 		logEntrySize := int64(len(dataBatch[i]))
 		totalBytes += logEntrySize
@@ -203,7 +202,6 @@ func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext
 func (lse *Executor) sendSequenceTask(ctx context.Context, st *sequenceTask) {
 	if err := lse.sq.send(ctx, st); err != nil {
 		st.wwg.done(err)
-		_ = st.wb.Close()
 		st.cwt.release()
 		releaseReplicateTasks(st.rts.tasks)
 		releaseReplicateTaskSlice(st.rts)
