@@ -9,7 +9,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -101,24 +100,14 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 
 	startTime = time.Now()
 
-	for dataIdx := 0; dataIdx < len(st.dataBatch); dataIdx++ {
-		sq.llsn++
-		if dataIdx == 0 {
-			st.awg.setBeginLLSN(sq.llsn)
-		}
-		if ce := sq.logger.Check(zap.DebugLevel, "sequencer: issued llsn"); ce != nil {
-			ce.Write(zap.Uint64("llsn", uint64(sq.llsn)))
-		}
-		// NOTE: If we guarantee len(st.awgs) is positive, it can be moved onto for loop.
-		if dataIdx == 0 {
-			for replicaIdx := 0; replicaIdx < len(st.rts.tasks); replicaIdx++ {
-				st.rts.tasks[replicaIdx].beginLLSN = sq.llsn
-			}
-		}
-		//nolint:staticcheck
-		if err := st.wb.Set(sq.llsn, st.dataBatch[dataIdx]); err != nil {
-			// TODO: handle error
-		}
+	beginLLSN := sq.llsn + 1
+	sq.llsn += types.LLSN(len(st.dataBatch))
+	if ce := sq.logger.Check(zap.DebugLevel, "sequencer: issued llsn"); ce != nil {
+		ce.Write(zap.Uint64("first", uint64(beginLLSN)), zap.Uint64("last", uint64(sq.llsn)))
+	}
+	st.awg.setBeginLLSN(beginLLSN)
+	for replicaIdx := range st.rts.tasks {
+		st.rts.tasks[replicaIdx].beginLLSN = beginLLSN
 	}
 
 	operationEndTime = time.Now()
@@ -145,7 +134,6 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 		sq.logger.Error("could not send to committer", zap.Error(err))
 		sq.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
 		st.wwg.done(err)
-		_ = st.wb.Close()
 		cwt.release()
 		releaseReplicateTasks(rts.tasks)
 		releaseReplicateTaskSlice(rts)
@@ -158,7 +146,6 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 		sq.logger.Error("could not send to writer", zap.Error(err))
 		sq.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
 		st.wwg.done(err)
-		_ = st.wb.Close()
 		releaseReplicateTasks(rts.tasks)
 		releaseReplicateTaskSlice(rts)
 		st.release()
@@ -249,7 +236,6 @@ var sequenceTaskPool = sync.Pool{
 type sequenceTask struct {
 	wwg       *writeWaitGroup
 	awg       *appendWaitGroup
-	wb        *storage.WriteBatch
 	dataBatch [][]byte
 	cwt       *commitWaitTask
 	rts       *replicateTaskSlice
@@ -263,7 +249,6 @@ func newSequenceTask() *sequenceTask {
 func (st *sequenceTask) release() {
 	st.wwg = nil
 	st.awg = nil
-	st.wb = nil
 	st.dataBatch = nil
 	st.cwt = nil
 	st.rts = nil

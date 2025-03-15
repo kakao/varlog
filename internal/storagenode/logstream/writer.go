@@ -87,12 +87,13 @@ func (w *writer) writeLoopInternal(ctx context.Context, st *sequenceTask) {
 	startTime := time.Now()
 	var err error
 	cnt := len(st.dataBatch)
+	wb := w.lse.stg.NewWriteBatch()
 	defer func() {
 		if err != nil {
 			w.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
 		}
 		st.wwg.done(err)
-		_ = st.wb.Close()
+		_ = wb.Close()
 		st.release()
 		inflight := w.inflight.Add(-1)
 		if w.lse.lsm == nil {
@@ -114,7 +115,16 @@ func (w *writer) writeLoopInternal(ctx context.Context, st *sequenceTask) {
 		return
 	}
 
-	err = st.wb.Apply()
+	for i := range cnt {
+		llsn := oldLLSN + types.LLSN(i)
+		err = wb.Set(llsn, st.dataBatch[i])
+		if err != nil {
+			w.logger.Error("could not set data to batch", zap.Error(err))
+			return
+		}
+	}
+
+	err = wb.Apply()
 	if err != nil {
 		w.logger.Error("could not apply data", zap.Error(err))
 		return
