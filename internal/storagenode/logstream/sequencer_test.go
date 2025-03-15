@@ -9,8 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
-
-	"github.com/kakao/varlog/internal/storage"
 )
 
 func TestSequencer_InvalidConfig(t *testing.T) {
@@ -66,14 +64,13 @@ func TestSequencer_ShouldNotAcceptTasksWhileNotAppendable(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func testSequenceTask(stg *storage.Storage) *sequenceTask {
+func testSequenceTask() *sequenceTask {
 	st := newSequenceTask()
 
 	st.wwg = newWriteWaitGroup()
 	awg := newAppendWaitGroup(st.wwg, 1)
 	st.awg = awg
 
-	st.wb = stg.NewWriteBatch()
 	st.dataBatch = [][]byte{nil}
 
 	st.cwt = newCommitWaitTask(awg, 1)
@@ -84,11 +81,6 @@ func testSequenceTask(stg *storage.Storage) *sequenceTask {
 }
 
 func TestSequencer_FailToSendToCommitter(t *testing.T) {
-	stg := storage.TestNewStorage(t)
-	defer func() {
-		assert.NoError(t, stg.Close())
-	}()
-
 	cm := &committer{}
 	cm.logger = zap.NewNop()
 	cm.commitWaitQ = newCommitWaitQueue()
@@ -111,7 +103,7 @@ func TestSequencer_FailToSendToCommitter(t *testing.T) {
 	sq.lse.wr = wr
 	sq.lse.cm = cm
 
-	st := testSequenceTask(stg)
+	st := testSequenceTask()
 	sq.sequenceLoopInternal(context.Background(), st)
 	assert.Len(t, wr.queue, 0)
 	assert.Equal(t, 0, cm.commitWaitQ.size())
@@ -119,11 +111,6 @@ func TestSequencer_FailToSendToCommitter(t *testing.T) {
 }
 
 func TestSequencer_FailToSendToWriter(t *testing.T) {
-	stg := storage.TestNewStorage(t)
-	defer func() {
-		assert.NoError(t, stg.Close())
-	}()
-
 	cm := &committer{}
 	cm.logger = zap.NewNop()
 	cm.commitWaitQ = newCommitWaitQueue()
@@ -146,18 +133,13 @@ func TestSequencer_FailToSendToWriter(t *testing.T) {
 	sq.lse.cm = cm
 	sq.lse.wr = wr
 
-	st := testSequenceTask(stg)
+	st := testSequenceTask()
 	sq.sequenceLoopInternal(context.Background(), st)
 	assert.Empty(t, wr.queue)
 	assert.Equal(t, executorStateSealing, sq.lse.esm.load())
 }
 
 func TestSequencer_FailToSendToReplicateClient(t *testing.T) {
-	stg := storage.TestNewStorage(t)
-	defer func() {
-		assert.NoError(t, stg.Close())
-	}()
-
 	wr := &writer{}
 	wr.logger = zap.NewNop()
 	wr.lse = &Executor{
@@ -190,7 +172,7 @@ func TestSequencer_FailToSendToReplicateClient(t *testing.T) {
 		clients: []*replicateClient{rc},
 	}
 
-	st := testSequenceTask(stg)
+	st := testSequenceTask()
 	st.rts = &replicateTaskSlice{
 		tasks: []*replicateTask{
 			{},
@@ -205,11 +187,6 @@ func TestSequencer_FailToSendToReplicateClient(t *testing.T) {
 
 func TestSequencer_Drain(t *testing.T) {
 	const numTasks = 10
-
-	stg := storage.TestNewStorage(t)
-	defer func() {
-		assert.NoError(t, stg.Close())
-	}()
 
 	lse := &Executor{
 		esm: newExecutorStateManager(executorStateAppendable),
@@ -234,7 +211,7 @@ func TestSequencer_Drain(t *testing.T) {
 	lse.cm = cm
 
 	for i := 0; i < numTasks; i++ {
-		err := sq.send(context.Background(), testSequenceTask(stg))
+		err := sq.send(context.Background(), testSequenceTask())
 		assert.NoError(t, err)
 	}
 
@@ -265,11 +242,6 @@ func TestSequencer_Drain(t *testing.T) {
 func TestSequencer_ForceDrain(t *testing.T) {
 	const numTasks = 10
 
-	stg := storage.TestNewStorage(t)
-	defer func() {
-		assert.NoError(t, stg.Close())
-	}()
-
 	lse := &Executor{
 		esm: newExecutorStateManager(executorStateAppendable),
 	}
@@ -282,7 +254,7 @@ func TestSequencer_ForceDrain(t *testing.T) {
 	lse.sq = sq
 
 	for i := 0; i < numTasks; i++ {
-		err := sq.send(context.Background(), testSequenceTask(stg))
+		err := sq.send(context.Background(), testSequenceTask())
 		assert.NoError(t, err)
 	}
 
