@@ -6,6 +6,8 @@ var (
 	errStorageIsNil  = fmt.Errorf("log stream: storage is nil")
 	errExecutorIsNil = fmt.Errorf("log stream: executor is nil")
 	errLoggerIsNil   = fmt.Errorf("log stream: logger is nil")
+
+	errTooOldCommit = fmt.Errorf("log stream: too old commit result")
 )
 
 func validateQueueCapacity(name string, capacity int) error {

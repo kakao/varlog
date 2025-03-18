@@ -453,7 +453,7 @@ func (lse *Executor) Commit(ctx context.Context, commitResult snpb.LogStreamComm
 
 	version, _, _, invalid := lse.lsc.reportCommitBase()
 	if commitResult.Version <= version {
-		return errors.New("too old commit result")
+		return errTooOldCommit
 	}
 	if invalid {
 		return errors.New("invalid replica status")
