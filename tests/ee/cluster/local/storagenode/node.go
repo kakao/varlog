@@ -87,7 +87,7 @@ func (node *Node) arguments(t *testing.T) []string {
 		"--listen", node.addr,
 		"--advertise", node.addr,
 		"--logtostderr",
-		"--storage-no-sync",
+		"--storage-datadb-no-sync",
 	}
 	for _, volume := range node.volumes {
 		args = append(args, "--volumes", volume)
