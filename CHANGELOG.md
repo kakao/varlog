@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.26.0](https://github.com/kakao/varlog/compare/v0.25.0...v0.26.0) (2025-03-29)
+
+
+### Features
+
+* **logstream:** deprecate error field in AppendResult for atomic append ([e072e4d](https://github.com/kakao/varlog/commit/e072e4d009df3d6de99778b4a6b1b5c951b99e5c))
+* **logstream:** introduce commit wait task for append batch ([30645f0](https://github.com/kakao/varlog/commit/30645f04005bd9a36431c27cf337a7ae9ea83a99))
+* **logstream:** remove deprecated LLSN field from ReplicateRequest ([c2663cc](https://github.com/kakao/varlog/commit/c2663cc620500e963219dedddd453b58d36c404e))
+* **metarepos:** add GetReports, GetCommitResult rpc ([b88a6c1](https://github.com/kakao/varlog/commit/b88a6c1551a19a3da4f2cf3d883210260b527601))
+* **metarepos:** add metric for count of commit result history ([029a36e](https://github.com/kakao/varlog/commit/029a36e1d06ca3626efebb5171f6cce04c51b902))
+* **storagenode:** remove package internal/batchlet ([42003ae](https://github.com/kakao/varlog/commit/42003ae73cba59f4eea0a884f61a1003ddedfbc7))
+
+
+### Bug Fixes
+
+* **metarepos:** reportCollector handles invalid report propertly ([f5f7273](https://github.com/kakao/varlog/commit/f5f7273c9dacc5d93c0c49eb256e5176756009f7))
+
+
+### Performance Improvements
+
+* **logstream:** remove llsnList from replicateTask ([2ce0a9d](https://github.com/kakao/varlog/commit/2ce0a9dd68cc94d18babe1e99ae2a4178fd718ec))
+* **reportCollector:** reduce calling sampleTracer.report ([0faea11](https://github.com/kakao/varlog/commit/0faea11e1e761a576b9d8b4d4ddc52e4ffcad954))
+
 ## [0.25.0](https://github.com/kakao/varlog/compare/v0.24.0...v0.25.0) (2025-02-21)
 
 
