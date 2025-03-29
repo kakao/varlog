@@ -437,7 +437,7 @@ func TestVarlogTest(t *testing.T) {
 		topicID := topicIDs[i]
 		logStreamID := addLogStream(topicID)
 
-		first, last, err := vlg.PeekLogStream(context.Background(), topicID, logStreamID)
+		first, last, _, err := vlg.PeekLogStream(context.Background(), topicID, logStreamID)
 		require.NoError(t, err)
 		require.True(t, first.Invalid())
 		require.True(t, last.Invalid())
@@ -615,7 +615,7 @@ func TestVarlogTest(t *testing.T) {
 		}
 
 		for _, lsID := range topicLogStreamsMap[tpID] {
-			first, last, err := vlg.PeekLogStream(context.Background(), tpID, lsID)
+			first, last, _, err := vlg.PeekLogStream(context.Background(), tpID, lsID)
 			require.NoError(t, err)
 			require.GreaterOrEqual(t, last.LLSN, first.LLSN)
 			subscribeTo(tpID, lsID, first.LLSN, last.LLSN+1)
@@ -634,7 +634,7 @@ func TestVarlogTest(t *testing.T) {
 	// Metadata
 	for tpID, lsIDs := range topicLogStreamsMap {
 		for _, lsID := range lsIDs {
-			first, last, err := vlg.PeekLogStream(context.Background(), tpID, lsID)
+			first, last, _, err := vlg.PeekLogStream(context.Background(), tpID, lsID)
 			require.NoError(t, err)
 			require.GreaterOrEqual(t, last.LLSN, first.LLSN)
 			subscribeTo(tpID, lsID, first.LLSN, last.LLSN+1)
@@ -645,7 +645,7 @@ func TestVarlogTest(t *testing.T) {
 	tpID := topicIDs[0]
 	lsID := topicLogStreamsMap[tpID][0]
 
-	first, last, err := vlg.PeekLogStream(context.Background(), tpID, lsID)
+	first, last, _, err := vlg.PeekLogStream(context.Background(), tpID, lsID)
 	require.NoError(t, err)
 	require.Equal(t, types.MinLLSN, first.LLSN)
 	require.GreaterOrEqual(t, last.LLSN, types.LLSN(minLogsPerTopic))
@@ -763,7 +763,7 @@ func TestVarlogTest_PeekLogStream(t *testing.T) {
 			name: "NewLogStream",
 			testf: func(t *testing.T, _ varlog.Admin, vlg varlog.Log, lsds []*varlogpb.LogStreamDescriptor) {
 				lsd := lsds[emptyLSIdx]
-				first, last, err := vlg.PeekLogStream(ctx, lsd.TopicID, lsd.LogStreamID)
+				first, last, _, err := vlg.PeekLogStream(ctx, lsd.TopicID, lsd.LogStreamID)
 				require.NoError(t, err)
 				require.True(t, first.GLSN.Invalid())
 				require.True(t, last.GLSN.Invalid())
@@ -773,7 +773,7 @@ func TestVarlogTest_PeekLogStream(t *testing.T) {
 			name: "FilledLogStream",
 			testf: func(t *testing.T, _ varlog.Admin, vlg varlog.Log, lsds []*varlogpb.LogStreamDescriptor) {
 				lsd := lsds[filledLSIdx]
-				first, last, err := vlg.PeekLogStream(ctx, lsd.TopicID, lsd.LogStreamID)
+				first, last, _, err := vlg.PeekLogStream(ctx, lsd.TopicID, lsd.LogStreamID)
 				require.NoError(t, err)
 				require.Equal(t, types.MinGLSN, first.GLSN)
 				require.Equal(t, types.GLSN(numLogs), last.GLSN)
@@ -795,7 +795,7 @@ func TestVarlogTest_PeekLogStream(t *testing.T) {
 				}
 
 				lsd := lsds[filledLSIdx]
-				first, last, err := vlg.PeekLogStream(ctx, lsd.TopicID, lsd.LogStreamID)
+				first, last, _, err := vlg.PeekLogStream(ctx, lsd.TopicID, lsd.LogStreamID)
 				require.NoError(t, err)
 				require.Equal(t, trimGLSN+1, first.GLSN)
 				require.Equal(t, types.GLSN(numLogs), last.GLSN)
@@ -817,7 +817,7 @@ func TestVarlogTest_PeekLogStream(t *testing.T) {
 				}
 
 				lsd := lsds[filledLSIdx]
-				first, last, err := vlg.PeekLogStream(ctx, lsd.TopicID, lsd.LogStreamID)
+				first, last, _, err := vlg.PeekLogStream(ctx, lsd.TopicID, lsd.LogStreamID)
 				require.NoError(t, err)
 				require.True(t, first.GLSN.Invalid())
 				require.True(t, last.GLSN.Invalid())
@@ -945,12 +945,12 @@ func TestVarlogTest_Trim(t *testing.T) {
 		assert.Error(t, subscriber.Close())
 	}
 
-	first, last, err := vlg.PeekLogStream(context.Background(), td.TopicID, lsds[0].LogStreamID)
+	first, last, _, err := vlg.PeekLogStream(context.Background(), td.TopicID, lsds[0].LogStreamID)
 	assert.NoError(t, err)
 	assert.Equal(t, varlogpb.LogSequenceNumber{LLSN: 3, GLSN: 5}, first)
 	assert.Equal(t, varlogpb.LogSequenceNumber{LLSN: 5, GLSN: 9}, last)
 
-	first, last, err = vlg.PeekLogStream(context.Background(), td.TopicID, lsds[1].LogStreamID)
+	first, last, _, err = vlg.PeekLogStream(context.Background(), td.TopicID, lsds[1].LogStreamID)
 	assert.NoError(t, err)
 	assert.Equal(t, varlogpb.LogSequenceNumber{LLSN: 2, GLSN: 4}, first)
 	assert.Equal(t, varlogpb.LogSequenceNumber{LLSN: 5, GLSN: 10}, last)

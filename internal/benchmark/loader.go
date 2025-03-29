@@ -328,7 +328,9 @@ func (loader *Loader) getLogRange(ctx context.Context, c varlog.Log, tpid types.
 	LogSequenceNumber, err error,
 ) {
 	if !lsid.Invalid() {
-		return c.PeekLogStream(ctx, tpid, lsid)
+		// FIXME: Handle ignored return value.
+		first, last, _, err := c.PeekLogStream(ctx, tpid, lsid)
+		return first, last, err
 	}
 
 	lsids := c.AppendableLogStreams(tpid)
@@ -339,7 +341,7 @@ func (loader *Loader) getLogRange(ctx context.Context, c varlog.Log, tpid types.
 	for lsid := range lsids {
 		lsid := lsid
 		eg.Go(func() error {
-			f, l, err := c.PeekLogStream(ctx, tpid, lsid)
+			f, l, _, err := c.PeekLogStream(ctx, tpid, lsid)
 			if err != nil {
 				return err
 			}
