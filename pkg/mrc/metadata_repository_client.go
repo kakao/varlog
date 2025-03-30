@@ -1,6 +1,6 @@
 package mrc
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/pkg/mrc -package mrc -destination metadata_repository_client_mock.go . MetadataRepositoryClient
+//go:generate go tool mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/pkg/mrc -package mrc -destination metadata_repository_client_mock.go . MetadataRepositoryClient
 
 import (
 	"context"

@@ -24,6 +24,7 @@ import (
 type MockClusterMetadataView struct {
 	ctrl     *gomock.Controller
 	recorder *MockClusterMetadataViewMockRecorder
+	isgomock struct{}
 }
 
 // MockClusterMetadataViewMockRecorder is the mock recorder for MockClusterMetadataView.
@@ -44,39 +45,40 @@ func (m *MockClusterMetadataView) EXPECT() *MockClusterMetadataViewMockRecorder 
 }
 
 // ClusterMetadata mocks base method.
-func (m *MockClusterMetadataView) ClusterMetadata(arg0 context.Context) (*varlogpb.MetadataDescriptor, error) {
+func (m *MockClusterMetadataView) ClusterMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ClusterMetadata", arg0)
+	ret := m.ctrl.Call(m, "ClusterMetadata", ctx)
 	ret0, _ := ret[0].(*varlogpb.MetadataDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ClusterMetadata indicates an expected call of ClusterMetadata.
-func (mr *MockClusterMetadataViewMockRecorder) ClusterMetadata(arg0 any) *gomock.Call {
+func (mr *MockClusterMetadataViewMockRecorder) ClusterMetadata(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClusterMetadata", reflect.TypeOf((*MockClusterMetadataView)(nil).ClusterMetadata), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClusterMetadata", reflect.TypeOf((*MockClusterMetadataView)(nil).ClusterMetadata), ctx)
 }
 
 // StorageNode mocks base method.
-func (m *MockClusterMetadataView) StorageNode(arg0 context.Context, arg1 types.StorageNodeID) (*varlogpb.StorageNodeDescriptor, error) {
+func (m *MockClusterMetadataView) StorageNode(ctx context.Context, storageNodeID types.StorageNodeID) (*varlogpb.StorageNodeDescriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StorageNode", arg0, arg1)
+	ret := m.ctrl.Call(m, "StorageNode", ctx, storageNodeID)
 	ret0, _ := ret[0].(*varlogpb.StorageNodeDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // StorageNode indicates an expected call of StorageNode.
-func (mr *MockClusterMetadataViewMockRecorder) StorageNode(arg0, arg1 any) *gomock.Call {
+func (mr *MockClusterMetadataViewMockRecorder) StorageNode(ctx, storageNodeID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StorageNode", reflect.TypeOf((*MockClusterMetadataView)(nil).StorageNode), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StorageNode", reflect.TypeOf((*MockClusterMetadataView)(nil).StorageNode), ctx, storageNodeID)
 }
 
 // MockMetadataRepositoryManager is a mock of MetadataRepositoryManager interface.
 type MockMetadataRepositoryManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockMetadataRepositoryManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockMetadataRepositoryManagerMockRecorder is the mock recorder for MockMetadataRepositoryManager.
@@ -97,17 +99,17 @@ func (m *MockMetadataRepositoryManager) EXPECT() *MockMetadataRepositoryManagerM
 }
 
 // AddPeer mocks base method.
-func (m *MockMetadataRepositoryManager) AddPeer(arg0 context.Context, arg1 types.NodeID, arg2, arg3 string) error {
+func (m *MockMetadataRepositoryManager) AddPeer(ctx context.Context, nodeID types.NodeID, peerURL, rpcURL string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddPeer", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "AddPeer", ctx, nodeID, peerURL, rpcURL)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AddPeer indicates an expected call of AddPeer.
-func (mr *MockMetadataRepositoryManagerMockRecorder) AddPeer(arg0, arg1, arg2, arg3 any) *gomock.Call {
+func (mr *MockMetadataRepositoryManagerMockRecorder) AddPeer(ctx, nodeID, peerURL, rpcURL any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPeer", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).AddPeer), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPeer", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).AddPeer), ctx, nodeID, peerURL, rpcURL)
 }
 
 // Close mocks base method.
@@ -139,18 +141,18 @@ func (mr *MockMetadataRepositoryManagerMockRecorder) ClusterMetadataView() *gomo
 }
 
 // GetClusterInfo mocks base method.
-func (m *MockMetadataRepositoryManager) GetClusterInfo(arg0 context.Context) (*mrpb.ClusterInfo, error) {
+func (m *MockMetadataRepositoryManager) GetClusterInfo(ctx context.Context) (*mrpb.ClusterInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetClusterInfo", arg0)
+	ret := m.ctrl.Call(m, "GetClusterInfo", ctx)
 	ret0, _ := ret[0].(*mrpb.ClusterInfo)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetClusterInfo indicates an expected call of GetClusterInfo.
-func (mr *MockMetadataRepositoryManagerMockRecorder) GetClusterInfo(arg0 any) *gomock.Call {
+func (mr *MockMetadataRepositoryManagerMockRecorder) GetClusterInfo(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterInfo", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).GetClusterInfo), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterInfo", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).GetClusterInfo), ctx)
 }
 
 // NumberOfMR mocks base method.
@@ -168,142 +170,142 @@ func (mr *MockMetadataRepositoryManagerMockRecorder) NumberOfMR() *gomock.Call {
 }
 
 // RegisterLogStream mocks base method.
-func (m *MockMetadataRepositoryManager) RegisterLogStream(arg0 context.Context, arg1 *varlogpb.LogStreamDescriptor) error {
+func (m *MockMetadataRepositoryManager) RegisterLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RegisterLogStream", arg0, arg1)
+	ret := m.ctrl.Call(m, "RegisterLogStream", ctx, logStreamDesc)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RegisterLogStream indicates an expected call of RegisterLogStream.
-func (mr *MockMetadataRepositoryManagerMockRecorder) RegisterLogStream(arg0, arg1 any) *gomock.Call {
+func (mr *MockMetadataRepositoryManagerMockRecorder) RegisterLogStream(ctx, logStreamDesc any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterLogStream", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).RegisterLogStream), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterLogStream", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).RegisterLogStream), ctx, logStreamDesc)
 }
 
 // RegisterStorageNode mocks base method.
-func (m *MockMetadataRepositoryManager) RegisterStorageNode(arg0 context.Context, arg1 *varlogpb.StorageNodeDescriptor) error {
+func (m *MockMetadataRepositoryManager) RegisterStorageNode(ctx context.Context, storageNodeMeta *varlogpb.StorageNodeDescriptor) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RegisterStorageNode", arg0, arg1)
+	ret := m.ctrl.Call(m, "RegisterStorageNode", ctx, storageNodeMeta)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RegisterStorageNode indicates an expected call of RegisterStorageNode.
-func (mr *MockMetadataRepositoryManagerMockRecorder) RegisterStorageNode(arg0, arg1 any) *gomock.Call {
+func (mr *MockMetadataRepositoryManagerMockRecorder) RegisterStorageNode(ctx, storageNodeMeta any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterStorageNode", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).RegisterStorageNode), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterStorageNode", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).RegisterStorageNode), ctx, storageNodeMeta)
 }
 
 // RegisterTopic mocks base method.
-func (m *MockMetadataRepositoryManager) RegisterTopic(arg0 context.Context, arg1 types.TopicID) error {
+func (m *MockMetadataRepositoryManager) RegisterTopic(ctx context.Context, topicID types.TopicID) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RegisterTopic", arg0, arg1)
+	ret := m.ctrl.Call(m, "RegisterTopic", ctx, topicID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RegisterTopic indicates an expected call of RegisterTopic.
-func (mr *MockMetadataRepositoryManagerMockRecorder) RegisterTopic(arg0, arg1 any) *gomock.Call {
+func (mr *MockMetadataRepositoryManagerMockRecorder) RegisterTopic(ctx, topicID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterTopic", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).RegisterTopic), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterTopic", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).RegisterTopic), ctx, topicID)
 }
 
 // RemovePeer mocks base method.
-func (m *MockMetadataRepositoryManager) RemovePeer(arg0 context.Context, arg1 types.NodeID) error {
+func (m *MockMetadataRepositoryManager) RemovePeer(ctx context.Context, nodeID types.NodeID) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemovePeer", arg0, arg1)
+	ret := m.ctrl.Call(m, "RemovePeer", ctx, nodeID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RemovePeer indicates an expected call of RemovePeer.
-func (mr *MockMetadataRepositoryManagerMockRecorder) RemovePeer(arg0, arg1 any) *gomock.Call {
+func (mr *MockMetadataRepositoryManagerMockRecorder) RemovePeer(ctx, nodeID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemovePeer", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).RemovePeer), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemovePeer", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).RemovePeer), ctx, nodeID)
 }
 
 // Seal mocks base method.
-func (m *MockMetadataRepositoryManager) Seal(arg0 context.Context, arg1 types.LogStreamID) (types.GLSN, error) {
+func (m *MockMetadataRepositoryManager) Seal(ctx context.Context, logStreamID types.LogStreamID) (types.GLSN, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Seal", arg0, arg1)
+	ret := m.ctrl.Call(m, "Seal", ctx, logStreamID)
 	ret0, _ := ret[0].(types.GLSN)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Seal indicates an expected call of Seal.
-func (mr *MockMetadataRepositoryManagerMockRecorder) Seal(arg0, arg1 any) *gomock.Call {
+func (mr *MockMetadataRepositoryManagerMockRecorder) Seal(ctx, logStreamID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).Seal), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).Seal), ctx, logStreamID)
 }
 
 // UnregisterLogStream mocks base method.
-func (m *MockMetadataRepositoryManager) UnregisterLogStream(arg0 context.Context, arg1 types.LogStreamID) error {
+func (m *MockMetadataRepositoryManager) UnregisterLogStream(ctx context.Context, logStreamID types.LogStreamID) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UnregisterLogStream", arg0, arg1)
+	ret := m.ctrl.Call(m, "UnregisterLogStream", ctx, logStreamID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UnregisterLogStream indicates an expected call of UnregisterLogStream.
-func (mr *MockMetadataRepositoryManagerMockRecorder) UnregisterLogStream(arg0, arg1 any) *gomock.Call {
+func (mr *MockMetadataRepositoryManagerMockRecorder) UnregisterLogStream(ctx, logStreamID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterLogStream", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).UnregisterLogStream), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterLogStream", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).UnregisterLogStream), ctx, logStreamID)
 }
 
 // UnregisterStorageNode mocks base method.
-func (m *MockMetadataRepositoryManager) UnregisterStorageNode(arg0 context.Context, arg1 types.StorageNodeID) error {
+func (m *MockMetadataRepositoryManager) UnregisterStorageNode(ctx context.Context, storageNodeID types.StorageNodeID) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UnregisterStorageNode", arg0, arg1)
+	ret := m.ctrl.Call(m, "UnregisterStorageNode", ctx, storageNodeID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UnregisterStorageNode indicates an expected call of UnregisterStorageNode.
-func (mr *MockMetadataRepositoryManagerMockRecorder) UnregisterStorageNode(arg0, arg1 any) *gomock.Call {
+func (mr *MockMetadataRepositoryManagerMockRecorder) UnregisterStorageNode(ctx, storageNodeID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterStorageNode", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).UnregisterStorageNode), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterStorageNode", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).UnregisterStorageNode), ctx, storageNodeID)
 }
 
 // UnregisterTopic mocks base method.
-func (m *MockMetadataRepositoryManager) UnregisterTopic(arg0 context.Context, arg1 types.TopicID) error {
+func (m *MockMetadataRepositoryManager) UnregisterTopic(ctx context.Context, topicID types.TopicID) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UnregisterTopic", arg0, arg1)
+	ret := m.ctrl.Call(m, "UnregisterTopic", ctx, topicID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UnregisterTopic indicates an expected call of UnregisterTopic.
-func (mr *MockMetadataRepositoryManagerMockRecorder) UnregisterTopic(arg0, arg1 any) *gomock.Call {
+func (mr *MockMetadataRepositoryManagerMockRecorder) UnregisterTopic(ctx, topicID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterTopic", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).UnregisterTopic), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterTopic", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).UnregisterTopic), ctx, topicID)
 }
 
 // Unseal mocks base method.
-func (m *MockMetadataRepositoryManager) Unseal(arg0 context.Context, arg1 types.LogStreamID) error {
+func (m *MockMetadataRepositoryManager) Unseal(ctx context.Context, logStreamID types.LogStreamID) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Unseal", arg0, arg1)
+	ret := m.ctrl.Call(m, "Unseal", ctx, logStreamID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Unseal indicates an expected call of Unseal.
-func (mr *MockMetadataRepositoryManagerMockRecorder) Unseal(arg0, arg1 any) *gomock.Call {
+func (mr *MockMetadataRepositoryManagerMockRecorder) Unseal(ctx, logStreamID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).Unseal), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).Unseal), ctx, logStreamID)
 }
 
 // UpdateLogStream mocks base method.
-func (m *MockMetadataRepositoryManager) UpdateLogStream(arg0 context.Context, arg1 *varlogpb.LogStreamDescriptor) error {
+func (m *MockMetadataRepositoryManager) UpdateLogStream(ctx context.Context, logStreamDesc *varlogpb.LogStreamDescriptor) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateLogStream", arg0, arg1)
+	ret := m.ctrl.Call(m, "UpdateLogStream", ctx, logStreamDesc)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateLogStream indicates an expected call of UpdateLogStream.
-func (mr *MockMetadataRepositoryManagerMockRecorder) UpdateLogStream(arg0, arg1 any) *gomock.Call {
+func (mr *MockMetadataRepositoryManagerMockRecorder) UpdateLogStream(ctx, logStreamDesc any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLogStream", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).UpdateLogStream), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLogStream", reflect.TypeOf((*MockMetadataRepositoryManager)(nil).UpdateLogStream), ctx, logStreamDesc)
 }

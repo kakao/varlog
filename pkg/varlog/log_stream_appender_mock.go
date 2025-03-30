@@ -19,6 +19,7 @@ import (
 type MockLogStreamAppender struct {
 	ctrl     *gomock.Controller
 	recorder *MockLogStreamAppenderMockRecorder
+	isgomock struct{}
 }
 
 // MockLogStreamAppenderMockRecorder is the mock recorder for MockLogStreamAppender.
@@ -39,17 +40,17 @@ func (m *MockLogStreamAppender) EXPECT() *MockLogStreamAppenderMockRecorder {
 }
 
 // AppendBatch mocks base method.
-func (m *MockLogStreamAppender) AppendBatch(arg0 [][]byte, arg1 BatchCallback) error {
+func (m *MockLogStreamAppender) AppendBatch(dataBatch [][]byte, callback BatchCallback) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AppendBatch", arg0, arg1)
+	ret := m.ctrl.Call(m, "AppendBatch", dataBatch, callback)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AppendBatch indicates an expected call of AppendBatch.
-func (mr *MockLogStreamAppenderMockRecorder) AppendBatch(arg0, arg1 any) *gomock.Call {
+func (mr *MockLogStreamAppenderMockRecorder) AppendBatch(dataBatch, callback any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendBatch", reflect.TypeOf((*MockLogStreamAppender)(nil).AppendBatch), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendBatch", reflect.TypeOf((*MockLogStreamAppender)(nil).AppendBatch), dataBatch, callback)
 }
 
 // Close mocks base method.

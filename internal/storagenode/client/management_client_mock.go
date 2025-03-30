@@ -24,6 +24,7 @@ import (
 type MockStorageNodeManagementClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockStorageNodeManagementClientMockRecorder
+	isgomock struct{}
 }
 
 // MockStorageNodeManagementClientMockRecorder is the mock recorder for MockStorageNodeManagementClient.
@@ -44,18 +45,18 @@ func (m *MockStorageNodeManagementClient) EXPECT() *MockStorageNodeManagementCli
 }
 
 // AddLogStreamReplica mocks base method.
-func (m *MockStorageNodeManagementClient) AddLogStreamReplica(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 string) (snpb.LogStreamReplicaMetadataDescriptor, error) {
+func (m *MockStorageNodeManagementClient) AddLogStreamReplica(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, snpath string) (snpb.LogStreamReplicaMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddLogStreamReplica", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "AddLogStreamReplica", ctx, topicID, logStreamID, snpath)
 	ret0, _ := ret[0].(snpb.LogStreamReplicaMetadataDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AddLogStreamReplica indicates an expected call of AddLogStreamReplica.
-func (mr *MockStorageNodeManagementClientMockRecorder) AddLogStreamReplica(arg0, arg1, arg2, arg3 any) *gomock.Call {
+func (mr *MockStorageNodeManagementClientMockRecorder) AddLogStreamReplica(ctx, topicID, logStreamID, snpath any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStreamReplica", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).AddLogStreamReplica), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStreamReplica", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).AddLogStreamReplica), ctx, topicID, logStreamID, snpath)
 }
 
 // Close mocks base method.
@@ -73,38 +74,38 @@ func (mr *MockStorageNodeManagementClientMockRecorder) Close() *gomock.Call {
 }
 
 // GetMetadata mocks base method.
-func (m *MockStorageNodeManagementClient) GetMetadata(arg0 context.Context) (*snpb.StorageNodeMetadataDescriptor, error) {
+func (m *MockStorageNodeManagementClient) GetMetadata(ctx context.Context) (*snpb.StorageNodeMetadataDescriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMetadata", arg0)
+	ret := m.ctrl.Call(m, "GetMetadata", ctx)
 	ret0, _ := ret[0].(*snpb.StorageNodeMetadataDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetMetadata indicates an expected call of GetMetadata.
-func (mr *MockStorageNodeManagementClientMockRecorder) GetMetadata(arg0 any) *gomock.Call {
+func (mr *MockStorageNodeManagementClientMockRecorder) GetMetadata(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).GetMetadata), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).GetMetadata), ctx)
 }
 
 // RemoveLogStream mocks base method.
-func (m *MockStorageNodeManagementClient) RemoveLogStream(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID) error {
+func (m *MockStorageNodeManagementClient) RemoveLogStream(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemoveLogStream", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "RemoveLogStream", ctx, topicID, logStreamID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RemoveLogStream indicates an expected call of RemoveLogStream.
-func (mr *MockStorageNodeManagementClientMockRecorder) RemoveLogStream(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockStorageNodeManagementClientMockRecorder) RemoveLogStream(ctx, topicID, logStreamID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLogStream", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).RemoveLogStream), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLogStream", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).RemoveLogStream), ctx, topicID, logStreamID)
 }
 
 // Seal mocks base method.
-func (m *MockStorageNodeManagementClient) Seal(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
+func (m *MockStorageNodeManagementClient) Seal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Seal", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "Seal", ctx, topicID, logStreamID, lastCommittedGLSN)
 	ret0, _ := ret[0].(varlogpb.LogStreamStatus)
 	ret1, _ := ret[1].(types.GLSN)
 	ret2, _ := ret[2].(error)
@@ -112,24 +113,24 @@ func (m *MockStorageNodeManagementClient) Seal(arg0 context.Context, arg1 types.
 }
 
 // Seal indicates an expected call of Seal.
-func (mr *MockStorageNodeManagementClientMockRecorder) Seal(arg0, arg1, arg2, arg3 any) *gomock.Call {
+func (mr *MockStorageNodeManagementClientMockRecorder) Seal(ctx, topicID, logStreamID, lastCommittedGLSN any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).Seal), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).Seal), ctx, topicID, logStreamID, lastCommittedGLSN)
 }
 
 // Sync mocks base method.
-func (m *MockStorageNodeManagementClient) Sync(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 types.StorageNodeID, arg4 string, arg5 types.GLSN) (*snpb.SyncStatus, error) {
+func (m *MockStorageNodeManagementClient) Sync(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Sync", arg0, arg1, arg2, arg3, arg4, arg5)
+	ret := m.ctrl.Call(m, "Sync", ctx, topicID, logStreamID, backupStorageNodeID, backupAddress, lastGLSN)
 	ret0, _ := ret[0].(*snpb.SyncStatus)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Sync indicates an expected call of Sync.
-func (mr *MockStorageNodeManagementClientMockRecorder) Sync(arg0, arg1, arg2, arg3, arg4, arg5 any) *gomock.Call {
+func (mr *MockStorageNodeManagementClientMockRecorder) Sync(ctx, topicID, logStreamID, backupStorageNodeID, backupAddress, lastGLSN any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).Sync), arg0, arg1, arg2, arg3, arg4, arg5)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).Sync), ctx, topicID, logStreamID, backupStorageNodeID, backupAddress, lastGLSN)
 }
 
 // Target mocks base method.
@@ -147,30 +148,30 @@ func (mr *MockStorageNodeManagementClientMockRecorder) Target() *gomock.Call {
 }
 
 // Trim mocks base method.
-func (m *MockStorageNodeManagementClient) Trim(arg0 context.Context, arg1 types.TopicID, arg2 types.GLSN) (map[types.LogStreamID]error, error) {
+func (m *MockStorageNodeManagementClient) Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) (map[types.LogStreamID]error, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Trim", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "Trim", ctx, topicID, lastGLSN)
 	ret0, _ := ret[0].(map[types.LogStreamID]error)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Trim indicates an expected call of Trim.
-func (mr *MockStorageNodeManagementClientMockRecorder) Trim(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockStorageNodeManagementClientMockRecorder) Trim(ctx, topicID, lastGLSN any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).Trim), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).Trim), ctx, topicID, lastGLSN)
 }
 
 // Unseal mocks base method.
-func (m *MockStorageNodeManagementClient) Unseal(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 []varlogpb.LogStreamReplica) error {
+func (m *MockStorageNodeManagementClient) Unseal(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, replicas []varlogpb.LogStreamReplica) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Unseal", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "Unseal", ctx, topicID, logStreamID, replicas)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Unseal indicates an expected call of Unseal.
-func (mr *MockStorageNodeManagementClientMockRecorder) Unseal(arg0, arg1, arg2, arg3 any) *gomock.Call {
+func (mr *MockStorageNodeManagementClientMockRecorder) Unseal(ctx, topicID, logStreamID, replicas any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).Unseal), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockStorageNodeManagementClient)(nil).Unseal), ctx, topicID, logStreamID, replicas)
 }

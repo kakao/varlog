@@ -1,6 +1,6 @@
 package client
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/storagenode/client -package client -destination management_client_mock.go . StorageNodeManagementClient
+//go:generate go tool mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/storagenode/client -package client -destination management_client_mock.go . StorageNodeManagementClient
 
 import (
 	"context"

@@ -23,6 +23,7 @@ import (
 type MockLog struct {
 	ctrl     *gomock.Controller
 	recorder *MockLogMockRecorder
+	isgomock struct{}
 }
 
 // MockLogMockRecorder is the mock recorder for MockLog.
@@ -43,10 +44,10 @@ func (m *MockLog) EXPECT() *MockLogMockRecorder {
 }
 
 // Append mocks base method.
-func (m *MockLog) Append(arg0 context.Context, arg1 types.TopicID, arg2 [][]byte, arg3 ...AppendOption) AppendResult {
+func (m *MockLog) Append(ctx context.Context, topicID types.TopicID, data [][]byte, opts ...AppendOption) AppendResult {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1, arg2}
-	for _, a := range arg3 {
+	varargs := []any{ctx, topicID, data}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Append", varargs...)
@@ -55,17 +56,17 @@ func (m *MockLog) Append(arg0 context.Context, arg1 types.TopicID, arg2 [][]byte
 }
 
 // Append indicates an expected call of Append.
-func (mr *MockLogMockRecorder) Append(arg0, arg1, arg2 any, arg3 ...any) *gomock.Call {
+func (mr *MockLogMockRecorder) Append(ctx, topicID, data any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1, arg2}, arg3...)
+	varargs := append([]any{ctx, topicID, data}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Append", reflect.TypeOf((*MockLog)(nil).Append), varargs...)
 }
 
 // AppendTo mocks base method.
-func (m *MockLog) AppendTo(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3 [][]byte, arg4 ...AppendOption) AppendResult {
+func (m *MockLog) AppendTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, data [][]byte, opts ...AppendOption) AppendResult {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1, arg2, arg3}
-	for _, a := range arg4 {
+	varargs := []any{ctx, topicID, logStreamID, data}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AppendTo", varargs...)
@@ -74,24 +75,24 @@ func (m *MockLog) AppendTo(arg0 context.Context, arg1 types.TopicID, arg2 types.
 }
 
 // AppendTo indicates an expected call of AppendTo.
-func (mr *MockLogMockRecorder) AppendTo(arg0, arg1, arg2, arg3 any, arg4 ...any) *gomock.Call {
+func (mr *MockLogMockRecorder) AppendTo(ctx, topicID, logStreamID, data any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1, arg2, arg3}, arg4...)
+	varargs := append([]any{ctx, topicID, logStreamID, data}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendTo", reflect.TypeOf((*MockLog)(nil).AppendTo), varargs...)
 }
 
 // AppendableLogStreams mocks base method.
-func (m *MockLog) AppendableLogStreams(arg0 types.TopicID) map[types.LogStreamID]struct{} {
+func (m *MockLog) AppendableLogStreams(tpid types.TopicID) map[types.LogStreamID]struct{} {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AppendableLogStreams", arg0)
+	ret := m.ctrl.Call(m, "AppendableLogStreams", tpid)
 	ret0, _ := ret[0].(map[types.LogStreamID]struct{})
 	return ret0
 }
 
 // AppendableLogStreams indicates an expected call of AppendableLogStreams.
-func (mr *MockLogMockRecorder) AppendableLogStreams(arg0 any) *gomock.Call {
+func (mr *MockLogMockRecorder) AppendableLogStreams(tpid any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendableLogStreams", reflect.TypeOf((*MockLog)(nil).AppendableLogStreams), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendableLogStreams", reflect.TypeOf((*MockLog)(nil).AppendableLogStreams), tpid)
 }
 
 // Close mocks base method.
@@ -109,10 +110,10 @@ func (mr *MockLogMockRecorder) Close() *gomock.Call {
 }
 
 // NewLogStreamAppender mocks base method.
-func (m *MockLog) NewLogStreamAppender(arg0 types.TopicID, arg1 types.LogStreamID, arg2 ...LogStreamAppenderOption) (LogStreamAppender, error) {
+func (m *MockLog) NewLogStreamAppender(tpid types.TopicID, lsid types.LogStreamID, opts ...LogStreamAppenderOption) (LogStreamAppender, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{tpid, lsid}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "NewLogStreamAppender", varargs...)
@@ -122,16 +123,16 @@ func (m *MockLog) NewLogStreamAppender(arg0 types.TopicID, arg1 types.LogStreamI
 }
 
 // NewLogStreamAppender indicates an expected call of NewLogStreamAppender.
-func (mr *MockLogMockRecorder) NewLogStreamAppender(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockLogMockRecorder) NewLogStreamAppender(tpid, lsid any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{tpid, lsid}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewLogStreamAppender", reflect.TypeOf((*MockLog)(nil).NewLogStreamAppender), varargs...)
 }
 
 // PeekLogStream mocks base method.
-func (m *MockLog) PeekLogStream(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID) (varlogpb.LogSequenceNumber, varlogpb.LogSequenceNumber, bool, error) {
+func (m *MockLog) PeekLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) (varlogpb.LogSequenceNumber, varlogpb.LogSequenceNumber, bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PeekLogStream", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "PeekLogStream", ctx, tpid, lsid)
 	ret0, _ := ret[0].(varlogpb.LogSequenceNumber)
 	ret1, _ := ret[1].(varlogpb.LogSequenceNumber)
 	ret2, _ := ret[2].(bool)
@@ -140,16 +141,16 @@ func (m *MockLog) PeekLogStream(arg0 context.Context, arg1 types.TopicID, arg2 t
 }
 
 // PeekLogStream indicates an expected call of PeekLogStream.
-func (mr *MockLogMockRecorder) PeekLogStream(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockLogMockRecorder) PeekLogStream(ctx, tpid, lsid any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PeekLogStream", reflect.TypeOf((*MockLog)(nil).PeekLogStream), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PeekLogStream", reflect.TypeOf((*MockLog)(nil).PeekLogStream), ctx, tpid, lsid)
 }
 
 // Subscribe mocks base method.
-func (m *MockLog) Subscribe(arg0 context.Context, arg1 types.TopicID, arg2, arg3 types.GLSN, arg4 OnNext, arg5 ...SubscribeOption) (SubscribeCloser, error) {
+func (m *MockLog) Subscribe(ctx context.Context, topicID types.TopicID, begin, end types.GLSN, onNextFunc OnNext, opts ...SubscribeOption) (SubscribeCloser, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1, arg2, arg3, arg4}
-	for _, a := range arg5 {
+	varargs := []any{ctx, topicID, begin, end, onNextFunc}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Subscribe", varargs...)
@@ -159,17 +160,17 @@ func (m *MockLog) Subscribe(arg0 context.Context, arg1 types.TopicID, arg2, arg3
 }
 
 // Subscribe indicates an expected call of Subscribe.
-func (mr *MockLogMockRecorder) Subscribe(arg0, arg1, arg2, arg3, arg4 any, arg5 ...any) *gomock.Call {
+func (mr *MockLogMockRecorder) Subscribe(ctx, topicID, begin, end, onNextFunc any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1, arg2, arg3, arg4}, arg5...)
+	varargs := append([]any{ctx, topicID, begin, end, onNextFunc}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockLog)(nil).Subscribe), varargs...)
 }
 
 // SubscribeTo mocks base method.
-func (m *MockLog) SubscribeTo(arg0 context.Context, arg1 types.TopicID, arg2 types.LogStreamID, arg3, arg4 types.LLSN, arg5 ...SubscribeOption) Subscriber {
+func (m *MockLog) SubscribeTo(ctx context.Context, topicID types.TopicID, logStreamID types.LogStreamID, begin, end types.LLSN, opts ...SubscribeOption) Subscriber {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1, arg2, arg3, arg4}
-	for _, a := range arg5 {
+	varargs := []any{ctx, topicID, logStreamID, begin, end}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "SubscribeTo", varargs...)
@@ -178,22 +179,22 @@ func (m *MockLog) SubscribeTo(arg0 context.Context, arg1 types.TopicID, arg2 typ
 }
 
 // SubscribeTo indicates an expected call of SubscribeTo.
-func (mr *MockLogMockRecorder) SubscribeTo(arg0, arg1, arg2, arg3, arg4 any, arg5 ...any) *gomock.Call {
+func (mr *MockLogMockRecorder) SubscribeTo(ctx, topicID, logStreamID, begin, end any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1, arg2, arg3, arg4}, arg5...)
+	varargs := append([]any{ctx, topicID, logStreamID, begin, end}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeTo", reflect.TypeOf((*MockLog)(nil).SubscribeTo), varargs...)
 }
 
 // Trim mocks base method.
-func (m *MockLog) Trim(arg0 context.Context, arg1 types.TopicID, arg2 types.GLSN, arg3 TrimOption) error {
+func (m *MockLog) Trim(ctx context.Context, topicID types.TopicID, until types.GLSN, opts TrimOption) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Trim", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "Trim", ctx, topicID, until, opts)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Trim indicates an expected call of Trim.
-func (mr *MockLogMockRecorder) Trim(arg0, arg1, arg2, arg3 any) *gomock.Call {
+func (mr *MockLogMockRecorder) Trim(ctx, topicID, until, opts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockLog)(nil).Trim), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockLog)(nil).Trim), ctx, topicID, until, opts)
 }

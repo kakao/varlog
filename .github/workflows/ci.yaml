@@ -19,9 +19,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Install tools
-        run: |
-          make tools
       - name: Check go mod
         run: |
           make mod-tidy-check

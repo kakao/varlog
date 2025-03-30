@@ -24,6 +24,7 @@ import (
 type MockManagementClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockManagementClientMockRecorder
+	isgomock struct{}
 }
 
 // MockManagementClientMockRecorder is the mock recorder for MockManagementClient.
@@ -44,10 +45,10 @@ func (m *MockManagementClient) EXPECT() *MockManagementClientMockRecorder {
 }
 
 // AddPeer mocks base method.
-func (m *MockManagementClient) AddPeer(arg0 context.Context, arg1 *mrpb.AddPeerRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
+func (m *MockManagementClient) AddPeer(ctx context.Context, in *mrpb.AddPeerRequest, opts ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AddPeer", varargs...)
@@ -57,17 +58,17 @@ func (m *MockManagementClient) AddPeer(arg0 context.Context, arg1 *mrpb.AddPeerR
 }
 
 // AddPeer indicates an expected call of AddPeer.
-func (mr *MockManagementClientMockRecorder) AddPeer(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockManagementClientMockRecorder) AddPeer(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPeer", reflect.TypeOf((*MockManagementClient)(nil).AddPeer), varargs...)
 }
 
 // GetClusterInfo mocks base method.
-func (m *MockManagementClient) GetClusterInfo(arg0 context.Context, arg1 *mrpb.GetClusterInfoRequest, arg2 ...grpc.CallOption) (*mrpb.GetClusterInfoResponse, error) {
+func (m *MockManagementClient) GetClusterInfo(ctx context.Context, in *mrpb.GetClusterInfoRequest, opts ...grpc.CallOption) (*mrpb.GetClusterInfoResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetClusterInfo", varargs...)
@@ -77,17 +78,17 @@ func (m *MockManagementClient) GetClusterInfo(arg0 context.Context, arg1 *mrpb.G
 }
 
 // GetClusterInfo indicates an expected call of GetClusterInfo.
-func (mr *MockManagementClientMockRecorder) GetClusterInfo(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockManagementClientMockRecorder) GetClusterInfo(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterInfo", reflect.TypeOf((*MockManagementClient)(nil).GetClusterInfo), varargs...)
 }
 
 // RemovePeer mocks base method.
-func (m *MockManagementClient) RemovePeer(arg0 context.Context, arg1 *mrpb.RemovePeerRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
+func (m *MockManagementClient) RemovePeer(ctx context.Context, in *mrpb.RemovePeerRequest, opts ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "RemovePeer", varargs...)
@@ -97,9 +98,9 @@ func (m *MockManagementClient) RemovePeer(arg0 context.Context, arg1 *mrpb.Remov
 }
 
 // RemovePeer indicates an expected call of RemovePeer.
-func (mr *MockManagementClientMockRecorder) RemovePeer(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockManagementClientMockRecorder) RemovePeer(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemovePeer", reflect.TypeOf((*MockManagementClient)(nil).RemovePeer), varargs...)
 }
 
@@ -107,6 +108,7 @@ func (mr *MockManagementClientMockRecorder) RemovePeer(arg0, arg1 any, arg2 ...a
 type MockManagementServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockManagementServerMockRecorder
+	isgomock struct{}
 }
 
 // MockManagementServerMockRecorder is the mock recorder for MockManagementServer.
@@ -175,6 +177,7 @@ func (mr *MockManagementServerMockRecorder) RemovePeer(arg0, arg1 any) *gomock.C
 type MockMetadataRepositoryServiceClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockMetadataRepositoryServiceClientMockRecorder
+	isgomock struct{}
 }
 
 // MockMetadataRepositoryServiceClientMockRecorder is the mock recorder for MockMetadataRepositoryServiceClient.
@@ -195,10 +198,10 @@ func (m *MockMetadataRepositoryServiceClient) EXPECT() *MockMetadataRepositorySe
 }
 
 // GetCommitResult mocks base method.
-func (m *MockMetadataRepositoryServiceClient) GetCommitResult(arg0 context.Context, arg1 *mrpb.GetCommitResultRequest, arg2 ...grpc.CallOption) (*mrpb.GetCommitResultResponse, error) {
+func (m *MockMetadataRepositoryServiceClient) GetCommitResult(ctx context.Context, in *mrpb.GetCommitResultRequest, opts ...grpc.CallOption) (*mrpb.GetCommitResultResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetCommitResult", varargs...)
@@ -208,17 +211,17 @@ func (m *MockMetadataRepositoryServiceClient) GetCommitResult(arg0 context.Conte
 }
 
 // GetCommitResult indicates an expected call of GetCommitResult.
-func (mr *MockMetadataRepositoryServiceClientMockRecorder) GetCommitResult(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockMetadataRepositoryServiceClientMockRecorder) GetCommitResult(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCommitResult", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).GetCommitResult), varargs...)
 }
 
 // GetMetadata mocks base method.
-func (m *MockMetadataRepositoryServiceClient) GetMetadata(arg0 context.Context, arg1 *mrpb.GetMetadataRequest, arg2 ...grpc.CallOption) (*mrpb.GetMetadataResponse, error) {
+func (m *MockMetadataRepositoryServiceClient) GetMetadata(ctx context.Context, in *mrpb.GetMetadataRequest, opts ...grpc.CallOption) (*mrpb.GetMetadataResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetMetadata", varargs...)
@@ -228,17 +231,17 @@ func (m *MockMetadataRepositoryServiceClient) GetMetadata(arg0 context.Context, 
 }
 
 // GetMetadata indicates an expected call of GetMetadata.
-func (mr *MockMetadataRepositoryServiceClientMockRecorder) GetMetadata(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockMetadataRepositoryServiceClientMockRecorder) GetMetadata(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).GetMetadata), varargs...)
 }
 
 // GetReports mocks base method.
-func (m *MockMetadataRepositoryServiceClient) GetReports(arg0 context.Context, arg1 *mrpb.GetReportsRequest, arg2 ...grpc.CallOption) (*mrpb.GetReportsResponse, error) {
+func (m *MockMetadataRepositoryServiceClient) GetReports(ctx context.Context, in *mrpb.GetReportsRequest, opts ...grpc.CallOption) (*mrpb.GetReportsResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetReports", varargs...)
@@ -248,17 +251,17 @@ func (m *MockMetadataRepositoryServiceClient) GetReports(arg0 context.Context, a
 }
 
 // GetReports indicates an expected call of GetReports.
-func (mr *MockMetadataRepositoryServiceClientMockRecorder) GetReports(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockMetadataRepositoryServiceClientMockRecorder) GetReports(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReports", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).GetReports), varargs...)
 }
 
 // RegisterLogStream mocks base method.
-func (m *MockMetadataRepositoryServiceClient) RegisterLogStream(arg0 context.Context, arg1 *mrpb.LogStreamRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
+func (m *MockMetadataRepositoryServiceClient) RegisterLogStream(ctx context.Context, in *mrpb.LogStreamRequest, opts ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "RegisterLogStream", varargs...)
@@ -268,17 +271,17 @@ func (m *MockMetadataRepositoryServiceClient) RegisterLogStream(arg0 context.Con
 }
 
 // RegisterLogStream indicates an expected call of RegisterLogStream.
-func (mr *MockMetadataRepositoryServiceClientMockRecorder) RegisterLogStream(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockMetadataRepositoryServiceClientMockRecorder) RegisterLogStream(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterLogStream", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).RegisterLogStream), varargs...)
 }
 
 // RegisterStorageNode mocks base method.
-func (m *MockMetadataRepositoryServiceClient) RegisterStorageNode(arg0 context.Context, arg1 *mrpb.StorageNodeRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
+func (m *MockMetadataRepositoryServiceClient) RegisterStorageNode(ctx context.Context, in *mrpb.StorageNodeRequest, opts ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "RegisterStorageNode", varargs...)
@@ -288,17 +291,17 @@ func (m *MockMetadataRepositoryServiceClient) RegisterStorageNode(arg0 context.C
 }
 
 // RegisterStorageNode indicates an expected call of RegisterStorageNode.
-func (mr *MockMetadataRepositoryServiceClientMockRecorder) RegisterStorageNode(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockMetadataRepositoryServiceClientMockRecorder) RegisterStorageNode(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterStorageNode", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).RegisterStorageNode), varargs...)
 }
 
 // RegisterTopic mocks base method.
-func (m *MockMetadataRepositoryServiceClient) RegisterTopic(arg0 context.Context, arg1 *mrpb.TopicRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
+func (m *MockMetadataRepositoryServiceClient) RegisterTopic(ctx context.Context, in *mrpb.TopicRequest, opts ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "RegisterTopic", varargs...)
@@ -308,17 +311,17 @@ func (m *MockMetadataRepositoryServiceClient) RegisterTopic(arg0 context.Context
 }
 
 // RegisterTopic indicates an expected call of RegisterTopic.
-func (mr *MockMetadataRepositoryServiceClientMockRecorder) RegisterTopic(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockMetadataRepositoryServiceClientMockRecorder) RegisterTopic(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterTopic", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).RegisterTopic), varargs...)
 }
 
 // Seal mocks base method.
-func (m *MockMetadataRepositoryServiceClient) Seal(arg0 context.Context, arg1 *mrpb.SealRequest, arg2 ...grpc.CallOption) (*mrpb.SealResponse, error) {
+func (m *MockMetadataRepositoryServiceClient) Seal(ctx context.Context, in *mrpb.SealRequest, opts ...grpc.CallOption) (*mrpb.SealResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Seal", varargs...)
@@ -328,17 +331,17 @@ func (m *MockMetadataRepositoryServiceClient) Seal(arg0 context.Context, arg1 *m
 }
 
 // Seal indicates an expected call of Seal.
-func (mr *MockMetadataRepositoryServiceClientMockRecorder) Seal(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockMetadataRepositoryServiceClientMockRecorder) Seal(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).Seal), varargs...)
 }
 
 // UnregisterLogStream mocks base method.
-func (m *MockMetadataRepositoryServiceClient) UnregisterLogStream(arg0 context.Context, arg1 *mrpb.LogStreamRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
+func (m *MockMetadataRepositoryServiceClient) UnregisterLogStream(ctx context.Context, in *mrpb.LogStreamRequest, opts ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "UnregisterLogStream", varargs...)
@@ -348,17 +351,17 @@ func (m *MockMetadataRepositoryServiceClient) UnregisterLogStream(arg0 context.C
 }
 
 // UnregisterLogStream indicates an expected call of UnregisterLogStream.
-func (mr *MockMetadataRepositoryServiceClientMockRecorder) UnregisterLogStream(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockMetadataRepositoryServiceClientMockRecorder) UnregisterLogStream(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterLogStream", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).UnregisterLogStream), varargs...)
 }
 
 // UnregisterStorageNode mocks base method.
-func (m *MockMetadataRepositoryServiceClient) UnregisterStorageNode(arg0 context.Context, arg1 *mrpb.StorageNodeRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
+func (m *MockMetadataRepositoryServiceClient) UnregisterStorageNode(ctx context.Context, in *mrpb.StorageNodeRequest, opts ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "UnregisterStorageNode", varargs...)
@@ -368,17 +371,17 @@ func (m *MockMetadataRepositoryServiceClient) UnregisterStorageNode(arg0 context
 }
 
 // UnregisterStorageNode indicates an expected call of UnregisterStorageNode.
-func (mr *MockMetadataRepositoryServiceClientMockRecorder) UnregisterStorageNode(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockMetadataRepositoryServiceClientMockRecorder) UnregisterStorageNode(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterStorageNode", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).UnregisterStorageNode), varargs...)
 }
 
 // UnregisterTopic mocks base method.
-func (m *MockMetadataRepositoryServiceClient) UnregisterTopic(arg0 context.Context, arg1 *mrpb.TopicRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
+func (m *MockMetadataRepositoryServiceClient) UnregisterTopic(ctx context.Context, in *mrpb.TopicRequest, opts ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "UnregisterTopic", varargs...)
@@ -388,17 +391,17 @@ func (m *MockMetadataRepositoryServiceClient) UnregisterTopic(arg0 context.Conte
 }
 
 // UnregisterTopic indicates an expected call of UnregisterTopic.
-func (mr *MockMetadataRepositoryServiceClientMockRecorder) UnregisterTopic(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockMetadataRepositoryServiceClientMockRecorder) UnregisterTopic(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterTopic", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).UnregisterTopic), varargs...)
 }
 
 // Unseal mocks base method.
-func (m *MockMetadataRepositoryServiceClient) Unseal(arg0 context.Context, arg1 *mrpb.UnsealRequest, arg2 ...grpc.CallOption) (*mrpb.UnsealResponse, error) {
+func (m *MockMetadataRepositoryServiceClient) Unseal(ctx context.Context, in *mrpb.UnsealRequest, opts ...grpc.CallOption) (*mrpb.UnsealResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Unseal", varargs...)
@@ -408,17 +411,17 @@ func (m *MockMetadataRepositoryServiceClient) Unseal(arg0 context.Context, arg1 
 }
 
 // Unseal indicates an expected call of Unseal.
-func (mr *MockMetadataRepositoryServiceClientMockRecorder) Unseal(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockMetadataRepositoryServiceClientMockRecorder) Unseal(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).Unseal), varargs...)
 }
 
 // UpdateLogStream mocks base method.
-func (m *MockMetadataRepositoryServiceClient) UpdateLogStream(arg0 context.Context, arg1 *mrpb.LogStreamRequest, arg2 ...grpc.CallOption) (*types.Empty, error) {
+func (m *MockMetadataRepositoryServiceClient) UpdateLogStream(ctx context.Context, in *mrpb.LogStreamRequest, opts ...grpc.CallOption) (*types.Empty, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "UpdateLogStream", varargs...)
@@ -428,9 +431,9 @@ func (m *MockMetadataRepositoryServiceClient) UpdateLogStream(arg0 context.Conte
 }
 
 // UpdateLogStream indicates an expected call of UpdateLogStream.
-func (mr *MockMetadataRepositoryServiceClientMockRecorder) UpdateLogStream(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockMetadataRepositoryServiceClientMockRecorder) UpdateLogStream(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLogStream", reflect.TypeOf((*MockMetadataRepositoryServiceClient)(nil).UpdateLogStream), varargs...)
 }
 
@@ -438,6 +441,7 @@ func (mr *MockMetadataRepositoryServiceClientMockRecorder) UpdateLogStream(arg0,
 type MockMetadataRepositoryServiceServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockMetadataRepositoryServiceServerMockRecorder
+	isgomock struct{}
 }
 
 // MockMetadataRepositoryServiceServerMockRecorder is the mock recorder for MockMetadataRepositoryServiceServer.

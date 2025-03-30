@@ -1,6 +1,6 @@
 package varlog
 
-//go:generate mockgen -package varlog -destination log_mock.go . Log
+//go:generate go tool mockgen -package varlog -destination log_mock.go . Log
 
 import (
 	"context"

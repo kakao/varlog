@@ -22,6 +22,7 @@ import (
 type MockReplicasRetriever struct {
 	ctrl     *gomock.Controller
 	recorder *MockReplicasRetrieverMockRecorder
+	isgomock struct{}
 }
 
 // MockReplicasRetrieverMockRecorder is the mock recorder for MockReplicasRetriever.
@@ -42,38 +43,39 @@ func (m *MockReplicasRetriever) EXPECT() *MockReplicasRetrieverMockRecorder {
 }
 
 // All mocks base method.
-func (m *MockReplicasRetriever) All(arg0 types.TopicID) map[types.LogStreamID][]varlogpb.LogStreamReplica {
+func (m *MockReplicasRetriever) All(topicID types.TopicID) map[types.LogStreamID][]varlogpb.LogStreamReplica {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "All", arg0)
+	ret := m.ctrl.Call(m, "All", topicID)
 	ret0, _ := ret[0].(map[types.LogStreamID][]varlogpb.LogStreamReplica)
 	return ret0
 }
 
 // All indicates an expected call of All.
-func (mr *MockReplicasRetrieverMockRecorder) All(arg0 any) *gomock.Call {
+func (mr *MockReplicasRetrieverMockRecorder) All(topicID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "All", reflect.TypeOf((*MockReplicasRetriever)(nil).All), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "All", reflect.TypeOf((*MockReplicasRetriever)(nil).All), topicID)
 }
 
 // Retrieve mocks base method.
-func (m *MockReplicasRetriever) Retrieve(arg0 types.TopicID, arg1 types.LogStreamID) ([]varlogpb.LogStreamReplica, bool) {
+func (m *MockReplicasRetriever) Retrieve(topicID types.TopicID, logStreamID types.LogStreamID) ([]varlogpb.LogStreamReplica, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Retrieve", arg0, arg1)
+	ret := m.ctrl.Call(m, "Retrieve", topicID, logStreamID)
 	ret0, _ := ret[0].([]varlogpb.LogStreamReplica)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
 // Retrieve indicates an expected call of Retrieve.
-func (mr *MockReplicasRetrieverMockRecorder) Retrieve(arg0, arg1 any) *gomock.Call {
+func (mr *MockReplicasRetrieverMockRecorder) Retrieve(topicID, logStreamID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retrieve", reflect.TypeOf((*MockReplicasRetriever)(nil).Retrieve), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retrieve", reflect.TypeOf((*MockReplicasRetriever)(nil).Retrieve), topicID, logStreamID)
 }
 
 // MockRenewableReplicasRetriever is a mock of RenewableReplicasRetriever interface.
 type MockRenewableReplicasRetriever struct {
 	ctrl     *gomock.Controller
 	recorder *MockRenewableReplicasRetrieverMockRecorder
+	isgomock struct{}
 }
 
 // MockRenewableReplicasRetrieverMockRecorder is the mock recorder for MockRenewableReplicasRetriever.
@@ -94,42 +96,42 @@ func (m *MockRenewableReplicasRetriever) EXPECT() *MockRenewableReplicasRetrieve
 }
 
 // All mocks base method.
-func (m *MockRenewableReplicasRetriever) All(arg0 types.TopicID) map[types.LogStreamID][]varlogpb.LogStreamReplica {
+func (m *MockRenewableReplicasRetriever) All(topicID types.TopicID) map[types.LogStreamID][]varlogpb.LogStreamReplica {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "All", arg0)
+	ret := m.ctrl.Call(m, "All", topicID)
 	ret0, _ := ret[0].(map[types.LogStreamID][]varlogpb.LogStreamReplica)
 	return ret0
 }
 
 // All indicates an expected call of All.
-func (mr *MockRenewableReplicasRetrieverMockRecorder) All(arg0 any) *gomock.Call {
+func (mr *MockRenewableReplicasRetrieverMockRecorder) All(topicID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "All", reflect.TypeOf((*MockRenewableReplicasRetriever)(nil).All), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "All", reflect.TypeOf((*MockRenewableReplicasRetriever)(nil).All), topicID)
 }
 
 // Renew mocks base method.
-func (m *MockRenewableReplicasRetriever) Renew(arg0 *varlogpb.MetadataDescriptor) {
+func (m *MockRenewableReplicasRetriever) Renew(metadata *varlogpb.MetadataDescriptor) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Renew", arg0)
+	m.ctrl.Call(m, "Renew", metadata)
 }
 
 // Renew indicates an expected call of Renew.
-func (mr *MockRenewableReplicasRetrieverMockRecorder) Renew(arg0 any) *gomock.Call {
+func (mr *MockRenewableReplicasRetrieverMockRecorder) Renew(metadata any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Renew", reflect.TypeOf((*MockRenewableReplicasRetriever)(nil).Renew), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Renew", reflect.TypeOf((*MockRenewableReplicasRetriever)(nil).Renew), metadata)
 }
 
 // Retrieve mocks base method.
-func (m *MockRenewableReplicasRetriever) Retrieve(arg0 types.TopicID, arg1 types.LogStreamID) ([]varlogpb.LogStreamReplica, bool) {
+func (m *MockRenewableReplicasRetriever) Retrieve(topicID types.TopicID, logStreamID types.LogStreamID) ([]varlogpb.LogStreamReplica, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Retrieve", arg0, arg1)
+	ret := m.ctrl.Call(m, "Retrieve", topicID, logStreamID)
 	ret0, _ := ret[0].([]varlogpb.LogStreamReplica)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
 // Retrieve indicates an expected call of Retrieve.
-func (mr *MockRenewableReplicasRetrieverMockRecorder) Retrieve(arg0, arg1 any) *gomock.Call {
+func (mr *MockRenewableReplicasRetrieverMockRecorder) Retrieve(topicID, logStreamID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retrieve", reflect.TypeOf((*MockRenewableReplicasRetriever)(nil).Retrieve), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retrieve", reflect.TypeOf((*MockRenewableReplicasRetriever)(nil).Retrieve), topicID, logStreamID)
 }

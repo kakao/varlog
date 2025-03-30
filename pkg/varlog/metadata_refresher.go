@@ -1,6 +1,6 @@
 package varlog
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/pkg/varlog -package varlog -destination metadata_refresher_mock.go . MetadataRefresher
+//go:generate go tool mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/pkg/varlog -package varlog -destination metadata_refresher_mock.go . MetadataRefresher
 
 import (
 	"context"

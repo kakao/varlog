@@ -26,6 +26,7 @@ import (
 type MockRepository struct {
 	ctrl     *gomock.Controller
 	recorder *MockRepositoryMockRecorder
+	isgomock struct{}
 }
 
 // MockRepositoryMockRecorder is the mock recorder for MockRepository.
@@ -46,32 +47,32 @@ func (m *MockRepository) EXPECT() *MockRepositoryMockRecorder {
 }
 
 // GetLogStream mocks base method.
-func (m *MockRepository) GetLogStream(arg0 types.LogStreamID) *LogStreamStat {
+func (m *MockRepository) GetLogStream(lsid types.LogStreamID) *LogStreamStat {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetLogStream", arg0)
+	ret := m.ctrl.Call(m, "GetLogStream", lsid)
 	ret0, _ := ret[0].(*LogStreamStat)
 	return ret0
 }
 
 // GetLogStream indicates an expected call of GetLogStream.
-func (mr *MockRepositoryMockRecorder) GetLogStream(arg0 any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) GetLogStream(lsid any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogStream", reflect.TypeOf((*MockRepository)(nil).GetLogStream), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogStream", reflect.TypeOf((*MockRepository)(nil).GetLogStream), lsid)
 }
 
 // GetStorageNode mocks base method.
-func (m *MockRepository) GetStorageNode(arg0 types.StorageNodeID) (*admpb.StorageNodeMetadata, bool) {
+func (m *MockRepository) GetStorageNode(snid types.StorageNodeID) (*admpb.StorageNodeMetadata, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetStorageNode", arg0)
+	ret := m.ctrl.Call(m, "GetStorageNode", snid)
 	ret0, _ := ret[0].(*admpb.StorageNodeMetadata)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
 
 // GetStorageNode indicates an expected call of GetStorageNode.
-func (mr *MockRepositoryMockRecorder) GetStorageNode(arg0 any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) GetStorageNode(snid any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorageNode", reflect.TypeOf((*MockRepository)(nil).GetStorageNode), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorageNode", reflect.TypeOf((*MockRepository)(nil).GetStorageNode), snid)
 }
 
 // ListStorageNodes mocks base method.
@@ -89,37 +90,37 @@ func (mr *MockRepositoryMockRecorder) ListStorageNodes() *gomock.Call {
 }
 
 // RemoveStorageNode mocks base method.
-func (m *MockRepository) RemoveStorageNode(arg0 types.StorageNodeID) {
+func (m *MockRepository) RemoveStorageNode(snid types.StorageNodeID) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RemoveStorageNode", arg0)
+	m.ctrl.Call(m, "RemoveStorageNode", snid)
 }
 
 // RemoveStorageNode indicates an expected call of RemoveStorageNode.
-func (mr *MockRepositoryMockRecorder) RemoveStorageNode(arg0 any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) RemoveStorageNode(snid any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveStorageNode", reflect.TypeOf((*MockRepository)(nil).RemoveStorageNode), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveStorageNode", reflect.TypeOf((*MockRepository)(nil).RemoveStorageNode), snid)
 }
 
 // Report mocks base method.
-func (m *MockRepository) Report(arg0 context.Context, arg1 *snpb.StorageNodeMetadataDescriptor, arg2 time.Time) {
+func (m *MockRepository) Report(ctx context.Context, snmd *snpb.StorageNodeMetadataDescriptor, ts time.Time) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Report", arg0, arg1, arg2)
+	m.ctrl.Call(m, "Report", ctx, snmd, ts)
 }
 
 // Report indicates an expected call of Report.
-func (mr *MockRepositoryMockRecorder) Report(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) Report(ctx, snmd, ts any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Report", reflect.TypeOf((*MockRepository)(nil).Report), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Report", reflect.TypeOf((*MockRepository)(nil).Report), ctx, snmd, ts)
 }
 
 // SetLogStreamStatus mocks base method.
-func (m *MockRepository) SetLogStreamStatus(arg0 types.LogStreamID, arg1 varlogpb.LogStreamStatus) {
+func (m *MockRepository) SetLogStreamStatus(lsid types.LogStreamID, status varlogpb.LogStreamStatus) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetLogStreamStatus", arg0, arg1)
+	m.ctrl.Call(m, "SetLogStreamStatus", lsid, status)
 }
 
 // SetLogStreamStatus indicates an expected call of SetLogStreamStatus.
-func (mr *MockRepositoryMockRecorder) SetLogStreamStatus(arg0, arg1 any) *gomock.Call {
+func (mr *MockRepositoryMockRecorder) SetLogStreamStatus(lsid, status any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLogStreamStatus", reflect.TypeOf((*MockRepository)(nil).SetLogStreamStatus), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetLogStreamStatus", reflect.TypeOf((*MockRepository)(nil).SetLogStreamStatus), lsid, status)
 }
