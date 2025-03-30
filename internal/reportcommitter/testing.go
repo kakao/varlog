@@ -18,12 +18,6 @@ func TestNewClient(t *testing.T, addr string) (Client, func()) {
 	return client, closer
 }
 
-func TestCommit(t *testing.T, addr string, cr snpb.CommitRequest) {
-	client, closer := TestNewClient(t, addr)
-	defer closer()
-	assert.NoError(t, client.Commit(cr))
-}
-
 func TestCommitBatch(t *testing.T, addr string, cb snpb.CommitBatchRequest) {
 	client, closer := TestNewClient(t, addr)
 	defer closer()

@@ -169,9 +169,9 @@ func TestStorageNode(t *testing.T) {
 		go func() {
 			defer appendWg.Done()
 			assert.Eventually(t, func() bool {
-				reportcommitter.TestCommit(t, sn1.advertise, snpb.CommitRequest{
+				reportcommitter.TestCommitBatch(t, sn1.advertise, snpb.CommitBatchRequest{
 					StorageNodeID: snid1,
-					CommitResult:  cr,
+					CommitResults: []snpb.LogStreamCommitResult{cr},
 				})
 				reports := reportcommitter.TestGetReport(t, sn1.advertise)
 				assert.Len(t, reports, 1)
@@ -182,9 +182,9 @@ func TestStorageNode(t *testing.T) {
 		go func() {
 			defer appendWg.Done()
 			assert.Eventually(t, func() bool {
-				reportcommitter.TestCommit(t, sn2.advertise, snpb.CommitRequest{
+				reportcommitter.TestCommitBatch(t, sn2.advertise, snpb.CommitBatchRequest{
 					StorageNodeID: snid2,
-					CommitResult:  cr,
+					CommitResults: []snpb.LogStreamCommitResult{cr},
 				})
 				reports := reportcommitter.TestGetReport(t, sn2.advertise)
 				assert.Len(t, reports, 1)
@@ -255,9 +255,9 @@ func TestStorageNode(t *testing.T) {
 		go func() {
 			defer appendWg.Done()
 			assert.Eventually(t, func() bool {
-				reportcommitter.TestCommit(t, sn1.advertise, snpb.CommitRequest{
+				reportcommitter.TestCommitBatch(t, sn1.advertise, snpb.CommitBatchRequest{
 					StorageNodeID: snid1,
-					CommitResult:  cr,
+					CommitResults: []snpb.LogStreamCommitResult{cr},
 				})
 				reports := reportcommitter.TestGetReport(t, sn1.advertise)
 				assert.Len(t, reports, 1)
@@ -647,9 +647,9 @@ func TestStorageNode_Append(t *testing.T) {
 				}()
 
 				require.Eventually(t, func() bool {
-					reportcommitter.TestCommit(t, addr, snpb.CommitRequest{
+					reportcommitter.TestCommitBatch(t, addr, snpb.CommitBatchRequest{
 						StorageNodeID: snid,
-						CommitResult: snpb.LogStreamCommitResult{
+						CommitResults: []snpb.LogStreamCommitResult{{
 							TopicID:             tpid,
 							LogStreamID:         lsid,
 							CommittedLLSNOffset: 1,
@@ -657,7 +657,7 @@ func TestStorageNode_Append(t *testing.T) {
 							CommittedGLSNLength: uint64(len(batch)),
 							Version:             1,
 							HighWatermark:       1,
-						},
+						}},
 					})
 					reports := reportcommitter.TestGetReport(t, addr)
 					require.Len(t, reports, 1)
@@ -961,9 +961,9 @@ func TestStorageNode_Subscribe(t *testing.T) {
 			go func() {
 				defer appendWg.Done()
 				assert.Eventually(t, func() bool {
-					reportcommitter.TestCommit(t, addr, snpb.CommitRequest{
+					reportcommitter.TestCommitBatch(t, addr, snpb.CommitBatchRequest{
 						StorageNodeID: snid,
-						CommitResult: snpb.LogStreamCommitResult{
+						CommitResults: []snpb.LogStreamCommitResult{{
 							TopicID:             tpid,
 							LogStreamID:         lsid,
 							CommittedLLSNOffset: 1,
@@ -971,7 +971,7 @@ func TestStorageNode_Subscribe(t *testing.T) {
 							CommittedGLSNLength: 2,
 							Version:             1,
 							HighWatermark:       2,
-						},
+						}},
 					})
 					reports := reportcommitter.TestGetReport(t, addr)
 					assert.Len(t, reports, 1)
@@ -1241,9 +1241,9 @@ func TestStorageNode_SubscribeTo(t *testing.T) {
 			go func() {
 				defer appendWg.Done()
 				assert.Eventually(t, func() bool {
-					reportcommitter.TestCommit(t, addr, snpb.CommitRequest{
+					reportcommitter.TestCommitBatch(t, addr, snpb.CommitBatchRequest{
 						StorageNodeID: snid,
-						CommitResult: snpb.LogStreamCommitResult{
+						CommitResults: []snpb.LogStreamCommitResult{{
 							TopicID:             tpid,
 							LogStreamID:         lsid,
 							CommittedLLSNOffset: 1,
@@ -1251,7 +1251,7 @@ func TestStorageNode_SubscribeTo(t *testing.T) {
 							CommittedGLSNLength: 2,
 							Version:             1,
 							HighWatermark:       2,
-						},
+						}},
 					})
 					reports := reportcommitter.TestGetReport(t, addr)
 					assert.Len(t, reports, 1)
@@ -1661,9 +1661,9 @@ func TestStorageNode_Sync(t *testing.T) {
 				}()
 			}
 			require.Eventually(t, func() bool {
-				reportcommitter.TestCommit(t, sn.advertise, snpb.CommitRequest{
+				reportcommitter.TestCommitBatch(t, sn.advertise, snpb.CommitBatchRequest{
 					StorageNodeID: sn.snid,
-					CommitResult: snpb.LogStreamCommitResult{
+					CommitResults: []snpb.LogStreamCommitResult{{
 						TopicID:             tpid,
 						LogStreamID:         lsid,
 						CommittedLLSNOffset: types.LLSN(2*v - 1),
@@ -1671,7 +1671,7 @@ func TestStorageNode_Sync(t *testing.T) {
 						CommittedGLSNLength: 2,
 						Version:             types.Version(v),
 						HighWatermark:       lastGLSN(types.Version(v)),
-					},
+					}},
 				})
 				reports := reportcommitter.TestGetReport(t, sn.advertise)
 				assert.Len(t, reports, 1)
@@ -2991,9 +2991,9 @@ func TestStorageNode_Trim(t *testing.T) {
 						})
 					}()
 					require.Eventually(t, func() bool {
-						reportcommitter.TestCommit(t, addr, snpb.CommitRequest{
+						reportcommitter.TestCommitBatch(t, addr, snpb.CommitBatchRequest{
 							StorageNodeID: snid,
-							CommitResult: snpb.LogStreamCommitResult{
+							CommitResults: []snpb.LogStreamCommitResult{{
 								TopicID:             tpid,
 								LogStreamID:         lsid,
 								CommittedLLSNOffset: llsn,
@@ -3001,7 +3001,7 @@ func TestStorageNode_Trim(t *testing.T) {
 								CommittedGLSNLength: 1,
 								Version:             version,
 								HighWatermark:       glsn,
-							},
+							}},
 						})
 						reports := reportcommitter.TestGetReport(t, addr)
 						require.Len(t, reports, 2)

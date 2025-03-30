@@ -642,19 +642,19 @@ func TestReportHandleInvalidReport(t *testing.T) {
 	glsn = begin + types.GLSN(r.UncommitReports[0].UncommittedLLSNLength)
 	version++
 
-	cr := snpb.CommitRequest{
+	cr := snpb.CommitBatchRequest{
 		StorageNodeID: r.StorageNodeID,
-		CommitResult: snpb.LogStreamCommitResult{
+		CommitResults: []snpb.LogStreamCommitResult{{
 			LogStreamID:         r.UncommitReports[0].LogStreamID,
 			CommittedLLSNOffset: r.UncommitReports[0].UncommittedLLSNOffset,
 			CommittedGLSNOffset: begin,
 			CommittedGLSNLength: r.UncommitReports[0].UncommittedLLSNLength,
 			HighWatermark:       glsn,
 			Version:             version,
-		},
+		}},
 	}
 
-	require.NoError(t, reporterClient.Commit(cr))
+	require.NoError(t, reporterClient.CommitBatch(cr))
 
 	r = <-mr.reportC
 	require.Equal(t, 1, r.Len())

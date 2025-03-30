@@ -47,7 +47,7 @@ func TestReportCommit(t *testing.T) {
 	knownVersions.vers[lsid1] = types.InvalidVersion
 	knownVersions.vers[lsid2] = types.InvalidVersion
 
-	var reportsCommits = map[types.LogStreamID][]struct {
+	reportsCommits := map[types.LogStreamID][]struct {
 		report         snpb.LogStreamUncommitReport
 		expectedCommit snpb.LogStreamCommitResult
 	}{
@@ -254,7 +254,7 @@ func TestReportCommit(t *testing.T) {
 	}()
 
 	sn := storagenode.TestNewRPCServer(t, ctrl, snid)
-	wg.Add(3)
+	wg.Add(2)
 	sn.MockLogStreamReporterServer.EXPECT().GetReport(gomock.Any()).DoAndReturn(
 		func(stream snpb.LogStreamReporter_GetReportServer) (err error) {
 			defer wg.Done()
@@ -286,27 +286,6 @@ func TestReportCommit(t *testing.T) {
 					logger.Error("report", zap.Error(err))
 					break
 				}
-			}
-			return err
-		},
-	).AnyTimes()
-	sn.MockLogStreamReporterServer.EXPECT().Commit(gomock.Any()).DoAndReturn(
-		func(stream snpb.LogStreamReporter_CommitServer) (err error) {
-			defer wg.Done()
-			var req *snpb.CommitRequest
-			for !snClosed.Load() {
-				req, err = stream.Recv()
-				if err != nil {
-					logger.Error("commit", zap.Error(err))
-					break
-				}
-				assert.NoError(t, err)
-
-				logger.Debug("commit", zap.String("req", req.String()))
-			}
-			err = stream.SendAndClose(&snpb.CommitResponse{})
-			if err != nil {
-				logger.Error("commit", zap.Error(err))
 			}
 			return err
 		},

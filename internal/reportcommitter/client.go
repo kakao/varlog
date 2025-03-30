@@ -18,7 +18,6 @@ import (
 // log stream and global log stream.
 type Client interface {
 	GetReport() (*snpb.GetReportResponse, error)
-	Commit(snpb.CommitRequest) error
 	CommitBatch(snpb.CommitBatchRequest) error
 	Close() error
 }
@@ -34,7 +33,6 @@ type client struct {
 	muReportStream sync.Mutex
 	getReportReq   snpb.GetReportRequest
 
-	commitStream      snpb.LogStreamReporter_CommitClient
 	commitBatchStream snpb.LogStreamReporter_CommitBatchClient
 	muCommitStream    sync.Mutex
 }
@@ -65,11 +63,6 @@ func NewClientWithConn(ctx context.Context, rpcConn *rpc.Conn) (Client, error) {
 		return nil, err
 	}
 
-	commitStream, err := rpcClient.Commit(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	commitBatchStream, err := rpcClient.CommitBatch(ctx)
 	if err != nil {
 		return nil, err
@@ -79,7 +72,6 @@ func NewClientWithConn(ctx context.Context, rpcConn *rpc.Conn) (Client, error) {
 		rpcConn:           rpcConn,
 		rpcClient:         rpcClient,
 		reportStream:      reportStream,
-		commitStream:      commitStream,
 		commitBatchStream: commitBatchStream,
 	}
 
@@ -103,18 +95,6 @@ func (c *client) GetReport() (*snpb.GetReportResponse, error) {
 		return nil, err
 	}
 	return rsp, nil
-}
-
-func (c *client) Commit(cr snpb.CommitRequest) (err error) {
-	c.muCommitStream.Lock()
-	defer c.muCommitStream.Unlock()
-
-	// Do not handle io.EOF
-	err = c.commitStream.Send(&cr)
-	if err != nil {
-		return c.commitStream.CloseSend()
-	}
-	return nil
 }
 
 func (c *client) CommitBatch(cr snpb.CommitBatchRequest) (err error) {

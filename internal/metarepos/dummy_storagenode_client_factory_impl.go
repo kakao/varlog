@@ -19,15 +19,10 @@ import (
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
-type EmptyStorageNodeClient struct {
-}
+type EmptyStorageNodeClient struct{}
 
 func (rc *EmptyStorageNodeClient) GetReport() (*snpb.GetReportResponse, error) {
 	return &snpb.GetReportResponse{}, nil
-}
-
-func (rc *EmptyStorageNodeClient) Commit(snpb.CommitRequest) error {
-	return nil
 }
 
 func (rc *EmptyStorageNodeClient) CommitBatch(snpb.CommitBatchRequest) error {
@@ -70,8 +65,7 @@ func (rc *EmptyStorageNodeClient) Trim(context.Context, types.TopicID, types.GLS
 	panic("not implemented")
 }
 
-type EmptyStorageNodeClientFactory struct {
-}
+type EmptyStorageNodeClientFactory struct{}
 
 func NewEmptyStorageNodeClientFactory() *EmptyStorageNodeClientFactory {
 	return &EmptyStorageNodeClientFactory{}
@@ -293,7 +287,7 @@ func (r *DummyStorageNodeClient) GetReport() (*snpb.GetReportResponse, error) {
 	return lls, nil
 }
 
-func (r *DummyStorageNodeClient) Commit(cr snpb.CommitRequest) error {
+func (r *DummyStorageNodeClient) commit(cr snpb.LogStreamCommitResult) error {
 	if r.disableCommit.Load() {
 		return nil
 	}
@@ -309,33 +303,33 @@ func (r *DummyStorageNodeClient) Commit(cr snpb.CommitRequest) error {
 		return errors.New("closed")
 	}
 
-	idx := int(cr.CommitResult.LogStreamID - types.LogStreamID(r.storageNodeID))
+	idx := int(cr.LogStreamID - types.LogStreamID(r.storageNodeID))
 	if idx < 0 || idx >= len(r.logStreamIDs) {
 		return errors.New("invalid log stream ID")
 	}
 
-	if r.uncommittedLLSNOffset[idx] != cr.CommitResult.CommittedLLSNOffset {
+	if r.uncommittedLLSNOffset[idx] != cr.CommittedLLSNOffset {
 		// continue
 		return nil
 	}
 
-	if r.knownVersion[idx] >= cr.CommitResult.Version {
-		//continue
+	if r.knownVersion[idx] >= cr.Version {
+		// continue
 		return nil
 	}
 
-	r.knownVersion[idx] = cr.CommitResult.Version
-	r.knownHWM[idx] = cr.CommitResult.HighWatermark
+	r.knownVersion[idx] = cr.Version
+	r.knownHWM[idx] = cr.HighWatermark
 
-	r.uncommittedLLSNOffset[idx] += types.LLSN(cr.CommitResult.CommittedGLSNLength)
-	r.uncommittedLLSNLength[idx] -= cr.CommitResult.CommittedGLSNLength
+	r.uncommittedLLSNOffset[idx] += types.LLSN(cr.CommittedGLSNLength)
+	r.uncommittedLLSNLength[idx] -= cr.CommittedGLSNLength
 
 	return nil
 }
 
 func (r *DummyStorageNodeClient) CommitBatch(cbr snpb.CommitBatchRequest) error {
 	for _, cr := range cbr.CommitResults {
-		if err := r.Commit(snpb.CommitRequest{StorageNodeID: cbr.StorageNodeID, CommitResult: cr}); err != nil {
+		if err := r.commit(cr); err != nil {
 			return err
 		}
 	}
