@@ -45,36 +45,6 @@ message AppendResponse {
   repeated AppendResult results = 1 [(gogoproto.nullable) = false];
 }
 
-// ReadRequest asks a storage node to retrieve log entry at the GLSN.
-message ReadRequest {
-  uint64 glsn = 1 [
-    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
-    (gogoproto.customname) = "GLSN"
-  ];
-  int32 topic_id = 2 [
-    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.TopicID",
-    (gogoproto.customname) = "TopicID"
-  ];
-  int32 log_stream_id = 3 [
-    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LogStreamID",
-    (gogoproto.customname) = "LogStreamID"
-  ];
-}
-
-// ReadResponse contains the contents of the log entry which is retrieved by
-// the ReadRequest.
-message ReadResponse {
-  uint64 glsn = 1 [
-    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.GLSN",
-    (gogoproto.customname) = "GLSN"
-  ];
-  uint64 llsn = 2 [
-    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.LLSN",
-    (gogoproto.customname) = "LLSN"
-  ];
-  bytes payload = 3;
-}
-
 // SubscribeRequest has GLSN which indicates an inclusive starting position
 // from which a client wants to receive.
 message SubscribeRequest {
@@ -200,9 +170,6 @@ service LogIO {
   // FIXME: Partial failures are not specified by the gRPC error codes.
   rpc Append(stream AppendRequest) returns (stream AppendResponse) {}
 
-  // Read reads a log entry from the log stream specified by ReadRequest.
-  // Deprecated: Use Subscribe or SubscribeTo.
-  rpc Read(ReadRequest) returns (ReadResponse) {}
   // Subscribe reads a range of log entries specified by SubscribeRequest.
   //
   // It returns the following gRPC errors:

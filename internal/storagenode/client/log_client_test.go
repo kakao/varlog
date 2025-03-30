@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"sort"
 	"sync"
@@ -21,8 +20,10 @@ import (
 
 type byGLSN []types.GLSN
 
-func (x byGLSN) Len() int           { return len(x) }
-func (x byGLSN) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
+func (x byGLSN) Len() int { return len(x) }
+
+func (x byGLSN) Swap(i, j int) { x[i], x[j] = x[j], x[i] }
+
 func (x byGLSN) Less(i, j int) bool { return x[i] < x[j] }
 
 type storageNode struct {
@@ -77,24 +78,6 @@ func newMockStorageNodeServiceClient(ctrl *gomock.Controller, sn *storageNode, t
 	}).AnyTimes()
 	mockAppendClient.EXPECT().CloseSend().Return(nil).AnyTimes()
 	mockClient.EXPECT().Append(gomock.Any(), gomock.Any()).Return(mockAppendClient, nil).AnyTimes()
-
-	// Read
-	mockClient.EXPECT().Read(
-		gomock.Any(),
-		gomock.Any(),
-		gomock.Any(),
-	).DoAndReturn(func(_ context.Context, req *snpb.ReadRequest, opts ...grpc.CallOption) (*snpb.ReadResponse, error) {
-		sn.mu.Lock()
-		defer sn.mu.Unlock()
-		data, ok := sn.logEntries[req.GetGLSN()]
-		if !ok {
-			return nil, fmt.Errorf("no entry")
-		}
-		return &snpb.ReadResponse{
-			Payload: data,
-			GLSN:    req.GetGLSN(),
-		}, nil
-	}).AnyTimes()
 
 	// Subscribe
 	mockClient.EXPECT().Subscribe(
