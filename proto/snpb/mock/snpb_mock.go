@@ -405,26 +405,6 @@ func (mr *MockLogIOClientMockRecorder) LogStreamReplicaMetadata(arg0, arg1 any, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogStreamReplicaMetadata", reflect.TypeOf((*MockLogIOClient)(nil).LogStreamReplicaMetadata), varargs...)
 }
 
-// Read mocks base method.
-func (m *MockLogIOClient) Read(arg0 context.Context, arg1 *snpb.ReadRequest, arg2 ...grpc.CallOption) (*snpb.ReadResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "Read", varargs...)
-	ret0, _ := ret[0].(*snpb.ReadResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Read indicates an expected call of Read.
-func (mr *MockLogIOClientMockRecorder) Read(arg0, arg1 any, arg2 ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockLogIOClient)(nil).Read), varargs...)
-}
-
 // Subscribe mocks base method.
 func (m *MockLogIOClient) Subscribe(arg0 context.Context, arg1 *snpb.SubscribeRequest, arg2 ...grpc.CallOption) (snpb.LogIO_SubscribeClient, error) {
 	m.ctrl.T.Helper()
@@ -535,21 +515,6 @@ func (m *MockLogIOServer) LogStreamReplicaMetadata(arg0 context.Context, arg1 *s
 func (mr *MockLogIOServerMockRecorder) LogStreamReplicaMetadata(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogStreamReplicaMetadata", reflect.TypeOf((*MockLogIOServer)(nil).LogStreamReplicaMetadata), arg0, arg1)
-}
-
-// Read mocks base method.
-func (m *MockLogIOServer) Read(arg0 context.Context, arg1 *snpb.ReadRequest) (*snpb.ReadResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Read", arg0, arg1)
-	ret0, _ := ret[0].(*snpb.ReadResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Read indicates an expected call of Read.
-func (mr *MockLogIOServerMockRecorder) Read(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Read", reflect.TypeOf((*MockLogIOServer)(nil).Read), arg0, arg1)
 }
 
 // Subscribe mocks base method.

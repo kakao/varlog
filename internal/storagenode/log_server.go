@@ -207,10 +207,6 @@ func (ls *logServer) appendStreamDrainCQLoop(cq <-chan *logstream.AppendTask) {
 	}
 }
 
-func (ls *logServer) Read(context.Context, *snpb.ReadRequest) (*snpb.ReadResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "deprecated")
-}
-
 func (ls *logServer) Subscribe(req *snpb.SubscribeRequest, stream snpb.LogIO_SubscribeServer) error {
 	if err := snpb.ValidateTopicLogStream(req); err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
