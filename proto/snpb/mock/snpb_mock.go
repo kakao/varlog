@@ -84,26 +84,6 @@ func (mr *MockReplicatorClientMockRecorder) SyncInit(arg0, arg1 any, arg2 ...any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncInit", reflect.TypeOf((*MockReplicatorClient)(nil).SyncInit), varargs...)
 }
 
-// SyncReplicate mocks base method.
-func (m *MockReplicatorClient) SyncReplicate(arg0 context.Context, arg1 *snpb.SyncReplicateRequest, arg2 ...grpc.CallOption) (*snpb.SyncReplicateResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "SyncReplicate", varargs...)
-	ret0, _ := ret[0].(*snpb.SyncReplicateResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SyncReplicate indicates an expected call of SyncReplicate.
-func (mr *MockReplicatorClientMockRecorder) SyncReplicate(arg0, arg1 any, arg2 ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicate", reflect.TypeOf((*MockReplicatorClient)(nil).SyncReplicate), varargs...)
-}
-
 // SyncReplicateStream mocks base method.
 func (m *MockReplicatorClient) SyncReplicateStream(arg0 context.Context, arg1 ...grpc.CallOption) (snpb.Replicator_SyncReplicateStreamClient, error) {
 	m.ctrl.T.Helper()
@@ -174,21 +154,6 @@ func (m *MockReplicatorServer) SyncInit(arg0 context.Context, arg1 *snpb.SyncIni
 func (mr *MockReplicatorServerMockRecorder) SyncInit(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncInit", reflect.TypeOf((*MockReplicatorServer)(nil).SyncInit), arg0, arg1)
-}
-
-// SyncReplicate mocks base method.
-func (m *MockReplicatorServer) SyncReplicate(arg0 context.Context, arg1 *snpb.SyncReplicateRequest) (*snpb.SyncReplicateResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SyncReplicate", arg0, arg1)
-	ret0, _ := ret[0].(*snpb.SyncReplicateResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SyncReplicate indicates an expected call of SyncReplicate.
-func (mr *MockReplicatorServerMockRecorder) SyncReplicate(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReplicate", reflect.TypeOf((*MockReplicatorServer)(nil).SyncReplicate), arg0, arg1)
 }
 
 // SyncReplicateStream mocks base method.
