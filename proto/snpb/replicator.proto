@@ -190,10 +190,6 @@ service Replicator {
   // TODO: Use the gRPC error code instead of setting particular values for the
   // SyncRange to avoid ambiguity.
   rpc SyncInit(SyncInitRequest) returns (SyncInitResponse) {}
-  // SyncReplicate
-  //
-  // Deprecated: Use SyncReplicateStream
-  rpc SyncReplicate(SyncReplicateRequest) returns (SyncReplicateResponse) {}
   // SyncReplicateStream copies log entries between replicas in a log stream.
   rpc SyncReplicateStream(stream SyncReplicateRequest)
     returns (SyncReplicateResponse) {}
