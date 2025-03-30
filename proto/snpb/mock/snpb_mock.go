@@ -927,26 +927,6 @@ func (m *MockLogStreamReporterClient) EXPECT() *MockLogStreamReporterClientMockR
 	return m.recorder
 }
 
-// Commit mocks base method.
-func (m *MockLogStreamReporterClient) Commit(arg0 context.Context, arg1 ...grpc.CallOption) (snpb.LogStreamReporter_CommitClient, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{arg0}
-	for _, a := range arg1 {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "Commit", varargs...)
-	ret0, _ := ret[0].(snpb.LogStreamReporter_CommitClient)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Commit indicates an expected call of Commit.
-func (mr *MockLogStreamReporterClientMockRecorder) Commit(arg0 any, arg1 ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0}, arg1...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamReporterClient)(nil).Commit), varargs...)
-}
-
 // CommitBatch mocks base method.
 func (m *MockLogStreamReporterClient) CommitBatch(arg0 context.Context, arg1 ...grpc.CallOption) (snpb.LogStreamReporter_CommitBatchClient, error) {
 	m.ctrl.T.Helper()
@@ -1008,20 +988,6 @@ func NewMockLogStreamReporterServer(ctrl *gomock.Controller) *MockLogStreamRepor
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockLogStreamReporterServer) EXPECT() *MockLogStreamReporterServerMockRecorder {
 	return m.recorder
-}
-
-// Commit mocks base method.
-func (m *MockLogStreamReporterServer) Commit(arg0 snpb.LogStreamReporter_CommitServer) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Commit", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Commit indicates an expected call of Commit.
-func (mr *MockLogStreamReporterServerMockRecorder) Commit(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Commit", reflect.TypeOf((*MockLogStreamReporterServer)(nil).Commit), arg0)
 }
 
 // CommitBatch mocks base method.

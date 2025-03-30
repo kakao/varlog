@@ -1578,20 +1578,20 @@ func (clus *VarlogCluster) CommitWithoutMR(t *testing.T, lsID types.LogStreamID,
 
 	rds := clus.replicasOf(t, lsID)
 	for _, r := range rds {
-		req := snpb.CommitRequest{
+		req := snpb.CommitBatchRequest{
 			StorageNodeID: r.StorageNodeID,
-			CommitResult: snpb.LogStreamCommitResult{
+			CommitResults: []snpb.LogStreamCommitResult{{
 				LogStreamID:         lsID,
 				Version:             version,
 				CommittedLLSNOffset: committedLLSNOffset,
 				CommittedGLSNOffset: committedGLSNOffset,
 				CommittedGLSNLength: committedGLSNLen,
 				HighWatermark:       highWatermark,
-			},
+			}},
 		}
 
 		reportCommitter := clus.reportCommitters[r.StorageNodeID]
-		err := reportCommitter.Commit(req)
+		err := reportCommitter.CommitBatch(req)
 		require.NoError(t, err)
 	}
 }
