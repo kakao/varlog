@@ -1,6 +1,6 @@
 package stats
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/admin/stats -package stats -destination repository_mock.go . Repository
+//go:generate go tool mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/admin/stats -package stats -destination repository_mock.go . Repository
 
 import (
 	"context"

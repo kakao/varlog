@@ -133,15 +133,11 @@ generate-check:
 
 
 # tools: lint, fmt, vet
-.PHONY: tools fmt lint vet mod-tidy mod-tidy-check mod-vendor mod-vendor-check
-tools:
-	$(GO) install golang.org/x/tools/cmd/goimports@latest
-	$(GO) install golang.org/x/lint/golint@latest
-	$(GO) install go.uber.org/mock/mockgen@v0.4.0
+.PHONY: fmt lint vet mod-tidy mod-tidy-check mod-vendor mod-vendor-check
 
 fmt:
 	@echo goimports
-	@$(foreach path,$(PKGS),goimports -w -local $(shell $(GO) list -m) ./$(path);)
+	@$(foreach path,$(PKGS),go tool goimports -w -local $(shell $(GO) list -m) ./$(path);)
 	@echo gofmt
 	@$(foreach path,$(PKGS),gofmt -w -s ./$(path);)
 

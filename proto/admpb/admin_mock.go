@@ -22,6 +22,7 @@ import (
 type MockClusterManagerClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClusterManagerClientMockRecorder
+	isgomock struct{}
 }
 
 // MockClusterManagerClientMockRecorder is the mock recorder for MockClusterManagerClient.
@@ -42,10 +43,10 @@ func (m *MockClusterManagerClient) EXPECT() *MockClusterManagerClientMockRecorde
 }
 
 // AddLogStream mocks base method.
-func (m *MockClusterManagerClient) AddLogStream(arg0 context.Context, arg1 *AddLogStreamRequest, arg2 ...grpc.CallOption) (*AddLogStreamResponse, error) {
+func (m *MockClusterManagerClient) AddLogStream(ctx context.Context, in *AddLogStreamRequest, opts ...grpc.CallOption) (*AddLogStreamResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AddLogStream", varargs...)
@@ -55,17 +56,17 @@ func (m *MockClusterManagerClient) AddLogStream(arg0 context.Context, arg1 *AddL
 }
 
 // AddLogStream indicates an expected call of AddLogStream.
-func (mr *MockClusterManagerClientMockRecorder) AddLogStream(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) AddLogStream(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddLogStream", reflect.TypeOf((*MockClusterManagerClient)(nil).AddLogStream), varargs...)
 }
 
 // AddMRPeer mocks base method.
-func (m *MockClusterManagerClient) AddMRPeer(arg0 context.Context, arg1 *AddMRPeerRequest, arg2 ...grpc.CallOption) (*AddMRPeerResponse, error) {
+func (m *MockClusterManagerClient) AddMRPeer(ctx context.Context, in *AddMRPeerRequest, opts ...grpc.CallOption) (*AddMRPeerResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AddMRPeer", varargs...)
@@ -75,17 +76,17 @@ func (m *MockClusterManagerClient) AddMRPeer(arg0 context.Context, arg1 *AddMRPe
 }
 
 // AddMRPeer indicates an expected call of AddMRPeer.
-func (mr *MockClusterManagerClientMockRecorder) AddMRPeer(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) AddMRPeer(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddMRPeer", reflect.TypeOf((*MockClusterManagerClient)(nil).AddMRPeer), varargs...)
 }
 
 // AddMetadataRepositoryNode mocks base method.
-func (m *MockClusterManagerClient) AddMetadataRepositoryNode(arg0 context.Context, arg1 *AddMetadataRepositoryNodeRequest, arg2 ...grpc.CallOption) (*AddMetadataRepositoryNodeResponse, error) {
+func (m *MockClusterManagerClient) AddMetadataRepositoryNode(ctx context.Context, in *AddMetadataRepositoryNodeRequest, opts ...grpc.CallOption) (*AddMetadataRepositoryNodeResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AddMetadataRepositoryNode", varargs...)
@@ -95,17 +96,17 @@ func (m *MockClusterManagerClient) AddMetadataRepositoryNode(arg0 context.Contex
 }
 
 // AddMetadataRepositoryNode indicates an expected call of AddMetadataRepositoryNode.
-func (mr *MockClusterManagerClientMockRecorder) AddMetadataRepositoryNode(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) AddMetadataRepositoryNode(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddMetadataRepositoryNode", reflect.TypeOf((*MockClusterManagerClient)(nil).AddMetadataRepositoryNode), varargs...)
 }
 
 // AddStorageNode mocks base method.
-func (m *MockClusterManagerClient) AddStorageNode(arg0 context.Context, arg1 *AddStorageNodeRequest, arg2 ...grpc.CallOption) (*AddStorageNodeResponse, error) {
+func (m *MockClusterManagerClient) AddStorageNode(ctx context.Context, in *AddStorageNodeRequest, opts ...grpc.CallOption) (*AddStorageNodeResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AddStorageNode", varargs...)
@@ -115,17 +116,17 @@ func (m *MockClusterManagerClient) AddStorageNode(arg0 context.Context, arg1 *Ad
 }
 
 // AddStorageNode indicates an expected call of AddStorageNode.
-func (mr *MockClusterManagerClientMockRecorder) AddStorageNode(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) AddStorageNode(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddStorageNode", reflect.TypeOf((*MockClusterManagerClient)(nil).AddStorageNode), varargs...)
 }
 
 // AddTopic mocks base method.
-func (m *MockClusterManagerClient) AddTopic(arg0 context.Context, arg1 *AddTopicRequest, arg2 ...grpc.CallOption) (*AddTopicResponse, error) {
+func (m *MockClusterManagerClient) AddTopic(ctx context.Context, in *AddTopicRequest, opts ...grpc.CallOption) (*AddTopicResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AddTopic", varargs...)
@@ -135,17 +136,17 @@ func (m *MockClusterManagerClient) AddTopic(arg0 context.Context, arg1 *AddTopic
 }
 
 // AddTopic indicates an expected call of AddTopic.
-func (mr *MockClusterManagerClientMockRecorder) AddTopic(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) AddTopic(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTopic", reflect.TypeOf((*MockClusterManagerClient)(nil).AddTopic), varargs...)
 }
 
 // DeleteMetadataRepositoryNode mocks base method.
-func (m *MockClusterManagerClient) DeleteMetadataRepositoryNode(arg0 context.Context, arg1 *DeleteMetadataRepositoryNodeRequest, arg2 ...grpc.CallOption) (*DeleteMetadataRepositoryNodeResponse, error) {
+func (m *MockClusterManagerClient) DeleteMetadataRepositoryNode(ctx context.Context, in *DeleteMetadataRepositoryNodeRequest, opts ...grpc.CallOption) (*DeleteMetadataRepositoryNodeResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "DeleteMetadataRepositoryNode", varargs...)
@@ -155,17 +156,17 @@ func (m *MockClusterManagerClient) DeleteMetadataRepositoryNode(arg0 context.Con
 }
 
 // DeleteMetadataRepositoryNode indicates an expected call of DeleteMetadataRepositoryNode.
-func (mr *MockClusterManagerClientMockRecorder) DeleteMetadataRepositoryNode(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) DeleteMetadataRepositoryNode(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteMetadataRepositoryNode", reflect.TypeOf((*MockClusterManagerClient)(nil).DeleteMetadataRepositoryNode), varargs...)
 }
 
 // DescribeTopic mocks base method.
-func (m *MockClusterManagerClient) DescribeTopic(arg0 context.Context, arg1 *DescribeTopicRequest, arg2 ...grpc.CallOption) (*DescribeTopicResponse, error) {
+func (m *MockClusterManagerClient) DescribeTopic(ctx context.Context, in *DescribeTopicRequest, opts ...grpc.CallOption) (*DescribeTopicResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "DescribeTopic", varargs...)
@@ -175,17 +176,17 @@ func (m *MockClusterManagerClient) DescribeTopic(arg0 context.Context, arg1 *Des
 }
 
 // DescribeTopic indicates an expected call of DescribeTopic.
-func (mr *MockClusterManagerClientMockRecorder) DescribeTopic(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) DescribeTopic(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTopic", reflect.TypeOf((*MockClusterManagerClient)(nil).DescribeTopic), varargs...)
 }
 
 // GetLogStream mocks base method.
-func (m *MockClusterManagerClient) GetLogStream(arg0 context.Context, arg1 *GetLogStreamRequest, arg2 ...grpc.CallOption) (*GetLogStreamResponse, error) {
+func (m *MockClusterManagerClient) GetLogStream(ctx context.Context, in *GetLogStreamRequest, opts ...grpc.CallOption) (*GetLogStreamResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetLogStream", varargs...)
@@ -195,17 +196,17 @@ func (m *MockClusterManagerClient) GetLogStream(arg0 context.Context, arg1 *GetL
 }
 
 // GetLogStream indicates an expected call of GetLogStream.
-func (mr *MockClusterManagerClientMockRecorder) GetLogStream(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) GetLogStream(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogStream", reflect.TypeOf((*MockClusterManagerClient)(nil).GetLogStream), varargs...)
 }
 
 // GetMRMembers mocks base method.
-func (m *MockClusterManagerClient) GetMRMembers(arg0 context.Context, arg1 *types.Empty, arg2 ...grpc.CallOption) (*GetMRMembersResponse, error) {
+func (m *MockClusterManagerClient) GetMRMembers(ctx context.Context, in *types.Empty, opts ...grpc.CallOption) (*GetMRMembersResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetMRMembers", varargs...)
@@ -215,17 +216,17 @@ func (m *MockClusterManagerClient) GetMRMembers(arg0 context.Context, arg1 *type
 }
 
 // GetMRMembers indicates an expected call of GetMRMembers.
-func (mr *MockClusterManagerClientMockRecorder) GetMRMembers(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) GetMRMembers(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMRMembers", reflect.TypeOf((*MockClusterManagerClient)(nil).GetMRMembers), varargs...)
 }
 
 // GetMetadataRepositoryNode mocks base method.
-func (m *MockClusterManagerClient) GetMetadataRepositoryNode(arg0 context.Context, arg1 *GetMetadataRepositoryNodeRequest, arg2 ...grpc.CallOption) (*GetMetadataRepositoryNodeResponse, error) {
+func (m *MockClusterManagerClient) GetMetadataRepositoryNode(ctx context.Context, in *GetMetadataRepositoryNodeRequest, opts ...grpc.CallOption) (*GetMetadataRepositoryNodeResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetMetadataRepositoryNode", varargs...)
@@ -235,17 +236,17 @@ func (m *MockClusterManagerClient) GetMetadataRepositoryNode(arg0 context.Contex
 }
 
 // GetMetadataRepositoryNode indicates an expected call of GetMetadataRepositoryNode.
-func (mr *MockClusterManagerClientMockRecorder) GetMetadataRepositoryNode(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) GetMetadataRepositoryNode(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadataRepositoryNode", reflect.TypeOf((*MockClusterManagerClient)(nil).GetMetadataRepositoryNode), varargs...)
 }
 
 // GetStorageNode mocks base method.
-func (m *MockClusterManagerClient) GetStorageNode(arg0 context.Context, arg1 *GetStorageNodeRequest, arg2 ...grpc.CallOption) (*GetStorageNodeResponse, error) {
+func (m *MockClusterManagerClient) GetStorageNode(ctx context.Context, in *GetStorageNodeRequest, opts ...grpc.CallOption) (*GetStorageNodeResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetStorageNode", varargs...)
@@ -255,17 +256,17 @@ func (m *MockClusterManagerClient) GetStorageNode(arg0 context.Context, arg1 *Ge
 }
 
 // GetStorageNode indicates an expected call of GetStorageNode.
-func (mr *MockClusterManagerClientMockRecorder) GetStorageNode(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) GetStorageNode(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorageNode", reflect.TypeOf((*MockClusterManagerClient)(nil).GetStorageNode), varargs...)
 }
 
 // GetTopic mocks base method.
-func (m *MockClusterManagerClient) GetTopic(arg0 context.Context, arg1 *GetTopicRequest, arg2 ...grpc.CallOption) (*GetTopicResponse, error) {
+func (m *MockClusterManagerClient) GetTopic(ctx context.Context, in *GetTopicRequest, opts ...grpc.CallOption) (*GetTopicResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetTopic", varargs...)
@@ -275,17 +276,17 @@ func (m *MockClusterManagerClient) GetTopic(arg0 context.Context, arg1 *GetTopic
 }
 
 // GetTopic indicates an expected call of GetTopic.
-func (mr *MockClusterManagerClientMockRecorder) GetTopic(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) GetTopic(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTopic", reflect.TypeOf((*MockClusterManagerClient)(nil).GetTopic), varargs...)
 }
 
 // ListLogStreams mocks base method.
-func (m *MockClusterManagerClient) ListLogStreams(arg0 context.Context, arg1 *ListLogStreamsRequest, arg2 ...grpc.CallOption) (*ListLogStreamsResponse, error) {
+func (m *MockClusterManagerClient) ListLogStreams(ctx context.Context, in *ListLogStreamsRequest, opts ...grpc.CallOption) (*ListLogStreamsResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "ListLogStreams", varargs...)
@@ -295,17 +296,17 @@ func (m *MockClusterManagerClient) ListLogStreams(arg0 context.Context, arg1 *Li
 }
 
 // ListLogStreams indicates an expected call of ListLogStreams.
-func (mr *MockClusterManagerClientMockRecorder) ListLogStreams(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) ListLogStreams(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListLogStreams", reflect.TypeOf((*MockClusterManagerClient)(nil).ListLogStreams), varargs...)
 }
 
 // ListMetadataRepositoryNodes mocks base method.
-func (m *MockClusterManagerClient) ListMetadataRepositoryNodes(arg0 context.Context, arg1 *ListMetadataRepositoryNodesRequest, arg2 ...grpc.CallOption) (*ListMetadataRepositoryNodesResponse, error) {
+func (m *MockClusterManagerClient) ListMetadataRepositoryNodes(ctx context.Context, in *ListMetadataRepositoryNodesRequest, opts ...grpc.CallOption) (*ListMetadataRepositoryNodesResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "ListMetadataRepositoryNodes", varargs...)
@@ -315,17 +316,17 @@ func (m *MockClusterManagerClient) ListMetadataRepositoryNodes(arg0 context.Cont
 }
 
 // ListMetadataRepositoryNodes indicates an expected call of ListMetadataRepositoryNodes.
-func (mr *MockClusterManagerClientMockRecorder) ListMetadataRepositoryNodes(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) ListMetadataRepositoryNodes(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMetadataRepositoryNodes", reflect.TypeOf((*MockClusterManagerClient)(nil).ListMetadataRepositoryNodes), varargs...)
 }
 
 // ListStorageNodes mocks base method.
-func (m *MockClusterManagerClient) ListStorageNodes(arg0 context.Context, arg1 *ListStorageNodesRequest, arg2 ...grpc.CallOption) (*ListStorageNodesResponse, error) {
+func (m *MockClusterManagerClient) ListStorageNodes(ctx context.Context, in *ListStorageNodesRequest, opts ...grpc.CallOption) (*ListStorageNodesResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "ListStorageNodes", varargs...)
@@ -335,17 +336,17 @@ func (m *MockClusterManagerClient) ListStorageNodes(arg0 context.Context, arg1 *
 }
 
 // ListStorageNodes indicates an expected call of ListStorageNodes.
-func (mr *MockClusterManagerClientMockRecorder) ListStorageNodes(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) ListStorageNodes(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListStorageNodes", reflect.TypeOf((*MockClusterManagerClient)(nil).ListStorageNodes), varargs...)
 }
 
 // ListTopics mocks base method.
-func (m *MockClusterManagerClient) ListTopics(arg0 context.Context, arg1 *ListTopicsRequest, arg2 ...grpc.CallOption) (*ListTopicsResponse, error) {
+func (m *MockClusterManagerClient) ListTopics(ctx context.Context, in *ListTopicsRequest, opts ...grpc.CallOption) (*ListTopicsResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "ListTopics", varargs...)
@@ -355,17 +356,17 @@ func (m *MockClusterManagerClient) ListTopics(arg0 context.Context, arg1 *ListTo
 }
 
 // ListTopics indicates an expected call of ListTopics.
-func (mr *MockClusterManagerClientMockRecorder) ListTopics(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) ListTopics(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTopics", reflect.TypeOf((*MockClusterManagerClient)(nil).ListTopics), varargs...)
 }
 
 // RemoveLogStreamReplica mocks base method.
-func (m *MockClusterManagerClient) RemoveLogStreamReplica(arg0 context.Context, arg1 *RemoveLogStreamReplicaRequest, arg2 ...grpc.CallOption) (*RemoveLogStreamReplicaResponse, error) {
+func (m *MockClusterManagerClient) RemoveLogStreamReplica(ctx context.Context, in *RemoveLogStreamReplicaRequest, opts ...grpc.CallOption) (*RemoveLogStreamReplicaResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "RemoveLogStreamReplica", varargs...)
@@ -375,17 +376,17 @@ func (m *MockClusterManagerClient) RemoveLogStreamReplica(arg0 context.Context, 
 }
 
 // RemoveLogStreamReplica indicates an expected call of RemoveLogStreamReplica.
-func (mr *MockClusterManagerClientMockRecorder) RemoveLogStreamReplica(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) RemoveLogStreamReplica(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveLogStreamReplica", reflect.TypeOf((*MockClusterManagerClient)(nil).RemoveLogStreamReplica), varargs...)
 }
 
 // RemoveMRPeer mocks base method.
-func (m *MockClusterManagerClient) RemoveMRPeer(arg0 context.Context, arg1 *RemoveMRPeerRequest, arg2 ...grpc.CallOption) (*RemoveMRPeerResponse, error) {
+func (m *MockClusterManagerClient) RemoveMRPeer(ctx context.Context, in *RemoveMRPeerRequest, opts ...grpc.CallOption) (*RemoveMRPeerResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "RemoveMRPeer", varargs...)
@@ -395,17 +396,17 @@ func (m *MockClusterManagerClient) RemoveMRPeer(arg0 context.Context, arg1 *Remo
 }
 
 // RemoveMRPeer indicates an expected call of RemoveMRPeer.
-func (mr *MockClusterManagerClientMockRecorder) RemoveMRPeer(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) RemoveMRPeer(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveMRPeer", reflect.TypeOf((*MockClusterManagerClient)(nil).RemoveMRPeer), varargs...)
 }
 
 // Seal mocks base method.
-func (m *MockClusterManagerClient) Seal(arg0 context.Context, arg1 *SealRequest, arg2 ...grpc.CallOption) (*SealResponse, error) {
+func (m *MockClusterManagerClient) Seal(ctx context.Context, in *SealRequest, opts ...grpc.CallOption) (*SealResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Seal", varargs...)
@@ -415,17 +416,17 @@ func (m *MockClusterManagerClient) Seal(arg0 context.Context, arg1 *SealRequest,
 }
 
 // Seal indicates an expected call of Seal.
-func (mr *MockClusterManagerClientMockRecorder) Seal(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) Seal(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Seal", reflect.TypeOf((*MockClusterManagerClient)(nil).Seal), varargs...)
 }
 
 // Sync mocks base method.
-func (m *MockClusterManagerClient) Sync(arg0 context.Context, arg1 *SyncRequest, arg2 ...grpc.CallOption) (*SyncResponse, error) {
+func (m *MockClusterManagerClient) Sync(ctx context.Context, in *SyncRequest, opts ...grpc.CallOption) (*SyncResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Sync", varargs...)
@@ -435,17 +436,17 @@ func (m *MockClusterManagerClient) Sync(arg0 context.Context, arg1 *SyncRequest,
 }
 
 // Sync indicates an expected call of Sync.
-func (mr *MockClusterManagerClientMockRecorder) Sync(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) Sync(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockClusterManagerClient)(nil).Sync), varargs...)
 }
 
 // Trim mocks base method.
-func (m *MockClusterManagerClient) Trim(arg0 context.Context, arg1 *TrimRequest, arg2 ...grpc.CallOption) (*TrimResponse, error) {
+func (m *MockClusterManagerClient) Trim(ctx context.Context, in *TrimRequest, opts ...grpc.CallOption) (*TrimResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Trim", varargs...)
@@ -455,17 +456,17 @@ func (m *MockClusterManagerClient) Trim(arg0 context.Context, arg1 *TrimRequest,
 }
 
 // Trim indicates an expected call of Trim.
-func (mr *MockClusterManagerClientMockRecorder) Trim(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) Trim(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Trim", reflect.TypeOf((*MockClusterManagerClient)(nil).Trim), varargs...)
 }
 
 // UnregisterLogStream mocks base method.
-func (m *MockClusterManagerClient) UnregisterLogStream(arg0 context.Context, arg1 *UnregisterLogStreamRequest, arg2 ...grpc.CallOption) (*UnregisterLogStreamResponse, error) {
+func (m *MockClusterManagerClient) UnregisterLogStream(ctx context.Context, in *UnregisterLogStreamRequest, opts ...grpc.CallOption) (*UnregisterLogStreamResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "UnregisterLogStream", varargs...)
@@ -475,17 +476,17 @@ func (m *MockClusterManagerClient) UnregisterLogStream(arg0 context.Context, arg
 }
 
 // UnregisterLogStream indicates an expected call of UnregisterLogStream.
-func (mr *MockClusterManagerClientMockRecorder) UnregisterLogStream(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) UnregisterLogStream(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterLogStream", reflect.TypeOf((*MockClusterManagerClient)(nil).UnregisterLogStream), varargs...)
 }
 
 // UnregisterStorageNode mocks base method.
-func (m *MockClusterManagerClient) UnregisterStorageNode(arg0 context.Context, arg1 *UnregisterStorageNodeRequest, arg2 ...grpc.CallOption) (*UnregisterStorageNodeResponse, error) {
+func (m *MockClusterManagerClient) UnregisterStorageNode(ctx context.Context, in *UnregisterStorageNodeRequest, opts ...grpc.CallOption) (*UnregisterStorageNodeResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "UnregisterStorageNode", varargs...)
@@ -495,17 +496,17 @@ func (m *MockClusterManagerClient) UnregisterStorageNode(arg0 context.Context, a
 }
 
 // UnregisterStorageNode indicates an expected call of UnregisterStorageNode.
-func (mr *MockClusterManagerClientMockRecorder) UnregisterStorageNode(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) UnregisterStorageNode(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterStorageNode", reflect.TypeOf((*MockClusterManagerClient)(nil).UnregisterStorageNode), varargs...)
 }
 
 // UnregisterTopic mocks base method.
-func (m *MockClusterManagerClient) UnregisterTopic(arg0 context.Context, arg1 *UnregisterTopicRequest, arg2 ...grpc.CallOption) (*UnregisterTopicResponse, error) {
+func (m *MockClusterManagerClient) UnregisterTopic(ctx context.Context, in *UnregisterTopicRequest, opts ...grpc.CallOption) (*UnregisterTopicResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "UnregisterTopic", varargs...)
@@ -515,17 +516,17 @@ func (m *MockClusterManagerClient) UnregisterTopic(arg0 context.Context, arg1 *U
 }
 
 // UnregisterTopic indicates an expected call of UnregisterTopic.
-func (mr *MockClusterManagerClientMockRecorder) UnregisterTopic(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) UnregisterTopic(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnregisterTopic", reflect.TypeOf((*MockClusterManagerClient)(nil).UnregisterTopic), varargs...)
 }
 
 // Unseal mocks base method.
-func (m *MockClusterManagerClient) Unseal(arg0 context.Context, arg1 *UnsealRequest, arg2 ...grpc.CallOption) (*UnsealResponse, error) {
+func (m *MockClusterManagerClient) Unseal(ctx context.Context, in *UnsealRequest, opts ...grpc.CallOption) (*UnsealResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "Unseal", varargs...)
@@ -535,17 +536,17 @@ func (m *MockClusterManagerClient) Unseal(arg0 context.Context, arg1 *UnsealRequ
 }
 
 // Unseal indicates an expected call of Unseal.
-func (mr *MockClusterManagerClientMockRecorder) Unseal(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) Unseal(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unseal", reflect.TypeOf((*MockClusterManagerClient)(nil).Unseal), varargs...)
 }
 
 // UpdateLogStream mocks base method.
-func (m *MockClusterManagerClient) UpdateLogStream(arg0 context.Context, arg1 *UpdateLogStreamRequest, arg2 ...grpc.CallOption) (*UpdateLogStreamResponse, error) {
+func (m *MockClusterManagerClient) UpdateLogStream(ctx context.Context, in *UpdateLogStreamRequest, opts ...grpc.CallOption) (*UpdateLogStreamResponse, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1}
-	for _, a := range arg2 {
+	varargs := []any{ctx, in}
+	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "UpdateLogStream", varargs...)
@@ -555,9 +556,9 @@ func (m *MockClusterManagerClient) UpdateLogStream(arg0 context.Context, arg1 *U
 }
 
 // UpdateLogStream indicates an expected call of UpdateLogStream.
-func (mr *MockClusterManagerClientMockRecorder) UpdateLogStream(arg0, arg1 any, arg2 ...any) *gomock.Call {
+func (mr *MockClusterManagerClientMockRecorder) UpdateLogStream(ctx, in any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1}, arg2...)
+	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLogStream", reflect.TypeOf((*MockClusterManagerClient)(nil).UpdateLogStream), varargs...)
 }
 
@@ -565,6 +566,7 @@ func (mr *MockClusterManagerClientMockRecorder) UpdateLogStream(arg0, arg1 any, 
 type MockClusterManagerServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockClusterManagerServerMockRecorder
+	isgomock struct{}
 }
 
 // MockClusterManagerServerMockRecorder is the mock recorder for MockClusterManagerServer.

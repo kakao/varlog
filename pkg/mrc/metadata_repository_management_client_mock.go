@@ -23,6 +23,7 @@ import (
 type MockMetadataRepositoryManagementClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockMetadataRepositoryManagementClientMockRecorder
+	isgomock struct{}
 }
 
 // MockMetadataRepositoryManagementClientMockRecorder is the mock recorder for MockMetadataRepositoryManagementClient.
@@ -43,17 +44,17 @@ func (m *MockMetadataRepositoryManagementClient) EXPECT() *MockMetadataRepositor
 }
 
 // AddPeer mocks base method.
-func (m *MockMetadataRepositoryManagementClient) AddPeer(arg0 context.Context, arg1 types.ClusterID, arg2 types.NodeID, arg3 string) error {
+func (m *MockMetadataRepositoryManagementClient) AddPeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID, url string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddPeer", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "AddPeer", ctx, clusterID, nodeID, url)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AddPeer indicates an expected call of AddPeer.
-func (mr *MockMetadataRepositoryManagementClientMockRecorder) AddPeer(arg0, arg1, arg2, arg3 any) *gomock.Call {
+func (mr *MockMetadataRepositoryManagementClientMockRecorder) AddPeer(ctx, clusterID, nodeID, url any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPeer", reflect.TypeOf((*MockMetadataRepositoryManagementClient)(nil).AddPeer), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPeer", reflect.TypeOf((*MockMetadataRepositoryManagementClient)(nil).AddPeer), ctx, clusterID, nodeID, url)
 }
 
 // Close mocks base method.
@@ -71,30 +72,30 @@ func (mr *MockMetadataRepositoryManagementClientMockRecorder) Close() *gomock.Ca
 }
 
 // GetClusterInfo mocks base method.
-func (m *MockMetadataRepositoryManagementClient) GetClusterInfo(arg0 context.Context, arg1 types.ClusterID) (*mrpb.GetClusterInfoResponse, error) {
+func (m *MockMetadataRepositoryManagementClient) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*mrpb.GetClusterInfoResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetClusterInfo", arg0, arg1)
+	ret := m.ctrl.Call(m, "GetClusterInfo", ctx, clusterID)
 	ret0, _ := ret[0].(*mrpb.GetClusterInfoResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetClusterInfo indicates an expected call of GetClusterInfo.
-func (mr *MockMetadataRepositoryManagementClientMockRecorder) GetClusterInfo(arg0, arg1 any) *gomock.Call {
+func (mr *MockMetadataRepositoryManagementClientMockRecorder) GetClusterInfo(ctx, clusterID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterInfo", reflect.TypeOf((*MockMetadataRepositoryManagementClient)(nil).GetClusterInfo), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterInfo", reflect.TypeOf((*MockMetadataRepositoryManagementClient)(nil).GetClusterInfo), ctx, clusterID)
 }
 
 // RemovePeer mocks base method.
-func (m *MockMetadataRepositoryManagementClient) RemovePeer(arg0 context.Context, arg1 types.ClusterID, arg2 types.NodeID) error {
+func (m *MockMetadataRepositoryManagementClient) RemovePeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RemovePeer", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "RemovePeer", ctx, clusterID, nodeID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RemovePeer indicates an expected call of RemovePeer.
-func (mr *MockMetadataRepositoryManagementClientMockRecorder) RemovePeer(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockMetadataRepositoryManagementClientMockRecorder) RemovePeer(ctx, clusterID, nodeID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemovePeer", reflect.TypeOf((*MockMetadataRepositoryManagementClient)(nil).RemovePeer), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemovePeer", reflect.TypeOf((*MockMetadataRepositoryManagementClient)(nil).RemovePeer), ctx, clusterID, nodeID)
 }

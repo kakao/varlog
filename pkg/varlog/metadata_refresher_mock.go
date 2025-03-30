@@ -22,6 +22,7 @@ import (
 type MockMetadataRefresher struct {
 	ctrl     *gomock.Controller
 	recorder *MockMetadataRefresherMockRecorder
+	isgomock struct{}
 }
 
 // MockMetadataRefresherMockRecorder is the mock recorder for MockMetadataRefresher.

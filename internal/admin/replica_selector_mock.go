@@ -22,6 +22,7 @@ import (
 type MockReplicaSelector struct {
 	ctrl     *gomock.Controller
 	recorder *MockReplicaSelectorMockRecorder
+	isgomock struct{}
 }
 
 // MockReplicaSelectorMockRecorder is the mock recorder for MockReplicaSelector.
@@ -56,16 +57,16 @@ func (mr *MockReplicaSelectorMockRecorder) Name() *gomock.Call {
 }
 
 // Select mocks base method.
-func (m *MockReplicaSelector) Select(arg0 context.Context) ([]*varlogpb.ReplicaDescriptor, error) {
+func (m *MockReplicaSelector) Select(ctx context.Context) ([]*varlogpb.ReplicaDescriptor, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Select", arg0)
+	ret := m.ctrl.Call(m, "Select", ctx)
 	ret0, _ := ret[0].([]*varlogpb.ReplicaDescriptor)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Select indicates an expected call of Select.
-func (mr *MockReplicaSelectorMockRecorder) Select(arg0 any) *gomock.Call {
+func (mr *MockReplicaSelectorMockRecorder) Select(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Select", reflect.TypeOf((*MockReplicaSelector)(nil).Select), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Select", reflect.TypeOf((*MockReplicaSelector)(nil).Select), ctx)
 }

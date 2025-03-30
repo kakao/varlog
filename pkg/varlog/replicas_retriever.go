@@ -1,6 +1,6 @@
 package varlog
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/pkg/varlog -package varlog -destination replicas_retriever_mock.go . ReplicasRetriever,RenewableReplicasRetriever
+//go:generate go tool mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/pkg/varlog -package varlog -destination replicas_retriever_mock.go . ReplicasRetriever,RenewableReplicasRetriever
 
 import (
 	"sync/atomic"

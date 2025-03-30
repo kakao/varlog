@@ -1,6 +1,6 @@
 package varlog
 
-//go:generate mockgen -package varlog -destination log_stream_appender_mock.go . LogStreamAppender
+//go:generate go tool mockgen -package varlog -destination log_stream_appender_mock.go . LogStreamAppender
 
 import (
 	"context"

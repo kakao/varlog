@@ -1,6 +1,6 @@
 package snmanager
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/admin/snmanager -package snmanager -destination manager_mock.go . StorageNodeManager
+//go:generate go tool mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/admin/snmanager -package snmanager -destination manager_mock.go . StorageNodeManager
 
 import (
 	"context"

@@ -1,6 +1,6 @@
 package varlog
 
-//go:generate mockgen -package varlog -destination admin_mock.go . Admin
+//go:generate go tool mockgen -package varlog -destination admin_mock.go . Admin
 
 import (
 	"context"

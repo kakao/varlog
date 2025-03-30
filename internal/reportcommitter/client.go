@@ -1,6 +1,6 @@
 package reportcommitter
 
-//go:generate mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/reportcommitter -package reportcommitter -destination client_mock.go . Client
+//go:generate go tool mockgen -build_flags -mod=vendor -self_package github.com/kakao/varlog/internal/reportcommitter -package reportcommitter -destination client_mock.go . Client
 
 import (
 	"context"
