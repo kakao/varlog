@@ -248,10 +248,23 @@ func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (stat
 
 	lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
 	if lse.esm.load() == executorStateSealed {
+		// BUG: A log stream replica returns the local high watermark that can
+		// be zero if all log entries are trimmed. However, an already sealed
+		// replica returns the last committed GLSN instead of the local high
+		// watermark, thus it might not be zero.
 		return varlogpb.LogStreamStatusSealed, lastCommittedGLSN, nil
 	}
 
 	_, _, uncommittedBegin, invalid := lse.lsc.reportCommitBase()
+
+	// This log stream should be synchronized from other replicas since
+	// `uncommittedBegin.GLSN` is invalid.
+	//
+	// TODO: Simplify `uncommittedBegin` usage.
+	if uncommittedBegin.GLSN.Invalid() {
+		return varlogpb.LogStreamStatusSealing, types.InvalidGLSN, nil
+	}
+
 	if uncommittedBegin.GLSN-1 > lastCommittedGLSN {
 		lse.logger.Panic("log stream: seal: metadata repository may be behind of log stream",
 			zap.Any("local", uncommittedBegin.GLSN-1),
