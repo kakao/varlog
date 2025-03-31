@@ -1,7 +1,6 @@
 module github.com/kakao/varlog
 
 go 1.24.0
-
 require (
 	github.com/cockroachdb/pebble v1.1.4
 	github.com/docker/go-units v0.5.0
@@ -36,7 +35,7 @@ require (
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df
 	golang.org/x/sync v0.12.0
-	golang.org/x/sys v0.30.0
+	golang.org/x/sys v0.31.0
 	google.golang.org/grpc v1.71.0
 	google.golang.org/protobuf v1.36.6
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
