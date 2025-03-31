@@ -2675,6 +2675,157 @@ func TestStorageNode_Unseal(t *testing.T) {
 	}
 }
 
+func TestStorageNode_ConcurrentSyncAndSeal(t *testing.T) {
+	const (
+		cid  = types.ClusterID(1)
+		tpid = types.TopicID(2)
+		lsid = types.LogStreamID(3)
+
+		syncTimeout = time.Minute
+	)
+
+	makeReplicas := func(sn *StorageNode) []varlogpb.LogStreamReplica {
+		return []varlogpb.LogStreamReplica{
+			{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: sn.snid,
+					Address:       sn.advertise,
+				},
+				TopicLogStream: varlogpb.TopicLogStream{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+				},
+			},
+		}
+	}
+
+	logger := zaptest.NewLogger(t)
+
+	nodes := make([]*StorageNode, 2)
+	for i := range nodes {
+		sn := TestNewSimpleStorageNode(t,
+			WithClusterID(cid),
+			WithStorageNodeID(types.StorageNodeID(i+1)),
+			WithDefaultLogStreamExecutorOptions(
+				logstream.WithSyncTimeout(syncTimeout),
+			),
+			WithLogger(logger),
+		)
+		nodes[i] = sn
+	}
+
+	var wg sync.WaitGroup
+	defer func() {
+		wg.Wait()
+	}()
+	for i := range nodes {
+		wg.Add(1)
+		sn := nodes[i]
+		go func() {
+			defer wg.Done()
+			_ = sn.Serve()
+		}()
+		TestWaitForStartingOfServe(t, sn)
+
+		TestAddLogStreamReplica(t, cid, sn.snid, tpid, lsid, sn.snPaths[0], sn.advertise)
+
+		lss, localHWM := TestSealLogStreamReplica(t, cid, sn.snid, tpid, lsid, types.InvalidGLSN, sn.advertise)
+		require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+		require.Equal(t, types.InvalidGLSN, localHWM)
+
+		TestUnsealLogStreamReplica(t, cid, sn.snid, tpid, lsid, makeReplicas(sn), sn.advertise)
+	}
+	defer func() {
+		for _, sn := range nodes {
+			_ = sn.Close()
+		}
+	}()
+
+	src, dst := nodes[0], nodes[1]
+
+	rpcConn, err := rpc.NewConn(context.Background(), src.advertise)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, rpcConn.Close())
+	}()
+	lc := client.TestNewLogClient(t, snpb.NewLogIOClient(rpcConn.Conn),
+		varlogpb.StorageNode{
+			StorageNodeID: src.snid,
+			Address:       src.advertise,
+		},
+	)
+	batch := [][]byte{[]byte("msg1"), []byte("msg2"), []byte("msg3")}
+	var wgAppend sync.WaitGroup
+	wgAppend.Add(1)
+	go func() {
+		defer wgAppend.Done()
+		res, err := lc.Append(context.Background(), tpid, lsid, batch)
+		require.NoError(t, err)
+		require.Len(t, res, len(batch))
+		for _, r := range res {
+			require.False(t, r.Meta.GLSN.Invalid())
+		}
+	}()
+	require.Eventually(t, func() bool {
+		reportcommitter.TestCommitBatch(t, src.advertise, snpb.CommitBatchRequest{
+			StorageNodeID: src.snid,
+			CommitResults: []snpb.LogStreamCommitResult{{
+				TopicID:             tpid,
+				LogStreamID:         lsid,
+				CommittedLLSNOffset: 1,
+				CommittedGLSNOffset: 1,
+				CommittedGLSNLength: 3,
+				Version:             1,
+				HighWatermark:       3,
+			}},
+		})
+		reports := reportcommitter.TestGetReport(t, src.advertise)
+		require.Len(t, reports, 1)
+		return reports[0].Version == types.Version(1)
+	}, time.Second, 10*time.Millisecond)
+	wgAppend.Wait()
+
+	trimRes := TestTrim(t, cid, src.snid, tpid, types.GLSN(3), src.advertise)
+	require.Len(t, trimRes, 1)
+	require.Contains(t, trimRes, lsid)
+	require.NoError(t, trimRes[lsid])
+
+	lss, lastGLSN := TestSealLogStreamReplica(t, cid, src.snid, tpid, lsid, types.GLSN(3), src.advertise)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+	// NOTE: The log stream replica's Seal API returns a local high watermark.
+	// This behavior differs from the Admin's Seal API, which returns the last
+	// committed GLSN.
+	require.True(t, lastGLSN.Invalid())
+
+	lss, lastGLSN = TestSealLogStreamReplica(t, cid, dst.snid, tpid, lsid, types.GLSN(3), dst.advertise)
+	require.Equal(t, varlogpb.LogStreamStatusSealing, lss)
+	require.True(t, lastGLSN.Invalid())
+
+	var wgCheck sync.WaitGroup
+	wgCheck.Add(2)
+	go func() {
+		defer wgCheck.Done()
+		syncStatus := TestSync(t, cid, src.snid, tpid, lsid, 0 /*unused*/, src.advertise, varlogpb.StorageNode{
+			StorageNodeID: dst.snid,
+			Address:       dst.advertise,
+		})
+		require.Equal(t, snpb.SyncStateStart, syncStatus.State)
+	}()
+	go func() {
+		defer wgCheck.Done()
+		require.EventuallyWithT(t, func(collect *assert.CollectT) {
+			lss, lastGLSN := TestSealLogStreamReplica(t, cid, dst.snid, tpid, lsid, types.GLSN(3), dst.advertise)
+			// Check if the status is either sealed or sealing.
+			if !assert.Equal(collect, varlogpb.LogStreamStatusSealed, lss) {
+				require.Equal(t, varlogpb.LogStreamStatusSealing, lss)
+			}
+			assert.True(collect, lastGLSN.Invalid())
+		}, time.Second, time.Millisecond)
+	}()
+
+	wgCheck.Wait()
+}
+
 func TestStorageNode_Trim(t *testing.T) {
 	const (
 		cid   = types.ClusterID(1)
