@@ -350,8 +350,8 @@ github.com/xrash/smetrics
 # github.com/yusufpapurcu/wmi v1.2.4
 ## explicit; go 1.16
 github.com/yusufpapurcu/wmi
-# go.etcd.io/etcd/api/v3 v3.5.18
-## explicit; go 1.22
+# go.etcd.io/etcd/api/v3 v3.5.21
+## explicit; go 1.23.0
 go.etcd.io/etcd/api/v3/version
 # go.etcd.io/etcd/client/pkg/v3 v3.5.21
 ## explicit; go 1.23.0
@@ -359,8 +359,8 @@ go.etcd.io/etcd/client/pkg/v3/fileutil
 go.etcd.io/etcd/client/pkg/v3/tlsutil
 go.etcd.io/etcd/client/pkg/v3/transport
 go.etcd.io/etcd/client/pkg/v3/types
-# go.etcd.io/etcd/pkg/v3 v3.5.18
-## explicit; go 1.22
+# go.etcd.io/etcd/pkg/v3 v3.5.21
+## explicit; go 1.23.0
 go.etcd.io/etcd/pkg/v3/crc
 go.etcd.io/etcd/pkg/v3/httputil
 go.etcd.io/etcd/pkg/v3/ioutil
@@ -372,8 +372,8 @@ go.etcd.io/etcd/raft/v3/confchange
 go.etcd.io/etcd/raft/v3/quorum
 go.etcd.io/etcd/raft/v3/raftpb
 go.etcd.io/etcd/raft/v3/tracker
-# go.etcd.io/etcd/server/v3 v3.5.18
-## explicit; go 1.22
+# go.etcd.io/etcd/server/v3 v3.5.21
+## explicit; go 1.23.0
 go.etcd.io/etcd/server/v3/etcdserver/api/rafthttp
 go.etcd.io/etcd/server/v3/etcdserver/api/snap
 go.etcd.io/etcd/server/v3/etcdserver/api/snap/snappb
@@ -489,7 +489,7 @@ golang.org/x/mod/internal/lazyregexp
 golang.org/x/mod/modfile
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.37.0
+# golang.org/x/net v0.38.0
 ## explicit; go 1.23.0
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
