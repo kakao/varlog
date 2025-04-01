@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"math"
+	"math/rand/v2"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -22,6 +24,7 @@ import (
 	"github.com/kakao/varlog/internal/admin/stats"
 	"github.com/kakao/varlog/internal/storagenode/volume"
 	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/admpb"
@@ -219,6 +222,335 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 			} else {
 				assert.Error(t, err)
 			}
+		})
+	}
+}
+
+// This test verifies whether the expected logstreams are sealed
+// in the event of an RPC timeout due to a storagenode failure.
+// In addition, it verifies that the logstreams on the healthy node
+// is not sealed in the event of intermittent failure of the mr request in that situation.
+func TestAdmin_Storagenode_HeartbeatTimeout_Seal(t *testing.T) {
+	const (
+		cid         = types.ClusterID(1)
+		tpid        = types.TopicID(1)
+		victimsnid  = types.StorageNodeID(1)
+		normalsnid  = types.StorageNodeID(2)
+		victimlsid1 = types.LogStreamID(1)
+		victimlsid2 = types.LogStreamID(2)
+		normallsid1 = types.LogStreamID(3)
+		normallsid2 = types.LogStreamID(4)
+		//TODO:: it should be 2
+		expectedSealed = 1
+		// rpcTimeout should be greater than snwatcher hb timeout(1s)
+		rpcTimeout = 2 * time.Second
+		// rate to cause intermittent failures
+		mrReqFailRate = 30
+	)
+
+	type testEnv struct {
+		mrfail      atomic.Bool
+		failedsnid  atomic.Int32
+		sealcnt     atomic.Int32
+		sealedlsids sync.Map
+		normallsids set.Set
+		victimlsids set.Set
+	}
+
+	tcs := []struct {
+		name  string
+		testf func(t *testing.T, env *testEnv)
+	}{
+		{
+			name: "ExpectedSeal",
+			testf: func(t *testing.T, env *testEnv) {
+				// Make victimsn failed
+				env.failedsnid.Store(int32(victimsnid))
+
+				require.Eventually(t, func() bool {
+					return env.sealcnt.Load() >= int32(env.victimlsids.Size()+env.normallsids.Size())
+				}, 30*time.Second, time.Second)
+
+				var numSealed int
+				env.sealedlsids.Range(func(k, _ any) bool {
+					numSealed++
+					require.True(t, env.victimlsids.Contains(k.(types.LogStreamID)))
+					return true
+				})
+
+				require.Equal(t, expectedSealed, numSealed)
+			},
+		},
+		{
+			name: "UnexpectedSeal_DuringMRFail",
+			testf: func(t *testing.T, env *testEnv) {
+				// Make victimsn failed
+				env.failedsnid.Store(int32(victimsnid))
+
+				require.Eventually(t, func() bool {
+					return env.sealcnt.Load() >= int32(env.victimlsids.Size())
+				}, 30*time.Second, time.Second)
+
+				// Make metarepos.ClusterMetadata failed
+				env.mrfail.Store(true)
+
+				// TODO:: unexpected sealed should be zero
+				require.Eventually(t, func() bool {
+					unexpectedSealed := 0
+					env.normallsids.Foreach(func(f interface{}) bool {
+						lsid := f.(types.LogStreamID)
+						if _, ok := env.sealedlsids.Load(lsid); ok {
+							unexpectedSealed++
+						}
+						return true
+					})
+
+					return env.normallsids.Size() == unexpectedSealed
+				}, 60*time.Second, time.Second)
+
+			},
+		},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			victimsnpath := filepath.Join("/tmp", volume.StorageNodeDirName(cid, victimsnid))
+			normalsnpath := filepath.Join("/tmp", volume.StorageNodeDirName(cid, normalsnid))
+			createTime := time.Now().UTC()
+
+			victimlsids := set.New(2)
+			victimlsids.Add(victimlsid1)
+			victimlsids.Add(victimlsid2)
+
+			normallsids := set.New(2)
+			normallsids.Add(normallsid1)
+			normallsids.Add(normallsid2)
+
+			env := &testEnv{
+				victimlsids: victimlsids,
+				normallsids: normallsids,
+			}
+
+			victimStorageNodeMetadata := &snpb.StorageNodeMetadataDescriptor{
+				ClusterID: cid,
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: victimsnid,
+				},
+				LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{
+					{
+						LogStreamReplica: varlogpb.LogStreamReplica{
+							StorageNode: varlogpb.StorageNode{
+								StorageNodeID: victimsnid,
+							},
+							TopicLogStream: varlogpb.TopicLogStream{
+								TopicID:     tpid,
+								LogStreamID: victimlsid1,
+							},
+						},
+					},
+					{
+						LogStreamReplica: varlogpb.LogStreamReplica{
+							StorageNode: varlogpb.StorageNode{
+								StorageNodeID: victimsnid,
+							},
+							TopicLogStream: varlogpb.TopicLogStream{
+								TopicID:     tpid,
+								LogStreamID: victimlsid2,
+							},
+						},
+					},
+				},
+				StartTime: createTime,
+			}
+
+			normalStorageNodeMetadata := &snpb.StorageNodeMetadataDescriptor{
+				ClusterID: cid,
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: normalsnid,
+				},
+				LogStreamReplicas: []snpb.LogStreamReplicaMetadataDescriptor{
+					{
+						LogStreamReplica: varlogpb.LogStreamReplica{
+							StorageNode: varlogpb.StorageNode{
+								StorageNodeID: normalsnid,
+							},
+							TopicLogStream: varlogpb.TopicLogStream{
+								TopicID:     tpid,
+								LogStreamID: normallsid1,
+							},
+						},
+					},
+					{
+						LogStreamReplica: varlogpb.LogStreamReplica{
+							StorageNode: varlogpb.StorageNode{
+								StorageNodeID: normalsnid,
+							},
+							TopicLogStream: varlogpb.TopicLogStream{
+								TopicID:     tpid,
+								LogStreamID: normallsid2,
+							},
+						},
+					},
+				},
+				StartTime: createTime,
+			}
+
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := newTestMock(ctrl)
+			mock.MockClusterMetadataView.EXPECT().ClusterMetadata(gomock.Any()).DoAndReturn(
+				func(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
+					if ctx.Err() != nil {
+						return nil, ctx.Err()
+					}
+
+					if env.mrfail.Load() && rand.Int32N(100) < mrReqFailRate {
+						return nil, context.Canceled
+					}
+
+					return &varlogpb.MetadataDescriptor{
+						StorageNodes: []*varlogpb.StorageNodeDescriptor{
+							{
+								StorageNode: varlogpb.StorageNode{
+									StorageNodeID: victimsnid,
+								},
+								CreateTime: createTime,
+							},
+							{
+								StorageNode: varlogpb.StorageNode{
+									StorageNodeID: normalsnid,
+								},
+								CreateTime: createTime,
+							},
+						},
+						LogStreams: []*varlogpb.LogStreamDescriptor{
+							{
+								TopicID:     tpid,
+								LogStreamID: victimlsid1,
+								Status:      varlogpb.LogStreamStatusRunning,
+								Replicas: []*varlogpb.ReplicaDescriptor{
+									{
+										StorageNodeID:   victimsnid,
+										StorageNodePath: victimsnpath,
+									},
+								},
+							},
+							{
+								TopicID:     tpid,
+								LogStreamID: victimlsid2,
+								Status:      varlogpb.LogStreamStatusRunning,
+								Replicas: []*varlogpb.ReplicaDescriptor{
+									{
+										StorageNodeID:   victimsnid,
+										StorageNodePath: victimsnpath,
+									},
+								},
+							},
+							{
+								TopicID:     tpid,
+								LogStreamID: normallsid1,
+								Status:      varlogpb.LogStreamStatusRunning,
+								Replicas: []*varlogpb.ReplicaDescriptor{
+									{
+										StorageNodeID:   normalsnid,
+										StorageNodePath: normalsnpath,
+									},
+								},
+							},
+							{
+								TopicID:     tpid,
+								LogStreamID: normallsid2,
+								Status:      varlogpb.LogStreamStatusRunning,
+								Replicas: []*varlogpb.ReplicaDescriptor{
+									{
+										StorageNodeID:   normalsnid,
+										StorageNodePath: normalsnpath,
+									},
+								},
+							},
+						},
+						Topics: []*varlogpb.TopicDescriptor{
+							{
+								TopicID: tpid,
+								LogStreams: []types.LogStreamID{
+									victimlsid1,
+									victimlsid2,
+									normallsid1,
+									normallsid2,
+								},
+							},
+						},
+					}, nil
+				},
+			).AnyTimes()
+
+			mock.MockStorageNodeManager.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
+					if types.StorageNodeID(env.failedsnid.Load()) == snid {
+						time.Sleep(rpcTimeout)
+						return nil, context.DeadlineExceeded
+					}
+
+					if snid == normalsnid {
+						return normalStorageNodeMetadata, nil
+					}
+					return victimStorageNodeMetadata, nil
+				},
+			).AnyTimes()
+
+			mock.MockStorageNodeManager.EXPECT().Seal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+				func(ctx context.Context, _ types.TopicID, lsid types.LogStreamID, _ types.GLSN) ([]snpb.LogStreamReplicaMetadataDescriptor, error) {
+					if ctx.Err() != nil {
+						return nil, ctx.Err()
+					}
+
+					if victimlsids.Contains(lsid) {
+						time.Sleep(rpcTimeout)
+						return nil, context.DeadlineExceeded
+					}
+
+					return nil, nil
+				},
+			).AnyTimes()
+
+			mock.MockMetadataRepositoryManager.EXPECT().Seal(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(ctx context.Context, lsid types.LogStreamID) (types.GLSN, error) {
+					env.sealcnt.Add(1)
+
+					if ctx.Err() != nil {
+						return types.InvalidGLSN, ctx.Err()
+					}
+
+					env.sealedlsids.Store(lsid, struct{}{})
+					return types.GLSN(1), nil
+				},
+			).AnyTimes()
+
+			tadm := admin.TestNewClusterManager(t,
+				admin.WithListenAddress("127.0.0.1:0"),
+				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
+				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+				admin.WithStorageNodeWatcherOptions(
+					snwatcher.WithStatisticsRepository(mock.MockRepository),
+				),
+			)
+			tadm.Serve(t)
+			defer tadm.Close(t)
+
+			client, closer := newTestClient(t, tadm.Address())
+			defer closer()
+
+			// Wait for registering a storage node
+			require.Eventually(t, func() bool {
+				vsnm, _ := client.GetStorageNode(context.Background(), normalsnid)
+				nsnm, _ := client.GetStorageNode(context.Background(), victimsnid)
+
+				return len(vsnm.LogStreamReplicas) == victimlsids.Size() &&
+					len(nsnm.LogStreamReplicas) == normallsids.Size()
+			}, time.Second, 10*time.Millisecond)
+
+			tc.testf(t, env)
 		})
 	}
 }
