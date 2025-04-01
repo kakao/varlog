@@ -199,9 +199,10 @@ func (c *admin) GetStorageNode(ctx context.Context, snid types.StorageNodeID, op
 	})
 	if err != nil {
 		code := status.Convert(err).Code()
-		if code == codes.NotFound {
+		switch code {
+		case codes.NotFound:
 			err = verrors.ErrNotExist
-		} else if code == codes.Unavailable {
+		case codes.Unavailable:
 			err = verrors.ErrUnavailable
 		}
 		return nil, errors.WithMessage(err, "admin: get storage node")
@@ -217,9 +218,10 @@ func (c *admin) ListStorageNodes(ctx context.Context, opts ...AdminCallOption) (
 	rsp, err := c.rpcClient.ListStorageNodes(ctx, &admpb.ListStorageNodesRequest{})
 	if err != nil {
 		code := status.Convert(err).Code()
-		if code == codes.NotFound {
+		switch code {
+		case codes.NotFound:
 			err = verrors.ErrNotExist
-		} else if code == codes.Unavailable {
+		case codes.Unavailable:
 			err = verrors.ErrUnavailable
 		}
 		return nil, errors.WithMessage(err, "admin: list storage nodes")

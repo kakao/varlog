@@ -328,9 +328,10 @@ func (c *testAdmin) UpdateLogStream(ctx context.Context, topicID types.TopicID, 
 	popIdx, pushIdx := -1, -1
 	for idx := range logStreamDesc.Replicas {
 		snid := logStreamDesc.Replicas[idx].StorageNodeID
-		if snid == poppedReplica.StorageNodeID {
+		switch snid {
+		case poppedReplica.StorageNodeID:
 			popIdx = idx
-		} else if snid == pushedReplica.StorageNodeID {
+		case pushedReplica.StorageNodeID:
 			pushIdx = idx
 		}
 	}

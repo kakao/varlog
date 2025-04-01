@@ -257,9 +257,10 @@ func (r *DummyStorageNodeClient) GetReport() (*snpb.GetReportResponse, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.status == DummyStorageNodeClientStatusCrash {
+	switch r.status {
+	case DummyStorageNodeClientStatusCrash:
 		return nil, errors.New("crash")
-	} else if r.status == DummyStorageNodeClientStatusClosed {
+	case DummyStorageNodeClientStatusClosed:
 		return nil, errors.New("closed")
 	}
 
@@ -297,9 +298,10 @@ func (r *DummyStorageNodeClient) commit(cr snpb.LogStreamCommitResult) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.status == DummyStorageNodeClientStatusCrash {
+	switch r.status {
+	case DummyStorageNodeClientStatusCrash:
 		return errors.New("crash")
-	} else if r.status == DummyStorageNodeClientStatusClosed {
+	case DummyStorageNodeClientStatusClosed:
 		return errors.New("closed")
 	}
 
