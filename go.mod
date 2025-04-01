@@ -1,7 +1,6 @@
 module github.com/kakao/varlog
 
 go 1.24.0
-
 require (
 	github.com/cockroachdb/pebble v1.1.4
 	github.com/docker/go-units v0.5.0
@@ -18,7 +17,7 @@ require (
 	github.com/soheilhy/cmux v0.1.5
 	github.com/stretchr/testify v1.10.0
 	github.com/urfave/cli/v2 v2.27.6
-	go.etcd.io/etcd/client/pkg/v3 v3.5.20
+	go.etcd.io/etcd/client/pkg/v3 v3.5.21
 	go.etcd.io/etcd/raft/v3 v3.5.20
 	go.etcd.io/etcd/server/v3 v3.5.18
 	go.opentelemetry.io/contrib/instrumentation/host v0.60.0
