@@ -107,7 +107,7 @@ func TestStorageNode(t *testing.T) {
 
 	// sn1: get path
 	snmd1 := TestGetStorageNodeMetadataDescriptor(t, cid, sn1.snid, sn1.advertise)
-	assert.Equal(t, snid1, snmd1.StorageNode.StorageNodeID)
+	assert.Equal(t, snid1, snmd1.StorageNodeID)
 	assert.NotEmpty(t, snmd1.Storages)
 	assert.NotEmpty(t, snmd1.Storages[0].Path)
 	// sn1: add ls
@@ -115,7 +115,7 @@ func TestStorageNode(t *testing.T) {
 
 	// sn2: get path
 	snmd2 := TestGetStorageNodeMetadataDescriptor(t, cid, sn2.snid, sn2.advertise)
-	assert.Equal(t, snid2, snmd2.StorageNode.StorageNodeID)
+	assert.Equal(t, snid2, snmd2.StorageNodeID)
 	assert.NotEmpty(t, snmd2.Storages)
 	assert.NotEmpty(t, snmd2.Storages[0].Path)
 	// sn2: add ls

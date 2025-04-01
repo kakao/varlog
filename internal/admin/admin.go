@@ -298,7 +298,7 @@ func (adm *Admin) listStorageNodesInternal(ctx context.Context) ([]admpb.Storage
 		})
 	}
 	sort.Slice(snms, func(i, j int) bool {
-		return snms[i].StorageNode.StorageNodeID < snms[j].StorageNode.StorageNodeID
+		return snms[i].StorageNodeID < snms[j].StorageNodeID
 	})
 	return snms, nil
 }
@@ -313,7 +313,7 @@ func (adm *Admin) addStorageNode(ctx context.Context, snid types.StorageNodeID, 
 	// If there is a storage node whose ID and address are the same as the
 	// arguments snid and addr, it will succeed. If only one of them is the
 	// same, it will fail by the metadata repository.
-	if snm, ok := adm.statRepository.GetStorageNode(snid); ok && snm.StorageNode.Address == addr {
+	if snm, ok := adm.statRepository.GetStorageNode(snid); ok && snm.Address == addr {
 		return snm, nil
 	}
 
@@ -332,7 +332,7 @@ func (adm *Admin) addStorageNode(ctx context.Context, snid types.StorageNodeID, 
 	}
 
 	confirm := func() *admpb.StorageNodeMetadata {
-		adm.snmgr.AddStorageNode(ctx, snmd.StorageNode.StorageNodeID, addr)
+		adm.snmgr.AddStorageNode(ctx, snmd.StorageNodeID, addr)
 		_, _ = adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx) // Fetch new cluster metadata.
 		adm.statRepository.Report(ctx, snmd, now)
 		if snm, ok := adm.statRepository.GetStorageNode(snid); ok {
@@ -1249,7 +1249,7 @@ func (adm *Admin) HandleReport(ctx context.Context, snm *snpb.StorageNodeMetadat
 			continue
 		}
 		if time.Since(ls.CreatedTime) > adm.logStreamGCTimeout {
-			_ = adm.removeLogStreamReplica(ctx, snm.StorageNode.StorageNodeID, ls.TopicID, ls.LogStreamID)
+			_ = adm.removeLogStreamReplica(ctx, snm.StorageNodeID, ls.TopicID, ls.LogStreamID)
 		}
 	}
 

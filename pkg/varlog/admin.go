@@ -6,8 +6,6 @@ import (
 	"context"
 	stderrors "errors"
 
-	"github.com/kakao/varlog/proto/admpb"
-
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/gogo/status"
 	"github.com/pkg/errors"
@@ -16,6 +14,7 @@ import (
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
+	"github.com/kakao/varlog/proto/admpb"
 	"github.com/kakao/varlog/proto/snpb"
 	"github.com/kakao/varlog/proto/varlogpb"
 )
@@ -239,7 +238,7 @@ func (c *admin) GetStorageNodes(ctx context.Context, opts ...AdminCallOption) (m
 	}
 	ret := make(map[types.StorageNodeID]admpb.StorageNodeMetadata, len(snms))
 	for _, snm := range snms {
-		ret[snm.StorageNode.StorageNodeID] = snm
+		ret[snm.StorageNodeID] = snm
 	}
 	return ret, nil
 }

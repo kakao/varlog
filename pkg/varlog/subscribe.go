@@ -486,7 +486,7 @@ func (q *subscribedLogEntriesQueue) pushBack(result client.SubscribeResult) {
 }
 
 func (q *subscribedLogEntriesQueue) pushable(result client.SubscribeResult) bool {
-	return result.LogEntry.GLSN == q.wanted || result.Error != nil
+	return result.GLSN == q.wanted || result.Error != nil
 }
 
 func (q *subscribedLogEntriesQueue) close() {

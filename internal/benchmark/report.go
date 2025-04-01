@@ -48,9 +48,9 @@ type EndToEndReport struct {
 }
 
 type Report struct {
-	AppendReport    `json:"append"`
-	SubscribeReport `json:"subscribe"`
-	EndToEndReport  `json:"endToEnd"`
+	AppendReport    AppendReport    `json:"append"`
+	SubscribeReport SubscribeReport `json:"subscribe"`
+	EndToEndReport  EndToEndReport  `json:"endToEnd"`
 }
 
 type TargetReport struct {

@@ -197,17 +197,17 @@ func TestController(t *testing.T) {
 		{
 			name:        "GetStorageNode0",
 			golden:      "varlogctl/getstoragenode.0.golden.json",
-			executeFunc: storagenode.Describe(snm1.StorageNode.StorageNodeID),
+			executeFunc: storagenode.Describe(snm1.StorageNodeID),
 			initMock: func(adm *varlog.MockAdmin) {
-				adm.EXPECT().GetStorageNode(gomock.Any(), snm1.StorageNode.StorageNodeID).Return(snm1, nil)
+				adm.EXPECT().GetStorageNode(gomock.Any(), snm1.StorageNodeID).Return(snm1, nil)
 			},
 		},
 		{
 			name:        "GetStorageNode1",
 			golden:      "varlogctl/getstoragenode.1.golden.json",
-			executeFunc: storagenode.Describe(snm2.StorageNode.StorageNodeID),
+			executeFunc: storagenode.Describe(snm2.StorageNodeID),
 			initMock: func(adm *varlog.MockAdmin) {
-				adm.EXPECT().GetStorageNode(gomock.Any(), snm2.StorageNode.StorageNodeID).Return(snm2, nil)
+				adm.EXPECT().GetStorageNode(gomock.Any(), snm2.StorageNodeID).Return(snm2, nil)
 			},
 		},
 		{
@@ -231,7 +231,7 @@ func TestController(t *testing.T) {
 		{
 			name:        "AddStorageNode0",
 			golden:      "varlogctl/addstoragenode.0.golden.json",
-			executeFunc: storagenode.Add(snm1.StorageNode.Address, snm1.StorageNode.StorageNodeID),
+			executeFunc: storagenode.Add(snm1.Address, snm1.StorageNodeID),
 			initMock: func(adm *varlog.MockAdmin) {
 				adm.EXPECT().AddStorageNode(
 					gomock.Any(),
@@ -243,7 +243,7 @@ func TestController(t *testing.T) {
 		{
 			name:        "UnregisterStorageNode0",
 			golden:      "varlogctl/unregisterstoragenode.0.golden.json",
-			executeFunc: storagenode.Remove(snm1.StorageNode.Address, snm1.StorageNode.StorageNodeID),
+			executeFunc: storagenode.Remove(snm1.Address, snm1.StorageNodeID),
 			initMock: func(adm *varlog.MockAdmin) {
 				adm.EXPECT().UnregisterStorageNode(
 					gomock.Any(),

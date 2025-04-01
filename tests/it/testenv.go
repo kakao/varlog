@@ -532,7 +532,7 @@ func (clus *VarlogCluster) AddSN(t *testing.T) types.StorageNodeID {
 	var addr string
 	require.Eventually(t, func() bool {
 		meta := storagenode.TestGetStorageNodeMetadataDescriptorWithoutAddr(t, sn)
-		addr = meta.StorageNode.Address
+		addr = meta.Address
 		return len(addr) > 0
 	}, time.Second, 10*time.Millisecond)
 
@@ -819,7 +819,7 @@ func (clus *VarlogCluster) AddLSIncomplete(t *testing.T, topicID types.TopicID) 
 	}
 
 	for _, replica := range replicas {
-		snID := replica.StorageNode.StorageNodeID
+		snID := replica.StorageNodeID
 		snmd, err := clus.storageNodeManagementClientOf(t, snID).GetMetadata(context.Background())
 		require.NoError(t, err)
 		path := snmd.Storages[0].Path

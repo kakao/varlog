@@ -300,7 +300,7 @@ func TestVarlotTest_LogStreamAppender(t *testing.T) {
 				require.Equal(t, cid, snMetaDesc.ClusterID)
 				require.Empty(t, snMetaDesc.LogStreamReplicas)
 				require.Equal(t, varlogpb.StorageNodeStatusRunning, snMetaDesc.Status)
-				require.Equal(t, addr, snMetaDesc.StorageNode.Address)
+				require.Equal(t, addr, snMetaDesc.Address)
 				require.NotEmpty(t, snMetaDesc.Storages)
 			}
 
@@ -402,7 +402,7 @@ func TestVarlogTest(t *testing.T) {
 		require.Equal(t, clusterID, snMetaDesc.ClusterID)
 		require.Empty(t, snMetaDesc.LogStreamReplicas)
 		require.Equal(t, varlogpb.StorageNodeStatusRunning, snMetaDesc.Status)
-		require.Equal(t, addr, snMetaDesc.StorageNode.Address)
+		require.Equal(t, addr, snMetaDesc.Address)
 		require.NotEmpty(t, snMetaDesc.Storages)
 	}
 

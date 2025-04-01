@@ -38,7 +38,7 @@ func (ts *TestServer) Serve(t *testing.T) {
 	}()
 
 	assert.Eventually(t, func() bool {
-		return len(ts.Admin.Address()) > 0
+		return len(ts.Address()) > 0
 	}, time.Second, 10*time.Millisecond)
 }
 
