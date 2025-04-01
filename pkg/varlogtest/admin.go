@@ -90,7 +90,7 @@ func (c *testAdmin) GetStorageNodes(ctx context.Context, opts ...varlog.AdminCal
 	}
 	ret := make(map[types.StorageNodeID]admpb.StorageNodeMetadata, len(snms))
 	for _, snm := range snms {
-		ret[snm.StorageNode.StorageNodeID] = snm
+		ret[snm.StorageNodeID] = snm
 	}
 	return ret, nil
 }
@@ -272,7 +272,7 @@ func (c *testAdmin) AddLogStream(_ context.Context, topicID types.TopicID, logSt
 			snpath := c.vt.storageNodes[snid].Storages[0].Path
 			dataPath := filepath.Join(snpath, volume.LogStreamDirName(topicID, logStreamID))
 			lsd.Replicas[i] = &varlogpb.ReplicaDescriptor{
-				StorageNodeID:   c.vt.storageNodes[snid].StorageNode.StorageNodeID,
+				StorageNodeID:   c.vt.storageNodes[snid].StorageNodeID,
 				StorageNodePath: c.vt.storageNodes[snid].Storages[0].Path,
 				DataPath:        dataPath,
 			}

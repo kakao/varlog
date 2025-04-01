@@ -21,7 +21,7 @@ func EqualReplicas(xs []LogStreamReplica, ys []LogStreamReplica) bool {
 				return false
 			}
 		*/
-		if x.StorageNode.StorageNodeID != y.StorageNode.StorageNodeID || x.LogStreamID != y.LogStreamID {
+		if x.StorageNodeID != y.StorageNodeID || x.LogStreamID != y.LogStreamID {
 			return false
 		}
 	}
@@ -39,7 +39,7 @@ func ValidReplicas(replicas []LogStreamReplica) error {
 	snidSet := set.New(len(replicas))
 	for _, replica := range replicas {
 		lsidSet.Add(replica.LogStreamID)
-		snidSet.Add(replica.StorageNode.StorageNodeID)
+		snidSet.Add(replica.StorageNodeID)
 	}
 	if lsidSet.Size() != 1 {
 		return errors.Wrap(verrors.ErrInvalid, "LogStreamID mismatch")
