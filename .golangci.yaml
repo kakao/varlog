@@ -1,65 +1,84 @@
-run:
-  timeout: 5m
+version: "2"
 linters:
-  disable-all: true
+  default: none
   enable:
     - depguard
     - errcheck
     - godot
-    - gofmt
-    - goimports
-    - gosimple
     - govet
     - ineffassign
     - misspell
     - revive
     - staticcheck
-    - typecheck
     - unused
-linters-settings:
-  depguard:
+  settings:
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: golang.org/x/net/context
+              desc: Should be replaced by standard lib context package
+            - pkg: golang.org/x/exp/slog
+              desc: Should be replaced by standard lib slog package
+            - pkg: golang.org/x/exp/slices
+              desc: Should be replaced by standard lib slices package
+    godot:
+      exclude:
+        - ^ TODO
+        - ^ FIXME
+        - ^ NOTE
+        - ^ NB
+        - :$
+        - ^[ ]*[-*]
+    misspell:
+      locale: US
+    revive:
+      confidence: 0.1
+      rules:
+        - name: unhandled-error
+          arguments:
+            - fmt.Fprint
+            - fmt.Fprintf
+            - fmt.Fprintln
+            - fmt.Print
+            - fmt.Printf
+            - fmt.Println
+            - strings.Builder.WriteString
+            - strings.Builder.WriteByte
+          disabled: false
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      main:
-        deny:
-          - pkg: golang.org/x/net/context
-            desc: Should be replaced by standard lib context package
-          - pkg: golang.org/x/exp/slog
-            desc: Should be replaced by standard lib slog package
-          - pkg: golang.org/x/exp/slices
-            desc: Should be replaced by standard lib slices package
-  godot:
-    exclude:
-      - "^ TODO"
-      - "^ FIXME"
-      - "^ NOTE"
-      - "^ NB"
-      - ":$"
-      - "^[ ]*[-*]"
-  goimports:
-    local-prefixes: github.com/kakao/varlog
-  misspell:
-    locale: US
-  revive:
-    confidence: 0.1
-    rules:
-      - name: unhandled-error
-        disabled: false
-        arguments:
-          - "fmt.Fprint"
-          - "fmt.Fprintf"
-          - "fmt.Fprintln"
-          - "fmt.Print"
-          - "fmt.Printf"
-          - "fmt.Println"
-          - "strings.Builder.WriteString"
-          - "strings.Builder.WriteByte"
+      - linters:
+          - mnd
+        path: _test\.go
+    paths:
+      - .*\.pb\.go$
+      - .*_mock\.go$
+      - third_party$
+      - builtin$
+      - examples$
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gomnd
-  exclude-files:
-    - ".*\\.pb\\.go$"
-    - ".*_mock\\.go$"
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/kakao/varlog
+  exclusions:
+    generated: lax
+    paths:
+      - .*\.pb\.go$
+      - .*_mock\.go$
+      - third_party$
+      - builtin$
+      - examples$
