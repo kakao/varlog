@@ -744,9 +744,10 @@ func (adm *Admin) updateLogStream(ctx context.Context, lsid types.LogStreamID, p
 	popIdx, pushIdx := -1, -1
 	for idx := range oldLSDesc.Replicas {
 		snid := oldLSDesc.Replicas[idx].StorageNodeID
-		if snid == poppedReplica.StorageNodeID {
+		switch snid {
+		case poppedReplica.StorageNodeID:
 			popIdx = idx
-		} else if snid == pushedReplica.StorageNodeID {
+		case pushedReplica.StorageNodeID:
 			pushIdx = idx
 		}
 	}
