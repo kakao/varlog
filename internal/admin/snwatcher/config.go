@@ -13,12 +13,11 @@ import (
 )
 
 const (
-	DefaultTick                  = 100 * time.Millisecond
-	DefaultReportInterval        = 10
-	DefaultHeartbeatTimeout      = 10
-	DefaultHeartbeatDeadline     = 3 * time.Second
-	DefaultFailureHandlerTimeout = 1 * time.Second
-	DefaultReportDeadline        = 3 * time.Second
+	DefaultTick                   = 1 * time.Second
+	DefaultReportInterval         = 5 * DefaultTick
+	DefaultHeartbeatTimeout       = 5 * DefaultTick
+	DefaultHeartbeatCheckDeadline = DefaultTick
+	DefaultReportDeadline         = DefaultTick
 )
 
 type config struct {
@@ -27,10 +26,9 @@ type config struct {
 	snmgr                  snmanager.StorageNodeManager
 	statsRepos             stats.Repository
 	tick                   time.Duration
-	reportInterval         int
-	heartbeatTimeout       int
+	reportInterval         time.Duration
+	heartbeatTimeout       time.Duration
 	heartbeatCheckDeadline time.Duration
-	failureHandlerTimeout  time.Duration
 	reportDeadline         time.Duration
 
 	logger *zap.Logger
@@ -42,8 +40,7 @@ func newConfig(opts []Option) (config, error) {
 		reportInterval:         DefaultReportInterval,
 		reportDeadline:         DefaultReportDeadline,
 		heartbeatTimeout:       DefaultHeartbeatTimeout,
-		heartbeatCheckDeadline: DefaultHeartbeatDeadline,
-		failureHandlerTimeout:  DefaultFailureHandlerTimeout,
+		heartbeatCheckDeadline: DefaultHeartbeatCheckDeadline,
 		logger:                 zap.NewNop(),
 	}
 	for _, opt := range opts {
@@ -69,14 +66,16 @@ func (cfg *config) validate() error {
 	if cfg.statsRepos == nil {
 		return errors.New("snwatcher: stats repository is nil")
 	}
-	if cfg.tick == 0 {
+	if cfg.tick == time.Duration(0) {
 		return fmt.Errorf("snwatcher: invalid tick %v", cfg.tick)
 	}
-	if cfg.heartbeatTimeout < 1 {
-		return fmt.Errorf("snwatcher: invalid heartbeat timeout %d", cfg.heartbeatTimeout)
+	if cfg.heartbeatTimeout < cfg.tick {
+		return fmt.Errorf("snwatcher: invalid heartbeat timeout %d, it should be lagger than tick %d",
+			cfg.heartbeatTimeout, cfg.tick)
 	}
-	if cfg.reportInterval < 1 {
-		return fmt.Errorf("snwatcher: invalid report interval %d", cfg.reportInterval)
+	if cfg.reportInterval < cfg.tick {
+		return fmt.Errorf("snwatcher: invalid report interval %d, it should be lagger than tick %d",
+			cfg.reportInterval, cfg.tick)
 	}
 	if cfg.logger == nil {
 		return errors.New("snwatcher: logger is nil")
@@ -135,22 +134,18 @@ func WithTick(tick time.Duration) Option {
 	})
 }
 
-// WithReportInterval sets the interval between each report in a unit of tick.
-// It should be a positive number.
-// If the tick is 1 second and the report interval is 10, the watcher reports
-// metadata of storage nodes every 10 seconds.
-func WithReportInterval(reportInterval int) Option {
+// WithReportInterval sets the interval between each report.
+// It should be largger than tick.
+func WithReportInterval(reportInterval time.Duration) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.reportInterval = reportInterval
 	})
 }
 
-// WithHeartbeatTimeout sets the heartbeat timeout, which is a unit of a tick,
+// WithHeartbeatTimeout sets the heartbeat timeout
 // to decide whether a storage node is live.
-// It should be a positive number.
-// If the tick is 1 second and the heartbeat timeout is 10, the watcher decides
-// that the storage node that has not responded over 10 seconds is failed.
-func WithHeartbeatTimeout(heartbeatTimeout int) Option {
+// It should be largger than tick.
+func WithHeartbeatTimeout(heartbeatTimeout time.Duration) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.heartbeatTimeout = heartbeatTimeout
 	})
@@ -163,14 +158,6 @@ func WithHeartbeatTimeout(heartbeatTimeout int) Option {
 func WithHeartbeatCheckDeadline(heartbeatCheckTimeout time.Duration) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.heartbeatCheckDeadline = heartbeatCheckTimeout
-	})
-}
-
-// WithFailureHandlerTimeout sets a timeout to handle the heartbeat timeout of
-// the storage node.
-func WithFailureHandlerTimeout(failureHandlerTimeout time.Duration) Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.failureHandlerTimeout = failureHandlerTimeout
 	})
 }
 

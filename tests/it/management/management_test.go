@@ -32,13 +32,21 @@ func TestMain(m *testing.M) {
 }
 
 func TestStorageNode_Heartbeat(t *testing.T) {
-	const tick = 100 * time.Millisecond
+	const (
+		tick            = time.Second
+		reportInterval  = tick
+		hbCheckDeadline = tick
+		hbTimeout       = 5 * tick
+	)
 
 	clus := it.NewVarlogCluster(t,
 		it.WithNumberOfStorageNodes(1),
 		it.WithVMSOptions(
 			admin.WithStorageNodeWatcherOptions(
 				snwatcher.WithTick(tick),
+				snwatcher.WithReportInterval(reportInterval),
+				snwatcher.WithHeartbeatCheckDeadline(hbCheckDeadline),
+				snwatcher.WithHeartbeatTimeout(hbTimeout),
 			),
 		),
 	)
@@ -60,13 +68,21 @@ func TestStorageNode_Heartbeat(t *testing.T) {
 }
 
 func TestStorageNode_HeartbeatFailure(t *testing.T) {
-	const tick = 100 * time.Millisecond
+	const (
+		tick            = time.Second
+		reportInterval  = tick
+		hbCheckDeadline = tick
+		hbTimeout       = 5 * tick
+	)
 
 	clus := it.NewVarlogCluster(t,
 		it.WithNumberOfStorageNodes(1),
 		it.WithVMSOptions(
 			admin.WithStorageNodeWatcherOptions(
 				snwatcher.WithTick(tick),
+				snwatcher.WithReportInterval(reportInterval),
+				snwatcher.WithHeartbeatCheckDeadline(hbCheckDeadline),
+				snwatcher.WithHeartbeatTimeout(hbTimeout),
 			),
 		),
 	)
@@ -310,6 +326,9 @@ func TestAddLogStreamWithAutoUnseal(t *testing.T) {
 		it.WithNumberOfTopics(1),
 		it.WithVMSOptions(
 			admin.WithAutoUnseal(),
+			admin.WithStorageNodeWatcherOptions(
+				snwatcher.WithReportInterval(snwatcher.DefaultTick),
+			),
 		),
 	)
 	defer clus.Close(t)
@@ -481,7 +500,12 @@ func TestSyncLogStream(t *testing.T) {
 }
 
 func TestSyncLogStreamWithAutoUnseal(t *testing.T) {
-	const numLogs = 10
+	const (
+		numLogs          = 10
+		tick             = time.Second
+		reportInterval   = tick
+		heartbeatTimeout = 5 * tick
+	)
 
 	clus := it.NewVarlogCluster(t,
 		it.WithReplicationFactor(2),
@@ -492,6 +516,11 @@ func TestSyncLogStreamWithAutoUnseal(t *testing.T) {
 		it.WithNumberOfTopics(1),
 		it.WithVMSOptions(
 			admin.WithAutoUnseal(),
+			admin.WithStorageNodeWatcherOptions(
+				snwatcher.WithTick(tick),
+				snwatcher.WithHeartbeatTimeout(heartbeatTimeout),
+				snwatcher.WithReportInterval(reportInterval),
+			),
 		),
 	)
 	defer clus.Close(t)
@@ -516,7 +545,7 @@ func TestSyncLogStreamWithAutoUnseal(t *testing.T) {
 		lsd, err := adm.GetLogStream(context.Background(), tpid, lsid)
 		assert.NoError(t, err)
 		return lsd.Status.Sealed()
-	}, 5*time.Second, 100*time.Millisecond)
+	}, heartbeatTimeout*2, tick)
 
 	// test if oldsnid exists in the logstream and newsnid does not exist
 	// in the log stream.
@@ -544,7 +573,7 @@ func TestSyncLogStreamWithAutoUnseal(t *testing.T) {
 		assert.True(t, ok)
 		return lsrmd.LocalHighWatermark.GLSN == types.GLSN(numLogs) &&
 			lsrmd.Status == varlogpb.LogStreamStatusRunning
-	}, 5*time.Second, 100*time.Millisecond)
+	}, 10*tick, tick)
 }
 
 func TestSealLogStreamSealedIncompletely(t *testing.T) {
@@ -668,9 +697,9 @@ func TestUnsealLogStreamUnsealedIncompletely(t *testing.T) {
 func TestGCZombieLogStream(t *testing.T) {
 	const (
 		tick             = 100 * time.Millisecond
-		reportInterval   = 10
-		heartbeatTimeout = 30
-		gcTimeout        = 6 * reportInterval * tick
+		reportInterval   = 10 * tick
+		heartbeatTimeout = 30 * tick
+		gcTimeout        = 6 * reportInterval
 	)
 	vmsOpts := it.NewTestVMSOptions(
 		admin.WithStorageNodeWatcherOptions(
@@ -723,7 +752,7 @@ func TestGCZombieLogStream(t *testing.T) {
 					}
 					_, exist := meta.GetLogStream(lsID)
 					return !exist
-				}, gcTimeout), ShouldBeTrue)
+				}, gcTimeout*2), ShouldBeTrue)
 			})
 		})
 	}))

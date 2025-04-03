@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"path/filepath"
 	"sync"
@@ -784,7 +785,10 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 		numStorageNodes   = replicationFactor
 		numTopics         = 1
 		numLogStreams     = 2
-		tick              = 100 * time.Millisecond
+		tick              = time.Second
+		hbTimeout         = 5 * tick
+		hbCheckTimeout    = tick
+		reportInterval    = tick
 	)
 
 	clus := it.NewVarlogCluster(t,
@@ -795,6 +799,9 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 		it.WithVMSOptions(
 			admin.WithStorageNodeWatcherOptions(
 				snwatcher.WithTick(tick),
+				snwatcher.WithHeartbeatCheckDeadline(hbCheckTimeout),
+				snwatcher.WithHeartbeatTimeout(hbTimeout),
+				snwatcher.WithReportInterval(reportInterval),
 			),
 		),
 	)
@@ -844,15 +851,18 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 				}
 			}
 		}
+
+		fmt.Printf("old:%v, cur:%v\n", olds[0].LastHeartbeatTime, snms[0].LastHeartbeatTime)
 		return snms[0].LastHeartbeatTime.After(olds[0].LastHeartbeatTime)
-	}, 10*tick, tick/10)
+	}, 10*tick, tick)
 }
 
 func TestAdmin_GetStorageNode(t *testing.T) {
 	const (
 		replicationFactor = 1
 		numStorageNodes   = replicationFactor
-		tick              = 100 * time.Millisecond
+		tick              = time.Second
+		reportInterval    = tick
 	)
 
 	clus := it.NewVarlogCluster(t,
@@ -863,6 +873,7 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 		it.WithVMSOptions(
 			admin.WithStorageNodeWatcherOptions(
 				snwatcher.WithTick(tick),
+				snwatcher.WithReportInterval(reportInterval),
 			),
 		),
 	)
@@ -893,5 +904,5 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 			require.Equal(t, old.LogStreamReplicas[i].Path, snm.LogStreamReplicas[i].Path)
 		}
 		return snm.LastHeartbeatTime.After(old.LastHeartbeatTime)
-	}, 10*tick, tick/10)
+	}, 2*reportInterval, tick)
 }
