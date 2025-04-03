@@ -37,8 +37,9 @@ type EventHandler interface {
 type StorageNodeWatcher struct {
 	config
 
-	hb map[types.StorageNodeID]time.Time // last heartbeat times
-	mu sync.RWMutex
+	// continuous heartbeat fail cnt
+	hbFailcnt map[types.StorageNodeID]int
+	mu        sync.RWMutex
 
 	runner *runner.Runner
 	cancel context.CancelFunc
@@ -50,9 +51,9 @@ func New(opts ...Option) (*StorageNodeWatcher, error) {
 		return nil, err
 	}
 	return &StorageNodeWatcher{
-		config: cfg,
-		hb:     make(map[types.StorageNodeID]time.Time),
-		runner: runner.New("wt", cfg.logger),
+		config:    cfg,
+		hbFailcnt: make(map[types.StorageNodeID]int),
+		runner:    runner.New("wt", cfg.logger),
 	}, nil
 }
 
@@ -80,13 +81,12 @@ func (snw *StorageNodeWatcher) run(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			now := time.Now().UTC()
-			if err := snw.checkHeartbeat(ctx, now); err != nil {
+			if err := snw.checkHeartbeat(ctx); err != nil {
 				snw.logger.Warn("check heartbeat", zap.Error(err))
 			}
-			snw.handleHeartbeatTimeout(ctx, now)
+			snw.handleHeartbeatTimeout(ctx)
 
-			reportInterval--
+			reportInterval -= snw.tick
 			if reportInterval > 0 {
 				continue
 			}
@@ -100,44 +100,53 @@ func (snw *StorageNodeWatcher) run(ctx context.Context) {
 	}
 }
 
-func (snw *StorageNodeWatcher) checkHeartbeat(ctx context.Context, now time.Time) error {
-	ctx, cancel := context.WithTimeout(ctx, snw.heartbeatCheckDeadline)
-	defer cancel()
-
+func (snw *StorageNodeWatcher) checkHeartbeat(ctx context.Context) error {
 	md, err := snw.cmview.ClusterMetadata(ctx)
 	if err != nil {
 		return fmt.Errorf("snwatcher: heartbeat: %w", err)
 	}
 
-	snw.reload(md.StorageNodes, now)
+	snw.reload(md.StorageNodes)
 
 	var (
 		wg   sync.WaitGroup
 		n    = len(md.StorageNodes)
 		errs = make([]error, n)
 	)
+
+	mctx, cancel := context.WithTimeout(ctx, snw.heartbeatCheckDeadline)
+	defer cancel()
+
 	wg.Add(n)
 	for i := 0; i < n; i++ {
 		go func(idx int) {
 			defer wg.Done()
 			snid := md.StorageNodes[idx].StorageNodeID
-			snmd, err := snw.snmgr.GetMetadata(ctx, snid)
+
+			snmd, err := snw.snmgr.GetMetadata(mctx, snid)
 			if err != nil {
+				snw.hbFail(snid)
 				errs[idx] = err
 				return
 			}
-			snw.set(snid, now)
-			snw.statsRepos.Report(ctx, snmd, now)
+			snw.hbReset(snid)
+			snw.statsRepos.Report(mctx, snmd, time.Now().UTC())
 		}(i)
 	}
 	wg.Wait()
 	return multierr.Combine(errs...)
 }
 
-func (snw *StorageNodeWatcher) set(snid types.StorageNodeID, ts time.Time) {
+func (snw *StorageNodeWatcher) hbFail(snid types.StorageNodeID) {
 	snw.mu.Lock()
 	defer snw.mu.Unlock()
-	snw.hb[snid] = ts
+	snw.hbFailcnt[snid]++
+}
+
+func (snw *StorageNodeWatcher) hbReset(snid types.StorageNodeID) {
+	snw.mu.Lock()
+	defer snw.mu.Unlock()
+	snw.hbFailcnt[snid] = 0
 }
 
 // reload resets the map lastTimes.
@@ -145,36 +154,34 @@ func (snw *StorageNodeWatcher) set(snid types.StorageNodeID, ts time.Time) {
 // the timestamp for a new one is set to the argument ts.
 // If the storage node is not in the argument snds, it is removed from the
 // lastTimes.
-func (snw *StorageNodeWatcher) reload(snds []*varlogpb.StorageNodeDescriptor, ts time.Time) {
+func (snw *StorageNodeWatcher) reload(snds []*varlogpb.StorageNodeDescriptor) {
 	snw.mu.Lock()
 	defer snw.mu.Unlock()
 
-	lastTimes := make(map[types.StorageNodeID]time.Time, len(snds))
+	lasthb := make(map[types.StorageNodeID]int, len(snds))
 	for _, snd := range snds {
 		snid := snd.StorageNodeID
-		oldts, ok := snw.hb[snid]
+		old, ok := snw.hbFailcnt[snid]
 		if ok {
-			lastTimes[snid] = oldts
+			lasthb[snid] = old
 			continue
 		}
-		lastTimes[snid] = ts
+		lasthb[snid] = 0
 	}
-	snw.hb = lastTimes
+	snw.hbFailcnt = lasthb
 }
 
-func (snw *StorageNodeWatcher) handleHeartbeatTimeout(ctx context.Context, now time.Time) {
+func (snw *StorageNodeWatcher) handleHeartbeatTimeout(ctx context.Context) {
 	snw.mu.Lock()
 	defer snw.mu.Unlock()
 
 	var wg sync.WaitGroup
-	for snid, ts := range snw.hb {
-		if now.Sub(ts) > snw.tick*time.Duration(snw.heartbeatTimeout) {
+	for snid, cnt := range snw.hbFailcnt {
+		if time.Duration(cnt)*snw.tick > snw.heartbeatTimeout {
 			wg.Add(1)
 			go func(ctx context.Context, snid types.StorageNodeID) {
 				defer wg.Done()
 
-				ctx, cancel := context.WithTimeout(ctx, snw.failureHandlerTimeout)
-				defer cancel()
 				snw.eventHandler.HandleHeartbeatTimeout(ctx, snid)
 			}(ctx, snid)
 		}
