@@ -66,7 +66,7 @@ func TestStorageNodeWatcher_InvalidConfig(t *testing.T) {
 		WithClusterMetadataView(cmview),
 		WithStorageNodeManager(snmgr),
 		WithStatisticsRepository(statsRepos),
-		WithHeartbeatTimeout(0),
+		WithHeartbeatTimeout(time.Duration(0)),
 	)
 	assert.Error(t, err)
 
@@ -86,7 +86,7 @@ func TestStorageNodeWatcher_InvalidConfig(t *testing.T) {
 		WithClusterMetadataView(cmview),
 		WithStorageNodeManager(snmgr),
 		WithStatisticsRepository(statsRepos),
-		WithReportInterval(0),
+		WithReportInterval(time.Duration(0)),
 	)
 	assert.Error(t, err)
 
@@ -106,7 +106,7 @@ func TestStorageNodeWatcher_BadClusterMetadataView(t *testing.T) {
 	defer ctrl.Finish()
 
 	const tick = 10 * time.Millisecond
-	const interval = 3
+	const interval = 3 * tick
 
 	eventHandler := NewMockEventHandler(ctrl)
 	cmview := mrmanager.NewMockClusterMetadataView(ctrl)
@@ -125,7 +125,7 @@ func TestStorageNodeWatcher_BadClusterMetadataView(t *testing.T) {
 	)
 	assert.NoError(t, err)
 	assert.NoError(t, sw.Start())
-	time.Sleep(2 * interval * tick)
+	time.Sleep(2 * interval)
 	assert.NoError(t, sw.Stop())
 }
 
@@ -134,7 +134,7 @@ func TestStorageNodeWatcher(t *testing.T) {
 	defer ctrl.Finish()
 
 	const tick = 10 * time.Millisecond
-	const interval = 3
+	const interval = 3 * tick
 
 	eventHandler := NewMockEventHandler(ctrl)
 	cmview := mrmanager.NewMockClusterMetadataView(ctrl)
@@ -199,7 +199,7 @@ func TestStorageNodeWatcher(t *testing.T) {
 	assert.Eventually(t, func() bool {
 		return atomic.LoadInt64(&numHeartbeatHandlerCalled) > 0 &&
 			atomic.LoadInt64(&numReportHandlerCalled) > 0
-	}, tick*interval*10, tick)
+	}, interval*10, tick)
 	assert.NoError(t, snw.Stop())
 }
 

@@ -34,8 +34,9 @@ OPTIONS:
    --mr-call-timeout value                                                                                                                                                                                mr call timeout (default: 3s) [$MR_CALL_TIMEOUT]
    --mr-conn-timeout value                                                                                                                                                                                mr connection timeout (default: 1s) [$MR_CONN_TIMEOUT]
    --replica-selector value, --repsel value                                                                                                                                                               random | lfu (default: "lfu") [$REPLICA_SELECTOR]
-   --sn-watcher-heartbeat-check-deadline value                                                                                                                                                            (default: 3s) [$SN_WATCHER_HEARTBEAT_CHECK_DEADLINE]
-   --sn-watcher-report-deadline value                                                                                                                                                                     (default: 3s) [$SN_WATCHER_REPORT_DEADLINE]
+   --sn-watcher-heartbeat-check-deadline value                                                                                                                                                            dealine for heartbeat check request to storage node (default: 1s) [$SN_WATCHER_HEARTBEAT_CHECK_DEADLINE]
+   --sn-watcher-heartbeat-timeout value                                                                                                                                                                   dealine to decide whether a storage node is live (default: 5s) [$SN_WATCHER_HEARTBEAT_TIMEOUT]
+   --sn-watcher-report-deadline value                                                                                                                                                                     dealine for report request to storage node (default: 1s) [$SN_WATCHER_REPORT_DEADLINE]
 
    Cluster:
 

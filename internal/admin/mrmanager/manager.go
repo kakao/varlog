@@ -161,7 +161,10 @@ func (mrm *mrManager) clusterMetadata(ctx context.Context) (*varlogpb.MetadataDe
 		return nil, errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	meta, err := cli.GetMetadata(ctx)
+	rpcCtx, cancel := context.WithTimeout(ctx, mrm.callTimeout)
+	defer cancel()
+
+	meta, err := cli.GetMetadata(rpcCtx)
 	if err != nil {
 		_ = cli.Close()
 		return nil, err
@@ -176,7 +179,10 @@ func (mrm *mrManager) RegisterStorageNode(ctx context.Context, storageNodeMeta *
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	err = cli.RegisterStorageNode(ctx, storageNodeMeta)
+	rpcCtx, cancel := context.WithTimeout(ctx, mrm.callTimeout)
+	defer cancel()
+
+	err = cli.RegisterStorageNode(rpcCtx, storageNodeMeta)
 	if err != nil {
 		_ = cli.Close()
 		return err
@@ -192,7 +198,10 @@ func (mrm *mrManager) UnregisterStorageNode(ctx context.Context, storageNodeID t
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	err = cli.UnregisterStorageNode(ctx, storageNodeID)
+	rpcCtx, cancel := context.WithTimeout(ctx, mrm.callTimeout)
+	defer cancel()
+
+	err = cli.UnregisterStorageNode(rpcCtx, storageNodeID)
 	if err != nil {
 		_ = cli.Close()
 		return err
@@ -208,7 +217,10 @@ func (mrm *mrManager) RegisterTopic(ctx context.Context, topicID types.TopicID) 
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	err = cli.RegisterTopic(ctx, topicID)
+	rpcCtx, cancel := context.WithTimeout(ctx, mrm.callTimeout)
+	defer cancel()
+
+	err = cli.RegisterTopic(rpcCtx, topicID)
 	if err != nil {
 		_ = cli.Close()
 		return err
@@ -224,7 +236,10 @@ func (mrm *mrManager) UnregisterTopic(ctx context.Context, topicID types.TopicID
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	err = cli.UnregisterTopic(ctx, topicID)
+	rpcCtx, cancel := context.WithTimeout(ctx, mrm.callTimeout)
+	defer cancel()
+
+	err = cli.UnregisterTopic(rpcCtx, topicID)
 	if err != nil {
 		_ = cli.Close()
 		return err
@@ -240,7 +255,10 @@ func (mrm *mrManager) RegisterLogStream(ctx context.Context, logStreamDesc *varl
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	err = cli.RegisterLogStream(ctx, logStreamDesc)
+	rpcCtx, cancel := context.WithTimeout(ctx, mrm.callTimeout)
+	defer cancel()
+
+	err = cli.RegisterLogStream(rpcCtx, logStreamDesc)
 	if err != nil {
 		_ = cli.Close()
 		return err
@@ -256,7 +274,10 @@ func (mrm *mrManager) UnregisterLogStream(ctx context.Context, logStreamID types
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	err = cli.UnregisterLogStream(ctx, logStreamID)
+	rpcCtx, cancel := context.WithTimeout(ctx, mrm.callTimeout)
+	defer cancel()
+
+	err = cli.UnregisterLogStream(rpcCtx, logStreamID)
 	if err != nil {
 		_ = cli.Close()
 		return err
@@ -272,7 +293,10 @@ func (mrm *mrManager) UpdateLogStream(ctx context.Context, logStreamDesc *varlog
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	err = cli.UpdateLogStream(ctx, logStreamDesc)
+	rpcCtx, cancel := context.WithTimeout(ctx, mrm.callTimeout)
+	defer cancel()
+
+	err = cli.UpdateLogStream(rpcCtx, logStreamDesc)
 	if err != nil {
 		_ = cli.Close()
 		return err
@@ -289,7 +313,10 @@ func (mrm *mrManager) Seal(ctx context.Context, logStreamID types.LogStreamID) (
 		return types.InvalidGLSN, errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	lastCommittedGLSN, err := cli.Seal(ctx, logStreamID)
+	rpcCtx, cancel := context.WithTimeout(ctx, mrm.callTimeout)
+	defer cancel()
+
+	lastCommittedGLSN, err := cli.Seal(rpcCtx, logStreamID)
 	if err != nil {
 		_ = cli.Close()
 		return types.InvalidGLSN, err
@@ -305,7 +332,10 @@ func (mrm *mrManager) Unseal(ctx context.Context, logStreamID types.LogStreamID)
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	err = cli.Unseal(ctx, logStreamID)
+	rpcCtx, cancel := context.WithTimeout(ctx, mrm.callTimeout)
+	defer cancel()
+
+	err = cli.Unseal(rpcCtx, logStreamID)
 	if err != nil {
 		_ = cli.Close()
 		return err
@@ -321,7 +351,10 @@ func (mrm *mrManager) GetClusterInfo(ctx context.Context) (*mrpb.ClusterInfo, er
 		return nil, errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	rsp, err := cli.GetClusterInfo(ctx, mrm.cid)
+	rpcCtx, cancel := context.WithTimeout(ctx, mrm.callTimeout)
+	defer cancel()
+
+	rsp, err := cli.GetClusterInfo(rpcCtx, mrm.cid)
 	if err != nil {
 		_ = cli.Close()
 		return nil, err
@@ -335,7 +368,10 @@ func (mrm *mrManager) AddPeer(ctx context.Context, nodeID types.NodeID, peerURL,
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	if err := cli.AddPeer(ctx, mrm.cid, nodeID, peerURL); err != nil {
+	rpcCtx, cancel := context.WithTimeout(ctx, mrm.callTimeout)
+	defer cancel()
+
+	if err := cli.AddPeer(rpcCtx, mrm.cid, nodeID, peerURL); err != nil {
 		if !errors.Is(err, verrors.ErrAlreadyExists) {
 			_ = cli.Close()
 			return err
@@ -353,7 +389,10 @@ func (mrm *mrManager) RemovePeer(ctx context.Context, nodeID types.NodeID) error
 		return errors.WithMessage(err, "mrmanager: not accessible")
 	}
 
-	if err := cli.RemovePeer(ctx, mrm.cid, nodeID); err != nil {
+	rpcCtx, cancel := context.WithTimeout(ctx, mrm.callTimeout)
+	defer cancel()
+
+	if err := cli.RemovePeer(rpcCtx, mrm.cid, nodeID); err != nil {
 		_ = cli.Close()
 		return err
 	}

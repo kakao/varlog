@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/kakao/varlog/internal/admin"
+	"github.com/kakao/varlog/internal/admin/snwatcher"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
 	"github.com/kakao/varlog/pkg/varlog/x/mlsa"
@@ -512,12 +514,26 @@ func TestVarlogSubscribeWithAddLS(t *testing.T) {
 
 func TestVarlogSubscribeWithUpdateLS(t *testing.T) {
 	// defer goleak.VerifyNone(t)
+	const (
+		tick            = snwatcher.DefaultTick
+		reportInterval  = tick
+		hbCheckDeadline = tick
+		hbTimeout       = 5 * tick
+	)
 	opts := []it.Option{
 		it.WithReplicationFactor(2),
 		it.WithNumberOfStorageNodes(5),
 		it.WithNumberOfLogStreams(3),
 		it.WithNumberOfClients(5),
 		it.WithNumberOfTopics(1),
+		it.WithVMSOptions(
+			admin.WithStorageNodeWatcherOptions(
+				snwatcher.WithTick(tick),
+				snwatcher.WithHeartbeatTimeout(hbTimeout),
+				snwatcher.WithHeartbeatCheckDeadline(hbCheckDeadline),
+				snwatcher.WithReportInterval(reportInterval),
+			),
+		),
 	}
 
 	Convey("Given Varlog cluster", t, it.WithTestCluster(t, opts, func(env *it.VarlogCluster) {
@@ -565,7 +581,7 @@ func TestVarlogSubscribeWithUpdateLS(t *testing.T) {
 					meta := env.GetMetadata(t)
 					lsdesc := meta.GetLogStream(lsID)
 					return lsdesc.Status == varlogpb.LogStreamStatusSealed
-				}, 5*time.Second, 10*time.Millisecond)
+				}, hbTimeout*2, tick)
 
 				env.UpdateLS(t, topicID, lsID, snID, addedSN)
 
@@ -581,7 +597,7 @@ func TestVarlogSubscribeWithUpdateLS(t *testing.T) {
 					}
 
 					return lsDesc.Status == varlogpb.LogStreamStatusRunning
-				}, 5*time.Second, 10*time.Millisecond)
+				}, 10*tick, tick)
 
 				for i := 0; i < nrLogs/4; i++ {
 					res := client.Append(context.Background(), topicID, [][]byte{[]byte("foo")})
@@ -707,9 +723,13 @@ func TestClientAppendWithAllowedLogStream(t *testing.T) {
 
 func TestLogStreamAppender(t *testing.T) {
 	const (
-		pipelineSize = 2
-		calls        = pipelineSize * 5
-		batchSize    = 2
+		pipelineSize    = 2
+		calls           = pipelineSize * 5
+		batchSize       = 2
+		tick            = snwatcher.DefaultTick
+		reportInterval  = tick
+		hbCheckDeadline = tick
+		hbTimeout       = 5 * tick
 	)
 
 	tcs := []struct {
@@ -847,7 +867,7 @@ func TestLogStreamAppender(t *testing.T) {
 
 				require.Eventually(t, func() bool {
 					return called.Load() == calls
-				}, 5*time.Second, 100*time.Millisecond)
+				}, 10*tick, tick)
 			},
 		},
 		{
@@ -1136,6 +1156,14 @@ func TestLogStreamAppender(t *testing.T) {
 				it.WithNumberOfClients(1),
 				it.WithVMSOptions(it.NewTestVMSOptions()...),
 				it.WithNumberOfTopics(1),
+				it.WithVMSOptions(
+					admin.WithStorageNodeWatcherOptions(
+						snwatcher.WithTick(tick),
+						snwatcher.WithHeartbeatTimeout(hbTimeout),
+						snwatcher.WithHeartbeatCheckDeadline(hbCheckDeadline),
+						snwatcher.WithReportInterval(reportInterval),
+					),
+				),
 			)
 			defer clus.Close(t)
 

@@ -2,7 +2,6 @@ package it
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -220,9 +219,7 @@ func WithoutVMS() Option {
 func NewTestVMSOptions(opts ...admin.Option) []admin.Option {
 	ret := []admin.Option{
 		admin.WithStorageNodeWatcherOptions(
-			snwatcher.WithTick(100*time.Millisecond),
-			snwatcher.WithHeartbeatTimeout(30),
-			snwatcher.WithReportInterval(10),
+			snwatcher.WithReportInterval(snwatcher.DefaultTick),
 		),
 		admin.WithLogger(zap.L()),
 	}
