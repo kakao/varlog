@@ -2443,6 +2443,156 @@ func TestStorageNode_Seal(t *testing.T) {
 	}
 }
 
+func TestStorageNode_AppendAndSeal(t *testing.T) {
+	const (
+		cid  = types.ClusterID(1)
+		snid = types.StorageNodeID(2)
+		tpid = types.TopicID(3)
+		lsid = types.LogStreamID(4)
+
+		repeat = 10
+	)
+
+	sn := TestNewSimpleStorageNode(t, WithClusterID(cid), WithStorageNodeID(snid))
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_ = sn.Serve()
+	}()
+	t.Cleanup(func() {
+		err := sn.Close()
+		require.NoError(t, err)
+		wg.Wait()
+	})
+
+	addr := TestGetAdvertiseAddress(t, sn)
+
+	mc, mcClose := TestNewManagementClient(t, cid, snid, addr)
+	t.Cleanup(mcClose)
+
+	_, err := mc.AddLogStreamReplica(context.Background(), tpid, lsid, sn.snPaths[0])
+	require.NoError(t, err)
+
+	lss, localHWM := TestSealLogStreamReplica(t, cid, sn.snid, tpid, lsid, types.InvalidGLSN, addr)
+	require.Equal(t, varlogpb.LogStreamStatusSealed, lss)
+	require.Equal(t, types.InvalidGLSN, localHWM)
+	TestUnsealLogStreamReplica(t, cid, snid, tpid, lsid, []varlogpb.LogStreamReplica{
+		{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: snid,
+				Address:       addr,
+			},
+			TopicLogStream: varlogpb.TopicLogStream{
+				TopicID:     tpid,
+				LogStreamID: lsid,
+			},
+		},
+	}, addr)
+
+	rpcConn, err := rpc.NewConn(context.Background(), addr)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, rpcConn.Close())
+	})
+	lc := client.TestNewLogClient(t, snpb.NewLogIOClient(rpcConn.Conn),
+		varlogpb.StorageNode{
+			StorageNodeID: snid,
+			Address:       addr,
+		},
+	)
+
+	batch := [][]byte{[]byte("msg1"), []byte("msg2"), []byte("msg3")}
+	var (
+		committedLLSNOffset = types.MinLLSN
+		committedGLSNOffset = types.MinGLSN
+		committedLength     = uint64(len(batch))
+		version             = types.MinVersion
+		highWatermark       = types.InvalidGLSN + types.GLSN(committedLength)
+	)
+
+	for range repeat {
+		var wgAppend sync.WaitGroup
+		wgAppend.Add(3)
+
+		go func() {
+			defer wgAppend.Done()
+
+			res, err := lc.Append(context.Background(), tpid, lsid, batch)
+			require.NoError(t, err)
+			for _, r := range res {
+				require.False(t, r.Meta.GLSN.Invalid())
+			}
+		}()
+
+		go func() {
+			defer wgAppend.Done()
+
+			// wait for log entries written
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				reports := reportcommitter.TestGetReport(t, addr)
+				assert.Len(collect, reports, 1)
+				assert.Equal(collect, committedLength, reports[0].UncommittedLLSNLength)
+			}, time.Second, 10*time.Millisecond)
+
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				reportcommitter.TestCommitBatch(t, addr, snpb.CommitBatchRequest{
+					StorageNodeID: snid,
+					CommitResults: []snpb.LogStreamCommitResult{{
+						TopicID:             tpid,
+						LogStreamID:         lsid,
+						CommittedLLSNOffset: committedLLSNOffset,
+						CommittedGLSNOffset: committedGLSNOffset,
+						CommittedGLSNLength: committedLength,
+						Version:             version,
+						HighWatermark:       highWatermark,
+					}},
+				})
+				reports := reportcommitter.TestGetReport(t, addr)
+				require.Len(t, reports, 1)
+				assert.Equal(collect, version, reports[0].Version)
+			}, time.Second, 10*time.Millisecond)
+		}()
+
+		go func() {
+			defer wgAppend.Done()
+
+			// wait for log entries written
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				reports := reportcommitter.TestGetReport(t, addr)
+				assert.Len(collect, reports, 1)
+				assert.Equal(collect, committedLength, reports[0].UncommittedLLSNLength)
+			}, time.Second, 10*time.Millisecond)
+
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				lss, localHWM := TestSealLogStreamReplica(t, cid, sn.snid, tpid, lsid, highWatermark, addr)
+				assert.Equal(collect, varlogpb.LogStreamStatusSealed, lss)
+				assert.Equal(collect, highWatermark, localHWM)
+			}, time.Second, 10*time.Millisecond)
+		}()
+
+		wgAppend.Wait()
+
+		committedLLSNOffset += types.LLSN(committedLength)
+		committedGLSNOffset += types.GLSN(committedLength)
+		version++
+		highWatermark += types.GLSN(committedLength)
+
+		TestUnsealLogStreamReplica(t, cid, snid, tpid, lsid, []varlogpb.LogStreamReplica{
+			{
+				StorageNode: varlogpb.StorageNode{
+					StorageNodeID: snid,
+					Address:       addr,
+				},
+				TopicLogStream: varlogpb.TopicLogStream{
+					TopicID:     tpid,
+					LogStreamID: lsid,
+				},
+			},
+		}, addr)
+	}
+}
+
 func TestStorageNode_Unseal(t *testing.T) {
 	const (
 		cid  = types.ClusterID(1)
