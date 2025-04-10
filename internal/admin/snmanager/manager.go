@@ -222,45 +222,70 @@ func (sm *snManager) Seal(ctx context.Context, tpid types.TopicID, lsid types.Lo
 	if err != nil {
 		return nil, err
 	}
+
+	var mu sync.Mutex
+	g, gctx := errgroup.WithContext(ctx)
+
 	lsmetaDesc := make([]snpb.LogStreamReplicaMetadataDescriptor, 0, len(replicas))
 	for _, replica := range replicas {
 		storageNodeID := replica.GetStorageNodeID()
-		cli, err := sm.clients.Get(storageNodeID)
-		if err != nil {
-			sm.refresh(ctx) //nolint:errcheck,revive // TODO: Handle an error returned.
-			return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
-		}
-		status, highWatermark, errSeal := cli.Seal(ctx, tpid, lsid, lastCommittedGLSN)
-		if errSeal != nil {
-			// NOTE: The sealing log stream ignores the failure of sealing its replica.
-			sm.logger.Warn("could not seal replica", zap.Int32("snid", int32(storageNodeID)), zap.Int32("lsid", int32(lsid)))
-			continue
-		}
-		sm.logger.Debug("seal",
-			zap.Int32("snid", int32(storageNodeID)),
-			zap.Int32("tpid", int32(tpid)),
-			zap.Int32("lsid", int32(lsid)),
-			zap.Uint64("last_glsn", uint64(lastCommittedGLSN)),
-			zap.String("status", status.String()),
-			zap.Uint64("local_hwm", uint64(highWatermark)),
-		)
-		lsmetaDesc = append(lsmetaDesc, snpb.LogStreamReplicaMetadataDescriptor{
-			LogStreamReplica: varlogpb.LogStreamReplica{
-				StorageNode: varlogpb.StorageNode{
-					StorageNodeID: storageNodeID,
+		path := replica.GetStorageNodePath()
+
+		g.Go(func() error {
+			cli, err := sm.clients.Get(storageNodeID)
+			if err != nil {
+				sm.logger.Warn("could not seal replica. not exist",
+					zap.Int32("snid", int32(storageNodeID)),
+					zap.Int32("lsid", int32(lsid)),
+				)
+				sm.refresh(gctx) //nolint:errcheck,revive // TODO: Handle an error returned.
+				return errors.Wrap(verrors.ErrNotExist, "storage node")
+			}
+			status, highWatermark, errSeal := cli.Seal(gctx, tpid, lsid, lastCommittedGLSN)
+			if errSeal != nil {
+				// NOTE: The sealing log stream ignores the failure of sealing its replica.
+				sm.logger.Warn("could not seal replica",
+					zap.Int32("snid", int32(storageNodeID)),
+					zap.Int32("lsid", int32(lsid)),
+					zap.Error(errSeal),
+				)
+				return nil
+			}
+			sm.logger.Debug("seal",
+				zap.Int32("snid", int32(storageNodeID)),
+				zap.Int32("tpid", int32(tpid)),
+				zap.Int32("lsid", int32(lsid)),
+				zap.Uint64("last_glsn", uint64(lastCommittedGLSN)),
+				zap.String("status", status.String()),
+				zap.Uint64("local_hwm", uint64(highWatermark)),
+			)
+
+			mu.Lock()
+			defer mu.Unlock()
+
+			lsmetaDesc = append(lsmetaDesc, snpb.LogStreamReplicaMetadataDescriptor{
+				LogStreamReplica: varlogpb.LogStreamReplica{
+					StorageNode: varlogpb.StorageNode{
+						StorageNodeID: storageNodeID,
+					},
+					TopicLogStream: varlogpb.TopicLogStream{
+						TopicID:     tpid,
+						LogStreamID: lsid,
+					},
 				},
-				TopicLogStream: varlogpb.TopicLogStream{
-					TopicID:     tpid,
-					LogStreamID: lsid,
+				Status: status,
+				LocalHighWatermark: varlogpb.LogSequenceNumber{
+					GLSN: highWatermark,
 				},
-			},
-			Status: status,
-			LocalHighWatermark: varlogpb.LogSequenceNumber{
-				GLSN: highWatermark,
-			},
-			Path: replica.GetStorageNodePath(),
+				Path: path,
+			})
+
+			return nil
 		})
 	}
+
+	err = g.Wait()
+
 	sm.logger.Info("seal result", zap.Reflect("logstream_meta", lsmetaDesc))
 	return lsmetaDesc, err
 }
