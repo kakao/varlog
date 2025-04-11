@@ -17,35 +17,38 @@ import (
 )
 
 const (
-	defaultClusterID          = flags.DefaultClusterID
-	DefaultListenAddress      = "127.0.0.1:9090"
-	DefaultReplicationFactor  = flags.DefaultReplicationFactor
-	DefaultLogStreamGCTimeout = 24 * time.Hour
+	defaultClusterID                       = flags.DefaultClusterID
+	DefaultListenAddress                   = "127.0.0.1:9090"
+	DefaultReplicationFactor               = flags.DefaultReplicationFactor
+	DefaultLogStreamGCTimeout              = 24 * time.Hour
+	DefaultStorageNodeFailureHandleTimeout = 2 * time.Second
 )
 
 type config struct {
-	cid                      types.ClusterID
-	listenAddress            string
-	replicationFactor        int
-	logStreamGCTimeout       time.Duration
-	disableAutoLogStreamSync bool
-	enableAutoUnseal         bool
-	mrmgr                    mrmanager.MetadataRepositoryManager
-	snmgr                    snmanager.StorageNodeManager
-	snSelector               ReplicaSelector
-	statRepository           stats.Repository
-	snwatcherOpts            []snwatcher.Option
-	defaultGRPCServerOptions []grpc.ServerOption
-	logger                   *zap.Logger
+	cid                             types.ClusterID
+	listenAddress                   string
+	replicationFactor               int
+	logStreamGCTimeout              time.Duration
+	storagenodeFailureHandleTimeout time.Duration
+	disableAutoLogStreamSync        bool
+	enableAutoUnseal                bool
+	mrmgr                           mrmanager.MetadataRepositoryManager
+	snmgr                           snmanager.StorageNodeManager
+	snSelector                      ReplicaSelector
+	statRepository                  stats.Repository
+	snwatcherOpts                   []snwatcher.Option
+	defaultGRPCServerOptions        []grpc.ServerOption
+	logger                          *zap.Logger
 }
 
 func newConfig(opts []Option) (config, error) {
 	cfg := config{
-		cid:                defaultClusterID,
-		listenAddress:      DefaultListenAddress,
-		replicationFactor:  DefaultReplicationFactor,
-		logStreamGCTimeout: DefaultLogStreamGCTimeout,
-		logger:             zap.NewNop(),
+		cid:                             defaultClusterID,
+		listenAddress:                   DefaultListenAddress,
+		replicationFactor:               DefaultReplicationFactor,
+		logStreamGCTimeout:              DefaultLogStreamGCTimeout,
+		storagenodeFailureHandleTimeout: DefaultStorageNodeFailureHandleTimeout,
+		logger:                          zap.NewNop(),
 	}
 
 	for _, opt := range opts {
@@ -137,6 +140,12 @@ func WithReplicationFactor(replicationFactor int) Option {
 func WithLogStreamGCTimeout(logStreamGCTimeout time.Duration) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.logStreamGCTimeout = logStreamGCTimeout
+	})
+}
+
+func WithStorageNodeFailureHandleTimeout(timeout time.Duration) Option {
+	return newFuncOption(func(cfg *config) {
+		cfg.storagenodeFailureHandleTimeout = timeout
 	})
 }
 

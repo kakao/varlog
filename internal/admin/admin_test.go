@@ -205,7 +205,9 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStorageNodeWatcherOptions(
-					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithTick(time.Hour),             // no heartbeat checking
+					snwatcher.WithHeartbeatTimeout(time.Hour), // no heartbeat checking
+					snwatcher.WithReportInterval(time.Hour),   // no heartbeat checking
 					snwatcher.WithStatisticsRepository(mock.MockRepository),
 				),
 				admin.WithStatisticsRepository(mock.MockRepository),
@@ -232,20 +234,22 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 // is not sealed in the event of intermittent failure of the mr request in that situation.
 func TestAdmin_Storagenode_HeartbeatTimeout_Seal(t *testing.T) {
 	const (
-		cid         = types.ClusterID(1)
-		tpid        = types.TopicID(1)
-		victimsnid  = types.StorageNodeID(1)
-		normalsnid  = types.StorageNodeID(2)
-		victimlsid1 = types.LogStreamID(1)
-		victimlsid2 = types.LogStreamID(2)
-		normallsid1 = types.LogStreamID(3)
-		normallsid2 = types.LogStreamID(4)
-		//TODO:: it should be 2
-		expectedSealed = 1
-		// rpcTimeout should be greater than snwatcher hb timeout(1s)
-		rpcTimeout = 2 * time.Second
+		cid            = types.ClusterID(1)
+		tpid           = types.TopicID(1)
+		victimsnid     = types.StorageNodeID(1)
+		normalsnid     = types.StorageNodeID(2)
+		victimlsid1    = types.LogStreamID(1)
+		victimlsid2    = types.LogStreamID(2)
+		normallsid1    = types.LogStreamID(3)
+		normallsid2    = types.LogStreamID(4)
+		expectedSealed = 2
 		// rate to cause intermittent failures
 		mrReqFailRate = 30
+
+		tick                   = time.Duration(100 * time.Millisecond)
+		hbCheck                = tick
+		hbTimeout              = 5 * tick
+		snFailureHandleTimeout = tick
 	)
 
 	type testEnv struct {
@@ -267,9 +271,12 @@ func TestAdmin_Storagenode_HeartbeatTimeout_Seal(t *testing.T) {
 				// Make victimsn failed
 				env.failedsnid.Store(int32(victimsnid))
 
+				wait := ((hbTimeout/tick + 1) * hbCheck) +
+					time.Duration(env.victimlsids.Size()+env.normallsids.Size()+1)*(snFailureHandleTimeout+tick)
+
 				require.Eventually(t, func() bool {
 					return env.sealcnt.Load() >= int32(env.victimlsids.Size()+env.normallsids.Size())
-				}, 30*time.Second, time.Second)
+				}, wait, tick)
 
 				var numSealed int
 				env.sealedlsids.Range(func(k, _ any) bool {
@@ -287,27 +294,32 @@ func TestAdmin_Storagenode_HeartbeatTimeout_Seal(t *testing.T) {
 				// Make victimsn failed
 				env.failedsnid.Store(int32(victimsnid))
 
+				wait := ((hbTimeout/tick + 1) * hbCheck) +
+					(time.Duration(env.victimlsids.Size()+1) * (snFailureHandleTimeout + tick))
+
 				require.Eventually(t, func() bool {
 					return env.sealcnt.Load() >= int32(env.victimlsids.Size())
-				}, 30*time.Second, time.Second)
+				}, wait, tick)
 
 				// Make metarepos.ClusterMetadata failed
 				env.mrfail.Store(true)
 
-				// TODO:: unexpected sealed should be zero
+				// Wait heartbeat timeout
+				time.Sleep((hbTimeout/tick + 1) * hbCheck)
+
+				wait = time.Duration(env.victimlsids.Size()+env.normallsids.Size()+1) * (snFailureHandleTimeout * tick)
+
+				env.sealcnt.Store(0)
 				require.Eventually(t, func() bool {
-					unexpectedSealed := 0
-					env.normallsids.Foreach(func(f interface{}) bool {
-						lsid := f.(types.LogStreamID)
-						if _, ok := env.sealedlsids.Load(lsid); ok {
-							unexpectedSealed++
-						}
-						return true
-					})
+					return env.sealcnt.Load() >= int32(env.victimlsids.Size()+env.normallsids.Size())
+				}, wait, tick)
 
-					return env.normallsids.Size() == unexpectedSealed
-				}, 60*time.Second, time.Second)
-
+				env.normallsids.Foreach(func(f interface{}) bool {
+					lsid := f.(types.LogStreamID)
+					_, ok := env.sealedlsids.Load(lsid)
+					require.False(t, ok)
+					return true
+				})
 			},
 		},
 	}
@@ -486,10 +498,10 @@ func TestAdmin_Storagenode_HeartbeatTimeout_Seal(t *testing.T) {
 			).AnyTimes()
 
 			mock.MockStorageNodeManager.EXPECT().GetMetadata(gomock.Any(), gomock.Any()).DoAndReturn(
-				func(_ context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
+				func(ctx context.Context, snid types.StorageNodeID) (*snpb.StorageNodeMetadataDescriptor, error) {
 					if types.StorageNodeID(env.failedsnid.Load()) == snid {
-						time.Sleep(rpcTimeout)
-						return nil, context.DeadlineExceeded
+						<-ctx.Done()
+						return nil, ctx.Err()
 					}
 
 					if snid == normalsnid {
@@ -501,13 +513,15 @@ func TestAdmin_Storagenode_HeartbeatTimeout_Seal(t *testing.T) {
 
 			mock.MockStorageNodeManager.EXPECT().Seal(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 				func(ctx context.Context, _ types.TopicID, lsid types.LogStreamID, _ types.GLSN) ([]snpb.LogStreamReplicaMetadataDescriptor, error) {
+					env.sealcnt.Add(1)
+
 					if ctx.Err() != nil {
 						return nil, ctx.Err()
 					}
 
 					if victimlsids.Contains(lsid) {
-						time.Sleep(rpcTimeout)
-						return nil, context.DeadlineExceeded
+						<-ctx.Done()
+						return nil, ctx.Err()
 					}
 
 					return nil, nil
@@ -516,8 +530,6 @@ func TestAdmin_Storagenode_HeartbeatTimeout_Seal(t *testing.T) {
 
 			mock.MockMetadataRepositoryManager.EXPECT().Seal(gomock.Any(), gomock.Any()).DoAndReturn(
 				func(ctx context.Context, lsid types.LogStreamID) (types.GLSN, error) {
-					env.sealcnt.Add(1)
-
 					if ctx.Err() != nil {
 						return types.InvalidGLSN, ctx.Err()
 					}
@@ -531,8 +543,12 @@ func TestAdmin_Storagenode_HeartbeatTimeout_Seal(t *testing.T) {
 				admin.WithListenAddress("127.0.0.1:0"),
 				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
+				admin.WithStorageNodeFailureHandleTimeout(snFailureHandleTimeout),
 				admin.WithStorageNodeWatcherOptions(
 					snwatcher.WithStatisticsRepository(mock.MockRepository),
+					snwatcher.WithTick(tick),
+					snwatcher.WithHeartbeatCheckDeadline(hbCheck),
+					snwatcher.WithHeartbeatTimeout(hbTimeout),
 				),
 			)
 			tadm.Serve(t)
@@ -563,8 +579,8 @@ func TestAdmin_GetStorageNode_FailedStorageNode(t *testing.T) {
 		lsid = types.LogStreamID(1)
 
 		tick             = 10 * time.Millisecond
-		heartbeatTimeout = int(24 * time.Hour / tick)
-		reportInterval   = int(24 * time.Hour / tick)
+		heartbeatTimeout = 24 * time.Hour
+		reportInterval   = 24 * time.Hour
 	)
 
 	snpath := filepath.Join("/tmp", volume.StorageNodeDirName(cid, snid))
@@ -739,7 +755,9 @@ func TestAdmin_ListStorageNodes(t *testing.T) {
 				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStorageNodeWatcherOptions(
-					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithTick(time.Hour),             // no heartbeat checking
+					snwatcher.WithHeartbeatTimeout(time.Hour), // no heartbeat checking
+					snwatcher.WithReportInterval(time.Hour),   // no heartbeat checking
 					snwatcher.WithStatisticsRepository(mock.MockRepository),
 				),
 				admin.WithStatisticsRepository(mock.MockRepository),
@@ -946,7 +964,9 @@ func TestAdmin_GetTopic(t *testing.T) {
 				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStorageNodeWatcherOptions(
-					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithTick(time.Hour),             // no heartbeat checking
+					snwatcher.WithHeartbeatTimeout(time.Hour), // no heartbeat checking
+					snwatcher.WithReportInterval(time.Hour),   // no heartbeat checking
 					snwatcher.WithStatisticsRepository(mock.MockRepository),
 				),
 			)
@@ -1018,7 +1038,9 @@ func TestAdmin_ListTopics(t *testing.T) {
 				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStorageNodeWatcherOptions(
-					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithTick(time.Hour),             // no heartbeat checking
+					snwatcher.WithHeartbeatTimeout(time.Hour), // no heartbeat checking
+					snwatcher.WithReportInterval(time.Hour),   // no heartbeat checking
 					snwatcher.WithStatisticsRepository(mock.MockRepository),
 				),
 			)
@@ -1797,7 +1819,9 @@ func TestAdmin_AddLogStream(t *testing.T) {
 				admin.WithReplicaSelector(mock.MockReplicaSelector),
 				admin.WithStatisticsRepository(mock.MockRepository),
 				admin.WithStorageNodeWatcherOptions(
-					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithTick(time.Hour),             // no heartbeat checking
+					snwatcher.WithHeartbeatTimeout(time.Hour), // no heartbeat checking
+					snwatcher.WithReportInterval(time.Hour),   // no heartbeat checking
 				),
 			}
 			if tc.autoUnseal {
@@ -2102,7 +2126,9 @@ func TestAdmin_UpdateLogStream(t *testing.T) {
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStatisticsRepository(mock.MockRepository),
 				admin.WithStorageNodeWatcherOptions(
-					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithTick(time.Hour),             // no heartbeat checking
+					snwatcher.WithHeartbeatTimeout(time.Hour), // no heartbeat checking
+					snwatcher.WithReportInterval(time.Hour),   // no heartbeat checking
 				),
 			)
 			tadm.Serve(t)
@@ -2344,7 +2370,9 @@ func TestAdmin_Seal(t *testing.T) {
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStatisticsRepository(mock.MockRepository),
 				admin.WithStorageNodeWatcherOptions(
-					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithTick(time.Hour),             // no heartbeat checking
+					snwatcher.WithHeartbeatTimeout(time.Hour), // no heartbeat checking
+					snwatcher.WithReportInterval(time.Hour),   // no heartbeat checking
 				),
 			)
 			tadm.Serve(t)
@@ -2427,7 +2455,9 @@ func TestAdmin_Unseal(t *testing.T) {
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStatisticsRepository(mock.MockRepository),
 				admin.WithStorageNodeWatcherOptions(
-					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithTick(time.Hour),             // no heartbeat checking
+					snwatcher.WithHeartbeatTimeout(time.Hour), // no heartbeat checking
+					snwatcher.WithReportInterval(time.Hour),   // no heartbeat checking
 				),
 			)
 			tadm.Serve(t)
@@ -2506,7 +2536,9 @@ func TestAdmin_Sync(t *testing.T) {
 				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStorageNodeWatcherOptions(
-					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithTick(time.Hour),             // no heartbeat checking
+					snwatcher.WithHeartbeatTimeout(time.Hour), // no heartbeat checking
+					snwatcher.WithReportInterval(time.Hour),   // no heartbeat checking
 				),
 			)
 			tadm.Serve(t)
@@ -2541,7 +2573,7 @@ func TestAdmin_DoNotSyncSealedReplicas_(t *testing.T) {
 		ghwm2    = types.GLSN(20)
 
 		tick           = 10 * time.Millisecond
-		reportInterval = 5
+		reportInterval = 5 * tick
 	)
 
 	var (
@@ -2635,14 +2667,14 @@ func TestAdmin_DoNotSyncSealedReplicas_(t *testing.T) {
 		admin.WithStorageNodeWatcherOptions(
 			snwatcher.WithTick(tick),
 			snwatcher.WithReportInterval(reportInterval),
-			snwatcher.WithHeartbeatTimeout(math.MaxInt), // no heartbeat checking
+			snwatcher.WithHeartbeatTimeout(time.Duration(math.MaxInt)), // no heartbeat checking
 		),
 		admin.WithLogStreamGCTimeout(math.MaxInt64), // no log stream gc
 	)
 	tadm.Serve(t)
 	defer tadm.Close(t)
 
-	time.Sleep(tick * reportInterval * 10)
+	time.Sleep(reportInterval * 10)
 }
 
 func TestAdmin_Trim(t *testing.T) {
@@ -2688,7 +2720,9 @@ func TestAdmin_Trim(t *testing.T) {
 				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStorageNodeWatcherOptions(
-					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithTick(time.Hour),             // no heartbeat checking
+					snwatcher.WithHeartbeatTimeout(time.Hour), // no heartbeat checking
+					snwatcher.WithReportInterval(time.Hour),   // no heartbeat checking
 				),
 			)
 			tadm.Serve(t)
@@ -2786,7 +2820,9 @@ func TestAdmin_GetMetadataRepositoryNode(t *testing.T) {
 				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStorageNodeWatcherOptions(
-					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithTick(time.Hour),             // no heartbeat checking
+					snwatcher.WithHeartbeatTimeout(time.Hour), // no heartbeat checking
+					snwatcher.WithReportInterval(time.Hour),   // no heartbeat checking
 				),
 			)
 			tadm.Serve(t)
@@ -2862,7 +2898,9 @@ func TestAdmin_ListMetadataRepositoryNodes(t *testing.T) {
 				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStorageNodeWatcherOptions(
-					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithTick(time.Hour),             // no heartbeat checking
+					snwatcher.WithHeartbeatTimeout(time.Hour), // no heartbeat checking
+					snwatcher.WithReportInterval(time.Hour),   // no heartbeat checking
 				),
 			)
 			tadm.Serve(t)
@@ -2957,7 +2995,9 @@ func TestAdmin_AddMetadataRepositoryNode(t *testing.T) {
 				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStorageNodeWatcherOptions(
-					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithTick(time.Hour),             // no heartbeat checking
+					snwatcher.WithHeartbeatTimeout(time.Hour), // no heartbeat checking
+					snwatcher.WithReportInterval(time.Hour),   // no heartbeat checking
 				),
 			)
 			tadm.Serve(t)
@@ -3035,7 +3075,9 @@ func TestAdmin_DeleteMetadataRepositoryNode(t *testing.T) {
 				admin.WithMetadataRepositoryManager(mock.MockMetadataRepositoryManager),
 				admin.WithStorageNodeManager(mock.MockStorageNodeManager),
 				admin.WithStorageNodeWatcherOptions(
-					snwatcher.WithTick(time.Hour), // no heartbeat checking
+					snwatcher.WithTick(time.Hour),             // no heartbeat checking
+					snwatcher.WithHeartbeatTimeout(time.Hour), // no heartbeat checking
+					snwatcher.WithReportInterval(time.Hour),   // no heartbeat checking
 				),
 			)
 			tadm.Serve(t)
