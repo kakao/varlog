@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"math/rand"
 	"net"
 	"slices"
 	"sort"
@@ -902,6 +903,22 @@ func (adm *Admin) seal(ctx context.Context, tpid types.TopicID, lsid types.LogSt
 	return adm.sealInternal(ctx, tpid, lsid)
 }
 
+// sealMeta seals the logstream metadata in metadata repository only.
+func (adm *Admin) sealMeta(ctx context.Context, lsid types.LogStreamID) (types.GLSN, error) {
+	adm.lockLogStreamStatus(lsid)
+	defer adm.unlockLogStreamStatus(lsid)
+
+	adm.statRepository.SetLogStreamStatus(lsid, varlogpb.LogStreamStatusSealing)
+
+	lastGLSN, err := adm.mrmgr.Seal(ctx, lsid)
+	if err != nil {
+		adm.statRepository.SetLogStreamStatus(lsid, varlogpb.LogStreamStatusRunning)
+		return types.InvalidGLSN, err
+	}
+
+	return lastGLSN, nil
+}
+
 func (adm *Admin) sealInternal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) ([]snpb.LogStreamReplicaMetadataDescriptor, types.GLSN, error) {
 	adm.statRepository.SetLogStreamStatus(lsid, varlogpb.LogStreamStatusSealing)
 
@@ -1092,18 +1109,40 @@ func (adm *Admin) removeMRPeer(ctx context.Context, raftURL string) error {
 	return nil
 }
 
+// HandleHeartbeatTimeout is called by snwatcher.
+// It seals all logstreams belonging to sn defined by snid.
+// Seal on metarepos first, as seal request on sn may be delayed.
+// Sealing metarepos is a high priority.
 func (adm *Admin) HandleHeartbeatTimeout(ctx context.Context, snid types.StorageNodeID) {
 	meta, err := adm.mrmgr.ClusterMetadataView().ClusterMetadata(ctx)
 	if err != nil {
 		return
 	}
 
-	// TODO: store sn status
+	target := make([]*varlogpb.LogStreamDescriptor, 0, len(meta.GetLogStreams()))
 	for _, ls := range meta.GetLogStreams() {
 		if ls.IsReplica(snid) {
-			adm.logger.Debug("seal due to heartbeat timeout", zap.Any("snid", snid), zap.Any("lsid", ls.LogStreamID))
-			_, _, _ = adm.seal(ctx, ls.TopicID, ls.LogStreamID)
+			target = append(target, ls)
 		}
+	}
+	rand.Shuffle(len(target), func(i, j int) { target[i], target[j] = target[j], target[i] })
+
+	for _, ls := range target {
+		_, err = adm.sealMeta(ctx, ls.LogStreamID)
+		if err != nil {
+			adm.logger.Error("seal to metarepos failed",
+				zap.Any("snid", snid),
+				zap.Any("lsid", ls.LogStreamID),
+				zap.Error(err))
+		}
+	}
+
+	hctx, cancel := context.WithTimeout(ctx, adm.storagenodeFailureHandleTimeout)
+	defer cancel()
+
+	for _, ls := range target {
+		adm.logger.Debug("seal due to heartbeat timeout", zap.Any("snid", snid), zap.Any("lsid", ls.LogStreamID))
+		_, _, _ = adm.seal(hctx, ls.TopicID, ls.LogStreamID)
 	}
 }
 

@@ -61,11 +61,18 @@ var (
 	}
 
 	flagSNWatcherHeartbeatCheckDeadline = flags.FlagDesc{
-		Name: "sn-watcher-heartbeat-check-deadline",
-		Envs: []string{"SN_WATCHER_HEARTBEAT_CHECK_DEADLINE"},
+		Name:  "sn-watcher-heartbeat-check-deadline",
+		Envs:  []string{"SN_WATCHER_HEARTBEAT_CHECK_DEADLINE"},
+		Usage: "dealine for heartbeat check request to storage node",
 	}
 	flagSNWatcherReportDeadline = flags.FlagDesc{
-		Name: "sn-watcher-report-deadline",
-		Envs: []string{"SN_WATCHER_REPORT_DEADLINE"},
+		Name:  "sn-watcher-report-deadline",
+		Envs:  []string{"SN_WATCHER_REPORT_DEADLINE"},
+		Usage: "dealine for report request to storage node",
+	}
+	flagSNWatcherHeartbeatTimeout = flags.FlagDesc{
+		Name:  "sn-watcher-heartbeat-timeout",
+		Envs:  []string{"SN_WATCHER_HEARTBEAT_TIMEOUT"},
+		Usage: "dealine to decide whether a storage node is live",
 	}
 )

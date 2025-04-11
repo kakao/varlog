@@ -54,7 +54,8 @@ func newStartCommand() *cli.Command {
 			flagMRConnTimeout.DurationFlag(false, mrmanager.DefaultMRConnTimeout),
 			flagMRCallTimeout.DurationFlag(false, mrmanager.DefaultMRCallTimeout),
 
-			flagSNWatcherHeartbeatCheckDeadline.DurationFlag(false, snwatcher.DefaultHeartbeatDeadline),
+			flagSNWatcherHeartbeatCheckDeadline.DurationFlag(false, snwatcher.DefaultHeartbeatCheckDeadline),
+			flagSNWatcherHeartbeatTimeout.DurationFlag(false, snwatcher.DefaultHeartbeatTimeout),
 			flagSNWatcherReportDeadline.DurationFlag(false, snwatcher.DefaultReportDeadline),
 
 			flags.GRPCServerReadBufferSize,
@@ -177,6 +178,7 @@ func start(c *cli.Context) error {
 		admin.WithMetadataRepositoryManager(mrMgr),
 		admin.WithStorageNodeManager(snMgr),
 		admin.WithStorageNodeWatcherOptions(
+			snwatcher.WithHeartbeatTimeout(c.Duration(flagSNWatcherHeartbeatTimeout.Name)),
 			snwatcher.WithHeartbeatCheckDeadline(c.Duration(flagSNWatcherHeartbeatCheckDeadline.Name)),
 			snwatcher.WithReportDeadline(c.Duration(flagSNWatcherReportDeadline.Name)),
 		),
