@@ -296,9 +296,8 @@ func (lse *Executor) Seal(_ context.Context, lastCommittedGLSN types.GLSN) (stat
 		return status, localHWM, nil
 	}
 
-	lse.resetInternalState(uncommittedBegin.LLSN-1, true)
-
 	lse.esm.store(executorStateSealed)
+	lse.resetInternalState(uncommittedBegin.LLSN-1, true)
 	return status, localHWM, nil
 }
 
