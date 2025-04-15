@@ -20,7 +20,7 @@ const (
 	defaultMetadataRefreshInterval = 1 * time.Minute
 	defaultMetadataRefreshTimeout  = 1 * time.Second
 
-	defaultSubscribeTimeout = 10 * time.Millisecond
+	defaultSubscribeTimeout = 100 * time.Millisecond
 
 	defaultDenyTTL            = 10 * time.Minute
 	defaultExpireDenyInterval = 1 * time.Second
