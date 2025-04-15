@@ -55,7 +55,6 @@ func (v *logImpl) subscribe(ctx context.Context, topicID types.TopicID, begin, e
 	tsm := &transmitter{
 		topicID:           topicID,
 		subscribers:       make(map[types.LogStreamID]*subscriber),
-		refresher:         v.refresher,
 		replicasRetriever: v.replicasRetriever,
 		logCLManager:      v.logCLManager,
 		sleq:              sleq,
@@ -273,7 +272,6 @@ func (s *subscriber) getLastSubscribeAt() time.Time {
 type transmitter struct {
 	topicID           types.TopicID
 	subscribers       map[types.LogStreamID]*subscriber
-	refresher         MetadataRefresher
 	replicasRetriever ReplicasRetriever
 	sleq              *subscribedLogEntriesQueue
 	wanted            types.GLSN
@@ -321,8 +319,6 @@ func (p *transmitter) transmit(ctx context.Context) {
 }
 
 func (p *transmitter) refreshSubscriber(ctx context.Context) error {
-	p.refresher.Refresh(ctx)
-
 	replicasMap := p.replicasRetriever.All(p.topicID)
 	for logStreamID, replicas := range replicasMap {
 		idx := 0
@@ -374,16 +370,9 @@ func (p *transmitter) refreshSubscriber(ctx context.Context) error {
 }
 
 func (p *transmitter) handleTimeout(ctx context.Context) {
-	l := make([]*subscriber, 0, len(p.subscribers))
 	for _, s := range p.subscribers {
 		if !s.complete.Load() && !s.closed.Load() &&
 			time.Since(s.getLastSubscribeAt()) >= p.timeout {
-			l = append(l, s)
-		}
-	}
-
-	if len(l) != len(p.subscribers) {
-		for _, s := range l {
 			s.stop()
 		}
 	}

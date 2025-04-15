@@ -1,9 +1,23 @@
 package varlog
 
 import (
+	"context"
+	"io"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
+
+	"github.com/kakao/varlog/internal/storagenode"
+	"github.com/kakao/varlog/internal/storagenode/client"
 	_ "github.com/kakao/varlog/internal/vtesting"
+	"github.com/kakao/varlog/pkg/types"
+	"github.com/kakao/varlog/pkg/util/runner"
+	"github.com/kakao/varlog/proto/snpb"
+	"github.com/kakao/varlog/proto/varlogpb"
 )
 
 func TestSubscribe(t *testing.T) {
@@ -214,4 +228,273 @@ func TestSubscribe(t *testing.T) {
 	//		})
 	//	})
 	//})
+}
+
+func TestSubscriberRefresh_Timeout(t *testing.T) {
+	const (
+		logStreamID      = types.LogStreamID(1)
+		minStorageNodeID = types.StorageNodeID(1)
+		topicID          = types.TopicID(1)
+	)
+	var (
+		begin = types.MinGLSN
+		end   = begin + 100
+	)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	metadataRefresher := NewMockMetadataRefresher(ctrl)
+	metadataRefresher.EXPECT().Refresh(gomock.Any()).Return().AnyTimes()
+	metadataRefresher.EXPECT().Metadata().Return(nil).AnyTimes()
+
+	leaderStorageNodeID := minStorageNodeID
+	followerStorageNodeID := minStorageNodeID + 1
+
+	leadersn := storagenode.TestNewRPCServer(t, ctrl, leaderStorageNodeID)
+	leadersn.Run()
+	defer leadersn.Close()
+
+	followersn := storagenode.TestNewRPCServer(t, ctrl, followerStorageNodeID)
+	followersn.Run()
+	defer followersn.Close()
+
+	replicasRetriever := NewMockReplicasRetriever(ctrl)
+	replicasMap := make(map[types.LogStreamID][]varlogpb.LogStreamReplica, 1)
+
+	replicasMap[logStreamID] = []varlogpb.LogStreamReplica{
+		{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: types.StorageNodeID(leaderStorageNodeID),
+				Address:       leadersn.Address(),
+			},
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: logStreamID,
+			},
+		},
+		{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: types.StorageNodeID(followerStorageNodeID),
+				Address:       followersn.Address(),
+			},
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: logStreamID,
+			},
+		},
+	}
+	replicasRetriever.EXPECT().All(topicID).Return(replicasMap).AnyTimes()
+
+	leadersn.MockLogIOServer.EXPECT().Subscribe(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ *snpb.SubscribeRequest, stream snpb.LogIO_SubscribeServer) (err error) {
+			ctx := stream.Context()
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	).Times(1)
+
+	followersn.MockLogIOServer.EXPECT().Subscribe(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(req *snpb.SubscribeRequest, stream snpb.LogIO_SubscribeServer) (err error) {
+			ctx := stream.Context()
+			glsn := req.GLSNBegin
+			llsn := types.LLSN(req.GLSNBegin)
+			rsp := &snpb.SubscribeResponse{}
+		Loop:
+			for {
+				select {
+				case <-ctx.Done():
+					err = ctx.Err()
+					break Loop
+				default:
+					if glsn == req.GLSNEnd {
+						break Loop
+					}
+
+					rsp.GLSN = glsn
+					rsp.LLSN = llsn
+					err = stream.SendMsg(rsp)
+					if err != nil {
+						break Loop
+					}
+
+					glsn++
+					llsn++
+				}
+			}
+			return err
+		},
+	).Times(1)
+
+	logCLManager, err := client.NewManager[*client.LogClient]()
+	require.NoError(t, err)
+	defer logCLManager.Close()
+
+	vlg := &logImpl{}
+	vlg.logger = zap.L()
+	vlg.runner = runner.New("varlog-test", zap.L())
+	vlg.replicasRetriever = replicasRetriever
+	vlg.refresher = metadataRefresher
+	vlg.logCLManager = logCLManager
+
+	expected := begin
+	var wg sync.WaitGroup
+	wg.Add(1)
+	onNext := func(logEntry varlogpb.LogEntry, err error) {
+		if err == io.EOF {
+			wg.Done()
+			return
+		}
+		require.Equal(t, expected, logEntry.GLSN)
+		expected++
+	}
+	closer, err := vlg.subscribe(context.TODO(), topicID, begin, end, onNext)
+	require.NoError(t, err)
+	wg.Wait()
+	closer()
+}
+
+func TestSubscriberRefresh_Reassign(t *testing.T) {
+	const (
+		logStreamID      = types.LogStreamID(1)
+		minStorageNodeID = types.StorageNodeID(1)
+		topicID          = types.TopicID(1)
+	)
+	var (
+		begin = types.MinGLSN
+		end   = begin + 100
+	)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	metadataRefresher := NewMockMetadataRefresher(ctrl)
+	metadataRefresher.EXPECT().Refresh(gomock.Any()).Return().AnyTimes()
+	metadataRefresher.EXPECT().Metadata().Return(nil).AnyTimes()
+
+	oldStorageNodeID := minStorageNodeID
+	newStorageNodeID := minStorageNodeID + 1
+
+	oldsn := storagenode.TestNewRPCServer(t, ctrl, oldStorageNodeID)
+	oldsn.Run()
+	defer oldsn.Close()
+
+	newsn := storagenode.TestNewRPCServer(t, ctrl, newStorageNodeID)
+	newsn.Run()
+	defer newsn.Close()
+
+	replicasRetriever := NewMockReplicasRetriever(ctrl)
+	replicasMap := make(map[types.LogStreamID][]varlogpb.LogStreamReplica, 1)
+
+	var mu sync.Mutex
+
+	replicasMap[logStreamID] = []varlogpb.LogStreamReplica{
+		{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: types.StorageNodeID(oldStorageNodeID),
+				Address:       oldsn.Address(),
+			},
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: logStreamID,
+			},
+		},
+	}
+
+	replicasRetriever.EXPECT().All(topicID).DoAndReturn(
+		func(_ types.TopicID) map[types.LogStreamID][]varlogpb.LogStreamReplica {
+			m := make(map[types.LogStreamID][]varlogpb.LogStreamReplica, 1)
+			mu.Lock()
+
+			for logStreamID, entry := range replicasMap {
+				m[logStreamID] = entry
+			}
+
+			mu.Unlock()
+
+			return m
+		}).AnyTimes()
+
+	oldsn.MockLogIOServer.EXPECT().Subscribe(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ *snpb.SubscribeRequest, stream snpb.LogIO_SubscribeServer) (err error) {
+			ctx := stream.Context()
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	).MinTimes(1)
+
+	newsn.MockLogIOServer.EXPECT().Subscribe(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(req *snpb.SubscribeRequest, stream snpb.LogIO_SubscribeServer) (err error) {
+			ctx := stream.Context()
+			glsn := req.GLSNBegin
+			llsn := types.LLSN(req.GLSNBegin)
+			rsp := &snpb.SubscribeResponse{}
+		Loop:
+			for {
+				select {
+				case <-ctx.Done():
+					err = ctx.Err()
+					break Loop
+				default:
+					if glsn == req.GLSNEnd {
+						break Loop
+					}
+
+					rsp.GLSN = glsn
+					rsp.LLSN = llsn
+					err = stream.SendMsg(rsp)
+					if err != nil {
+						break Loop
+					}
+
+					glsn++
+					llsn++
+				}
+			}
+			return err
+		},
+	).Times(1)
+
+	logCLManager, err := client.NewManager[*client.LogClient]()
+	require.NoError(t, err)
+	defer logCLManager.Close()
+
+	vlg := &logImpl{}
+	vlg.logger = zap.L()
+	vlg.runner = runner.New("varlog-test", zap.L())
+	vlg.replicasRetriever = replicasRetriever
+	vlg.refresher = metadataRefresher
+	vlg.logCLManager = logCLManager
+
+	expected := begin
+	var wg sync.WaitGroup
+	wg.Add(1)
+	onNext := func(logEntry varlogpb.LogEntry, err error) {
+		if err == io.EOF {
+			wg.Done()
+			return
+		}
+		require.Equal(t, expected, logEntry.GLSN)
+		expected++
+	}
+	closer, err := vlg.subscribe(context.TODO(), topicID, begin, end, onNext)
+	require.NoError(t, err)
+
+	// reassign
+	time.Sleep(time.Second)
+	mu.Lock()
+
+	replicasMap[logStreamID] = []varlogpb.LogStreamReplica{
+		{
+			StorageNode: varlogpb.StorageNode{
+				StorageNodeID: types.StorageNodeID(newStorageNodeID),
+				Address:       newsn.Address(),
+			},
+			TopicLogStream: varlogpb.TopicLogStream{
+				LogStreamID: logStreamID,
+			},
+		},
+	}
+
+	mu.Unlock()
+
+	wg.Wait()
+	closer()
 }
