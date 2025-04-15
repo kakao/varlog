@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.26.0](https://github.com/kakao/varlog/compare/v0.25.0...v0.26.0) (2025-04-15)
+
+
+### Features
+
+* **client:** enhance PeekLogStream with status return value ([bf497dc](https://github.com/kakao/varlog/commit/bf497dc4b098aa99240621708fd18a97af3d56c0))
+* **logstream:** deprecate error field in AppendResult for atomic append ([e072e4d](https://github.com/kakao/varlog/commit/e072e4d009df3d6de99778b4a6b1b5c951b99e5c))
+* **logstream:** introduce commit wait task for append batch ([30645f0](https://github.com/kakao/varlog/commit/30645f04005bd9a36431c27cf337a7ae9ea83a99))
+* **logstream:** remove deprecated LLSN field from ReplicateRequest ([c2663cc](https://github.com/kakao/varlog/commit/c2663cc620500e963219dedddd453b58d36c404e))
+* **metarepos:** add GetReports, GetCommitResult rpc ([b88a6c1](https://github.com/kakao/varlog/commit/b88a6c1551a19a3da4f2cf3d883210260b527601))
+* **metarepos:** add metric for count of commit result history ([029a36e](https://github.com/kakao/varlog/commit/029a36e1d06ca3626efebb5171f6cce04c51b902))
+* **storage:** add separate sync/wal options for data and commit DBs ([0ee44c3](https://github.com/kakao/varlog/commit/0ee44c323ae8ae30e630d5ed85dce08f032b709b))
+* **storagenode:** add empty payload validation ([feccb64](https://github.com/kakao/varlog/commit/feccb64fb1476254116c853d6ec063daa105bced))
+* **storagenode:** remove package internal/batchlet ([42003ae](https://github.com/kakao/varlog/commit/42003ae73cba59f4eea0a884f61a1003ddedfbc7))
+* support zap logger's development mode ([00e4836](https://github.com/kakao/varlog/commit/00e48364eab2ba0f7457d41ce632aeb1a83e7356))
+* **telemetry:** Support both new and deprecated OpenTelemetry runtime metrics ([5b6f3e3](https://github.com/kakao/varlog/commit/5b6f3e357201040767464fb84c9cc64624061223))
+
+
+### Bug Fixes
+
+* **admin:** handle heartbeat timeout ([36ebaa8](https://github.com/kakao/varlog/commit/36ebaa8d63182a15bb6f56649011004649c7105d))
+* **admin:** seal replicas in parallell ([aaf494d](https://github.com/kakao/varlog/commit/aaf494d3c8722e9dfc0c2966e06d64f2e121953d))
+* **metarepos:** reportCollector handles invalid report propertly ([f5f7273](https://github.com/kakao/varlog/commit/f5f7273c9dacc5d93c0c49eb256e5176756009f7))
+* **storagenode:** handle unexpected LLSN errors ([f39c1b8](https://github.com/kakao/varlog/commit/f39c1b8b3c05326739e2c302d6c30075a3f9e2f5))
+* **storagenode:** handle unsealing of already appendable log streams ([6836037](https://github.com/kakao/varlog/commit/68360376ca6fb5257ecd0da09f7ebe8796a60968))
+* **storagenode:** prevent panic during concurrent commit & seal ops ([20e8d23](https://github.com/kakao/varlog/commit/20e8d237a61a2b2d7fcb10a3e4a126100fe9ff3e))
+* **storagenode:** prevent panic during replica sealing in synchronization ([98f379a](https://github.com/kakao/varlog/commit/98f379a0c68f199b0363a7e7bcde8a532026f291))
+* **subscriber:** fix refresh subscriber ([9cf88cb](https://github.com/kakao/varlog/commit/9cf88cba1d4672606113164e9cab18468e41268a))
+
+
+### Performance Improvements
+
+* **logstream:** remove llsnList from replicateTask ([2ce0a9d](https://github.com/kakao/varlog/commit/2ce0a9dd68cc94d18babe1e99ae2a4178fd718ec))
+* **reportCollector:** reduce calling sampleTracer.report ([0faea11](https://github.com/kakao/varlog/commit/0faea11e1e761a576b9d8b4d4ddc52e4ffcad954))
+
 ## [0.25.0](https://github.com/kakao/varlog/compare/v0.24.0...v0.25.0) (2025-02-21)
 
 
