@@ -60,22 +60,6 @@ var (
 		EnvVars:  []string{"GRPC_SERVER_SHARED_WRITE_BUFFER"},
 		Usage:    "Enable sharing gRPC server's transport write buffer across connections. If not set, each connection will allocate its own write buffer.",
 	}
-	// GRPCServerMaxRecvMsgSize is a flag to set the maximum message size the server can receive.
-	//
-	// See:
-	//   - https://pkg.go.dev/google.golang.org/grpc#MaxRecvMsgSize
-	GRPCServerMaxRecvMsgSize = &cli.StringFlag{
-		Name:     "grpc-server-max-recv-msg-size",
-		Category: CategoryGRPC,
-		EnvVars:  []string{"GRPC_SERVER_MAX_RECV_MSG_SIZE"},
-		Usage:    "Set the maximum message size in bytes that the gRPC server can receive. If not set, the default value of 4MiB defined by gRPC will be used.",
-		Action: func(c *cli.Context, value string) error {
-			if _, err := units.FromByteSizeString(value); err != nil {
-				return fmt.Errorf("invalid value \"%s\" for flag --grpc-server-max-recv-msg-size", value)
-			}
-			return nil
-		},
-	}
 	// GRPCServerInitialConnWindowSize is a flag to set the gRPC server's initial window size for a connection.
 	//
 	// See:
@@ -203,13 +187,6 @@ func ParseGRPCServerOptionFlags(c *cli.Context) (opts []grpc.ServerOption, _ err
 		opts = append(opts, grpc.WriteBufferSize(int(writeBufferSize)))
 	}
 	opts = append(opts, grpc.SharedWriteBuffer(c.Bool(GRPCServerSharedWriteBuffer.Name)))
-	if c.IsSet(GRPCServerMaxRecvMsgSize.Name) {
-		maxRecvMsgSize, err := units.FromByteSizeString(c.String(GRPCServerMaxRecvMsgSize.Name))
-		if err != nil {
-			return nil, err
-		}
-		opts = append(opts, grpc.MaxRecvMsgSize(int(maxRecvMsgSize)))
-	}
 	if c.IsSet(GRPCServerInitialConnWindowSize.Name) {
 		initialConnWindowSize, err := units.FromByteSizeString(c.String(GRPCServerInitialConnWindowSize.Name), 0, math.MaxInt32)
 		if err != nil {

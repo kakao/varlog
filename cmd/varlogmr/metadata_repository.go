@@ -137,7 +137,6 @@ func initCLI() *cli.App {
 				flags.GRPCServerReadBufferSize,
 				flags.GRPCServerWriteBufferSize,
 				flags.GRPCServerSharedWriteBuffer,
-				flags.GRPCServerMaxRecvMsgSize,
 				flags.GRPCServerInitialConnWindowSize,
 				flags.GRPCServerInitialWindowSize,
 				flags.GRPCClientReadBufferSize,

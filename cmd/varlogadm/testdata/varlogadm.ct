@@ -74,7 +74,6 @@ OPTIONS:
    --grpc-client-write-buffer-size value         Set the gRPC client's write buffer size for a single write syscall. If not set, the default value of 32KiB defined by gRPC will be used. [$GRPC_CLIENT_WRITE_BUFFER_SIZE]
    --grpc-server-initial-conn-window-size value  Set the gRPC server's initial window size for a connection. If not set, the default value of 64KiB defined by gRPC will be used. [$GRPC_SERVER_INITIAL_CONN_WINDOW_SIZE]
    --grpc-server-initial-window-size value       Set the gRPC server's initial window size for a stream. If not set, the default value of 64KiB defined by gRPC will be used. [$GRPC_SERVER_INITIAL_WINDOW_SIZE]
-   --grpc-server-max-recv-msg-size value         Set the maximum message size in bytes that the gRPC server can receive. If not set, the default value of 4MiB defined by gRPC will be used. [$GRPC_SERVER_MAX_RECV_MSG_SIZE]
    --grpc-server-read-buffer-size value          Set the gRPC server's read buffer size for a single read syscall. If not set, the default value of 32KiB defined by gRPC will be used. [$GRPC_SERVER_READ_BUFFER_SIZE]
    --grpc-server-shared-write-buffer             Enable sharing gRPC server's transport write buffer across connections. If not set, each connection will allocate its own write buffer. (default: false) [$GRPC_SERVER_SHARED_WRITE_BUFFER]
    --grpc-server-write-buffer-size value         Set the gRPC server's write buffer size for a single write syscall. If not set, the default value of 32KiB defined by gRPC will be used. [$GRPC_SERVER_WRITE_BUFFER_SIZE]
