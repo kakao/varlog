@@ -4,13 +4,34 @@ import (
 	"context"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 )
 
-var defaultDialOption = []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+const (
+	// clientKeepaliveInterval defines the time interval for client-side
+	// keepalive pings. It is set to 10 seconds since the minimum value
+	// supported by gRPC is 10 seconds.
+	clientKeepaliveInterval = 10 * time.Second
+
+	// clientKeepaliveTimeout specifies the timeout for client-side keepalive
+	// pings. It is set to 1500ms (3*network timeout) to allow sufficient time
+	// for transient network issues to resolve.
+	clientKeepaliveTimeout = 3 * networkTimeout
+)
+
+var defaultDialOption = []grpc.DialOption{
+	grpc.WithTransportCredentials(insecure.NewCredentials()),
+	grpc.WithKeepaliveParams(keepalive.ClientParameters{
+		Time:                clientKeepaliveInterval,
+		Timeout:             clientKeepaliveTimeout,
+		PermitWithoutStream: true,
+	}),
+}
 
 type Conn struct {
 	Conn *grpc.ClientConn
