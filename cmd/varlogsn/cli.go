@@ -48,7 +48,6 @@ func newStartCommand() *cli.Command {
 			flags.GRPCServerReadBufferSize,
 			flags.GRPCServerWriteBufferSize,
 			flags.GRPCServerSharedWriteBuffer,
-			flags.GRPCServerMaxRecvMsgSize,
 			flags.GRPCServerInitialConnWindowSize,
 			flags.GRPCServerInitialWindowSize,
 			flags.GRPCClientReadBufferSize,
