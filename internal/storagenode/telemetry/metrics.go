@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/puzpuzpuz/xsync/v2"
 	"go.opentelemetry.io/otel/attribute"
@@ -252,32 +253,51 @@ type Metrics struct {
 func RegisterMetrics(meter metric.Meter) (m *Metrics, err error) {
 	m = &Metrics{}
 
+	var boundaries []float64
+	// 100us, 200us, ... 1000us
+	for dur := 100 * time.Microsecond; dur <= 1000*time.Microsecond; dur += 100 * time.Microsecond {
+		boundaries = append(boundaries, float64(dur.Nanoseconds())/1000.0)
+	}
+	// 2ms, 12ms, 14ms, ..., 100ms
+	for dur := 2 * time.Millisecond; dur <= 100*time.Millisecond; dur += 2 * time.Millisecond {
+		boundaries = append(boundaries, float64(dur.Nanoseconds())/1000.0)
+	}
+	// 150ms, 200ms, ... , 3000ms
+	for dur := 150 * time.Millisecond; dur <= 3000*time.Millisecond; dur += 50 * time.Millisecond {
+		boundaries = append(boundaries, float64(dur.Nanoseconds())/1000.0)
+	}
 	m.logRPCServerDuration, err = meter.Int64Histogram(
 		"log_rpc.server.duration",
 		metric.WithDescription("Time spent processing inbound RPC in microseconds."),
 		metric.WithUnit("us"),
-		metric.WithExplicitBucketBoundaries(
-			200, 400, 600, 800, // 200us, 400us, 600us, 800us
-			1_000, 2_000, 4_000, 6_000, 8_000, // 1ms, 2ms, 4ms, 6ms, 8ms
-			10_000, 20_000, 40_000, 60_000, 80_000, // 10ms, 20ms, 40ms, 60ms, 80ms
-			100_000, 150_000, 200_000, 250_000, // 100ms, 150ms, 200ms, 250ms
-			500_000, 600_000, 700_000, 800_000, 900_000, // 500ms, 600ms, 700ms, 800ms
-			1_000_000, 2_000_000, 4_000_000, 6_000_000, 8_000_000, 10_000_000, // 1s, 2s, 4s, 6s, 8s, 10s
-		),
+		metric.WithExplicitBucketBoundaries(boundaries...),
 	)
 	if err != nil {
 		return nil, err
 	}
 
+	boundaries = nil
+	// 100B, 200B, 300B, ..., 1000B
+	for sz := 100; sz <= 1000; sz += 100 {
+		boundaries = append(boundaries, float64(sz))
+	}
+	// 5KB, 10KB, 15KB, ..., 100KB
+	for sz := 5_000; sz <= 100_000; sz += 5_000 {
+		boundaries = append(boundaries, float64(sz))
+	}
+	// 150KB, 200KB, ..., 1000KB (1MB)
+	for sz := 150_000; sz <= 1000_000; sz += 50_000 {
+		boundaries = append(boundaries, float64(sz))
+	}
+	// 1500KB, 2000KB, ..., 20000KB (20MB)
+	for sz := 1500_000; sz <= 20_000_000; sz += 500_000 {
+		boundaries = append(boundaries, float64(sz))
+	}
 	m.logRPCServerLogEntrySize, err = meter.Int64Histogram(
 		"log_rpc.server.log_entry.size",
 		metric.WithDescription("Size of appended log entries."),
 		metric.WithUnit("By"),
-		metric.WithExplicitBucketBoundaries(
-			1<<10, 2<<10, 4<<10, 8<<10, 16<<10, // 1KiB, 2KiB, 4KiB, 8KiB, 16KiB
-			32<<10, 64<<10, 128<<10, 256<<10, 512<<10, // 32KiB, 64KiB, 128KiB, 256KiB, 512KiB
-			1<<20, 2<<20, 4<<20, 8<<20, 16<<20, 32<<20, 64<<20, // 1MiB, 2MiB, 4MiB, 8MiB, 16MiB, 32MiB, 64MiB
-		),
+		metric.WithExplicitBucketBoundaries(boundaries...),
 	)
 	if err != nil {
 		return nil, err
@@ -287,11 +307,7 @@ func RegisterMetrics(meter metric.Meter) (m *Metrics, err error) {
 		"log_rpc.server.batch.size",
 		metric.WithDescription("Size of appended log entry batches."),
 		metric.WithUnit("By"),
-		metric.WithExplicitBucketBoundaries(
-			1<<10, 2<<10, 4<<10, 8<<10, 16<<10, // 1KiB, 2KiB, 4KiB, 8KiB, 16KiB
-			32<<10, 64<<10, 128<<10, 256<<10, 512<<10, // 32KiB, 64KiB, 128KiB, 256KiB, 512KiB
-			1<<20, 2<<20, 4<<20, 8<<20, 16<<20, 32<<20, 64<<20, // 1MiB, 2MiB, 4MiB, 8MiB, 16MiB, 32MiB, 64MiB
-		),
+		metric.WithExplicitBucketBoundaries(boundaries...),
 	)
 	if err != nil {
 		return nil, err
