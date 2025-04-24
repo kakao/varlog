@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"slices"
+	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/host"
 	"go.opentelemetry.io/contrib/instrumentation/runtime"
@@ -52,6 +53,19 @@ func NewMeterProvider(opts ...MeterProviderOption) (metric.MeterProvider, StopMe
 	}
 	if cfg.runtimeInstrumentation {
 		// It customizes the bucket size of the process.runtime.go.gc.pause_ns.
+		var boundaries []float64
+		// 50us, 100us, 150us, ..., 1ms
+		for dur := 50 * time.Microsecond; dur <= time.Millisecond; dur += 50 * time.Microsecond {
+			boundaries = append(boundaries, float64(dur))
+		}
+		// 5ms, 10ms, 15ms, 20ms, 25ms, 30ms, ..., 95ms
+		for dur := 5 * time.Millisecond; dur < 100*time.Millisecond; dur += 5 * time.Millisecond {
+			boundaries = append(boundaries, float64(dur))
+		}
+		// 100ms, 200ms, 300ms, ..., 1000ms
+		for dur := 100 * time.Millisecond; dur <= 1000*time.Millisecond; dur += 100 * time.Millisecond {
+			boundaries = append(boundaries, float64(dur))
+		}
 		mpOpts = append(mpOpts,
 			metricsdk.WithView(metricsdk.NewView(
 				metricsdk.Instrument{
@@ -59,11 +73,7 @@ func NewMeterProvider(opts ...MeterProviderOption) (metric.MeterProvider, StopMe
 				},
 				metricsdk.Stream{
 					Aggregation: metricsdk.AggregationExplicitBucketHistogram{
-						// 1ns, 10ns, 100ns,
-						// 1_000ns(1us), 10_000ns(10us), 100_000ns(100us),
-						// 1_000_000ns(1ms), 10_000_000ns(10ms), 100_000_000ns(100ms)
-						// 1_000_000_000ns(1s)
-						Boundaries: []float64{1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9},
+						Boundaries: boundaries,
 					},
 				},
 			)),
