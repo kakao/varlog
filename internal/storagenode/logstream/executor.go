@@ -461,7 +461,13 @@ func (lse *Executor) Commit(ctx context.Context, commitResult snpb.LogStreamComm
 
 	if types.Version(atomic.LoadUint64(&lse.prevCommitVersion)) != commitResult.Version {
 		if ce := lse.logger.Check(zap.DebugLevel, "commit"); ce != nil {
-			ce.Write(zap.String("commit_result", commitResult.String()))
+			ce.Write(
+				zap.Uint64("version", uint64(commitResult.Version)),
+				zap.Uint64("highWatermark", uint64(commitResult.HighWatermark)),
+				zap.Uint64("committedLLSNOffset", uint64(commitResult.CommittedLLSNOffset)),
+				zap.Uint64("committedGLSNOffset", uint64(commitResult.CommittedGLSNOffset)),
+				zap.Uint64("committedGLSNLength", commitResult.CommittedGLSNLength),
+			)
 		}
 		atomic.StoreUint64(&lse.prevCommitVersion, uint64(commitResult.Version))
 	}
