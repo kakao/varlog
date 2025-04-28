@@ -2,11 +2,155 @@ package snpb
 
 import (
 	"testing"
+	"unsafe"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/kakao/varlog/pkg/types"
 )
+
+func getPointers[S ~[]E, E any](elems S) []uintptr {
+	ptrs := make([]uintptr, len(elems))
+	for i := range elems {
+		p := uintptr(unsafe.Pointer(&elems[i]))
+		ptrs[i] = p
+	}
+	return ptrs
+}
+
+func get2DPointers[S ~[][]E, E any](elems S) [][]uintptr {
+	ptrs := make([][]uintptr, len(elems))
+	for i := range elems {
+		ptrs[i] = getPointers(elems[i])
+	}
+	return ptrs
+}
+
+func TestReplicateRequest(t *testing.T) {
+	smallRequest := ReplicateRequest{
+		Data:      [][]byte{[]byte("I")},
+		BeginLLSN: types.LLSN(1),
+	}
+	smallPayload, err := smallRequest.Marshal()
+	require.NoError(t, err)
+
+	mediumRequest := ReplicateRequest{
+		Data:      [][]byte{[]byte("XI"), []byte("XII"), []byte("XIII"), []byte("XIV"), []byte("XV")},
+		BeginLLSN: types.LLSN(11),
+	}
+	mediumPayload, err := mediumRequest.Marshal()
+	require.NoError(t, err)
+
+	largeRequest := ReplicateRequest{
+		Data:      [][]byte{[]byte("XXI"), []byte("XXII"), []byte("XXIII"), []byte("XXIV"), []byte("XXV"), []byte("XXVI"), []byte("XXVII"), []byte("XXVIII"), []byte("XXIX"), []byte("XXX")},
+		BeginLLSN: types.LLSN(21),
+	}
+	laregePayload, err := largeRequest.Marshal()
+	require.NoError(t, err)
+
+	t.Run("EqualLength", func(t *testing.T) {
+		tcs := []struct {
+			name    string
+			req     ReplicateRequest
+			payload []byte
+		}{
+			{
+				name:    "Small",
+				req:     smallRequest,
+				payload: smallPayload,
+			},
+			{
+				name:    "Medium",
+				req:     mediumRequest,
+				payload: mediumPayload,
+			},
+			{
+				name:    "Large",
+				req:     largeRequest,
+				payload: laregePayload,
+			},
+		}
+
+		for _, tc := range tcs {
+			t.Run(tc.name, func(t *testing.T) {
+				var req ReplicateRequest
+
+				err := req.Unmarshal(tc.payload)
+				require.NoError(t, err)
+				require.Equal(t, tc.req, req)
+				wantDataPtrs := get2DPointers(req.Data)
+
+				req.ResetReuse()
+				err = req.Unmarshal(tc.payload)
+				require.NoError(t, err)
+				require.Equal(t, tc.req, req)
+				gotDataPtrs := get2DPointers(req.Data)
+
+				require.Equal(t, wantDataPtrs, gotDataPtrs)
+			})
+		}
+	})
+
+	t.Run("GrowingLengthGrowingCapacity", func(t *testing.T) {
+		var req ReplicateRequest
+
+		err := req.Unmarshal(smallPayload)
+		require.NoError(t, err)
+		require.Equal(t, smallRequest, req)
+		smallDataPtrs := get2DPointers(req.Data)
+		smallDataCap := cap(req.Data)
+
+		req.ResetReuse()
+		err = req.Unmarshal(mediumPayload)
+		require.NoError(t, err)
+		require.Equal(t, mediumRequest, req)
+		mediumDataPtrs := get2DPointers(req.Data)
+		mediumDataCap := cap(req.Data)
+
+		require.NotEqual(t, smallDataPtrs, mediumDataPtrs)
+		require.Less(t, smallDataCap, mediumDataCap)
+
+		req.ResetReuse()
+		err = req.Unmarshal(laregePayload)
+		require.NoError(t, err)
+		require.Equal(t, largeRequest, req)
+		largeDataPtrs := get2DPointers(req.Data)
+		largeDataCap := cap(req.Data)
+
+		require.NotEqual(t, mediumDataPtrs, largeDataPtrs)
+		require.Less(t, mediumDataCap, largeDataCap)
+	})
+
+	t.Run("ShrinkingLengthEqualCapacity", func(t *testing.T) {
+		var req ReplicateRequest
+
+		err := req.Unmarshal(laregePayload)
+		require.NoError(t, err)
+		require.Equal(t, largeRequest, req)
+		largeDataPtrs := get2DPointers(req.Data)
+		largeDataCap := cap(req.Data)
+
+		req.ResetReuse()
+		err = req.Unmarshal(mediumPayload)
+		require.NoError(t, err)
+		require.Equal(t, mediumRequest, req)
+		mediumDataPtrs := get2DPointers(req.Data)
+		mediumDataCap := cap(req.Data)
+
+		require.NotEqual(t, largeDataPtrs, mediumDataPtrs)
+		require.Equal(t, largeDataCap, mediumDataCap)
+
+		req.ResetReuse()
+		err = req.Unmarshal(smallPayload)
+		require.NoError(t, err)
+		require.Equal(t, smallRequest, req)
+		smallDataPtrs := get2DPointers(req.Data)
+		smallDataCap := cap(req.Data)
+
+		require.NotEqual(t, mediumDataPtrs, smallDataPtrs)
+		require.Equal(t, mediumDataCap, smallDataCap)
+	})
+}
 
 func TestSyncPositionInvalid(t *testing.T) {
 	tcs := []struct {

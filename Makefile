@@ -106,13 +106,49 @@ PROTO_SRCS := $(shell find . -name "*.proto" -not -path "./vendor/*")
 PROTO_PBS := $(PROTO_SRCS:.proto=.pb.go)
 PROTO_INCS := -I$(GOPATH)/src -I$(CURDIR)/proto -I$(CURDIR)/vendor
 
-.PHONY: proto proto-check
+.PHONY: proto proto-check proto-patch apply-proto-patch
 proto: $(PROTO_PBS)
 $(PROTO_PBS): $(PROTO_SRCS)
-	@echo $(PROTOC)
 	for src in $^ ; do \
 		$(PROTOC) $(PROTO_INCS) \
 		--gogo_out=plugins=grpc,Mgoogle/protobuf/empty.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,Mgoogle/protobuf/duration.proto=github.com/gogo/protobuf/types,paths=source_relative:. $$src ; \
+	done
+	$(MAKE) fmt
+	$(MAKE) apply-proto-patch
+
+PATCH_DIR := $(CURDIR)/proto/patches
+PATCHED_PBS := $(CURDIR)/proto/snpb/replicator.pb.go
+proto-patch:
+	@for pb_file in $(PATCHED_PBS); do \
+		echo "Generating patch for $$pb_file"; \
+		base_name=$$(basename "$$pb_file"); \
+		relative_pb_path="$${pb_file#$(CURDIR)/proto/}"; \
+		relative_pb_dir=$$(dirname "$$relative_pb_path"); \
+		target_patch_dir="$(PATCH_DIR)/$$relative_pb_dir"; \
+		patch_file="$$target_patch_dir/$$base_name.patch"; \
+		diff_output=$$(git diff -- "$$pb_file"); \
+		if [ -n "$$diff_output" ]; then \
+			echo "$$diff_output" > "$$patch_file"; \
+			echo "Patch file created: $$patch_file"; \
+		fi; \
+	done
+
+apply-proto-patch:
+	@find $(PATCH_DIR) -type f -name "*.patch" -print0 | while IFS= read -r -d $$'\0' patch_file; do \
+		echo "--- Processing: $$patch_file"; \
+		if git apply -R --check "$$patch_file" > /dev/null 2>&1; then \
+			echo "    Already applied (skip)"; \
+			continue; \
+		fi; \
+		if ! git apply --check "$$patch_file"; then \
+			echo "    Potential conflict" >&2; \
+			exit 1; \
+		fi; \
+		if ! git apply --verbose "$$patch_file"; then \
+			echo "    Failed unexpectedly" >&2; \
+			exit 1; \
+		fi; \
+		echo "    Patch applied"; \
 	done
 
 proto-check:
