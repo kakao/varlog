@@ -67,7 +67,11 @@ func (rcs reportCommitServer) CommitBatch(stream snpb.LogStreamReporter_CommitBa
 	req := &snpb.CommitBatchRequest{}
 	ctx := stream.Context()
 	for {
+		commitResults := req.CommitResults
+		commitResults = commitResults[:0]
 		req.Reset()
+		req.CommitResults = commitResults
+
 		err = stream.RecvMsg(req)
 		if err == io.EOF {
 			return nil
