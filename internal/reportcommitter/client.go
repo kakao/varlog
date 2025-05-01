@@ -5,7 +5,6 @@ package reportcommitter
 import (
 	"context"
 	"io"
-	"sync"
 
 	"go.uber.org/multierr"
 	"google.golang.org/grpc"
@@ -14,8 +13,10 @@ import (
 	"github.com/kakao/varlog/proto/snpb"
 )
 
-// Client contains the functionality of bi-directional communication about local
-// log stream and global log stream.
+// Client establishes a connection to a storage node for retrieving reports and
+// sending commit results. GetReport and CommitBatch can be invoked
+// concurrently by different goroutines. However, GetReport must not be invoked
+// concurrently by multiple goroutines, and the same applies to CommitBatch.
 type Client interface {
 	GetReport() (*snpb.GetReportResponse, error)
 	CommitBatch(snpb.CommitBatchRequest) error
@@ -26,15 +27,10 @@ type client struct {
 	rpcConn   *rpc.Conn
 	rpcClient snpb.LogStreamReporterClient
 
-	// TODO(jun): If each reportCollectorExecutor that belongs to the same storage node
-	// instantiates the client by using NewClientWithConn with the same rpc.Conn, mutex
-	// muCommitStream can be removed.
-	reportStream   snpb.LogStreamReporter_GetReportClient
-	muReportStream sync.Mutex
-	getReportReq   snpb.GetReportRequest
+	reportStream snpb.LogStreamReporter_GetReportClient
+	getReportReq snpb.GetReportRequest
 
 	commitBatchStream snpb.LogStreamReporter_CommitBatchClient
-	muCommitStream    sync.Mutex
 }
 
 func NewClient(ctx context.Context, address string, grpcDialOptions ...grpc.DialOption) (cl Client, err error) {
@@ -78,11 +74,12 @@ func NewClientWithConn(ctx context.Context, rpcConn *rpc.Conn) (Client, error) {
 	return cl, nil
 }
 
+// GetReport retrieves log stream reports from the connected storage node. This
+// method is not safe for concurrent use by multiple goroutines. Multiple
+// goroutines must not call GetReport concurrently.
+//
 // FIXME(jun): add response parameter to return the response without creating a new object.
 func (c *client) GetReport() (*snpb.GetReportResponse, error) {
-	c.muReportStream.Lock()
-	defer c.muReportStream.Unlock()
-
 	if err := c.reportStream.Send(&c.getReportReq); err != nil {
 		return nil, err
 	}
@@ -97,10 +94,10 @@ func (c *client) GetReport() (*snpb.GetReportResponse, error) {
 	return rsp, nil
 }
 
+// CommitBatch sends commit results to the connected storage node. This method
+// is not safe for concurrent use by multiple goroutines. Multiple goroutines
+// must not call CommitBatch concurrently.
 func (c *client) CommitBatch(cr snpb.CommitBatchRequest) (err error) {
-	c.muCommitStream.Lock()
-	defer c.muCommitStream.Unlock()
-
 	// Do not handle io.EOF
 	err = c.commitBatchStream.Send(&cr)
 	if err != nil {
