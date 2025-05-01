@@ -4,7 +4,6 @@ package reportcommitter
 
 import (
 	"context"
-	"io"
 
 	"go.uber.org/multierr"
 	"google.golang.org/grpc"
@@ -83,15 +82,7 @@ func (c *client) GetReport() (*snpb.GetReportResponse, error) {
 	if err := c.reportStream.Send(&c.getReportReq); err != nil {
 		return nil, err
 	}
-	rsp, err := c.reportStream.Recv()
-	if err != nil {
-		if err == io.EOF {
-			// NOTE(jun,pharrell): Zero value of GetReportResponse should be handled.
-			return &snpb.GetReportResponse{}, nil
-		}
-		return nil, err
-	}
-	return rsp, nil
+	return c.reportStream.Recv()
 }
 
 // CommitBatch sends commit results to the connected storage node. This method

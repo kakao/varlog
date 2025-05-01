@@ -3,6 +3,7 @@ package metarepos
 import (
 	"context"
 	"errors"
+	"io"
 	"sort"
 	"sync"
 	"time"
@@ -19,7 +20,9 @@ import (
 )
 
 const DefaultReportRefreshTime = time.Second
+
 const DefaultCatchupRefreshTime = 3 * time.Millisecond
+
 const DefaultSampleReportsRate = 10000
 
 type sampleTracer struct {
@@ -630,6 +633,9 @@ func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
 
 	response, err := cli.GetReport()
 	if err != nil {
+		if err == io.EOF {
+			return nil
+		}
 		rce.closeClient(cli)
 		return err
 	}
@@ -645,6 +651,10 @@ func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
 	return nil
 }
 
+// processReport computes the difference between the current and previous
+// uncommit reports. The current report is provided as the `response` parameter
+// of type `*snpb.GetReportResponse`. It returns a diff report of type
+// `*mrpb.StorageNodeUncommitReport`.
 func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse) *mrpb.StorageNodeUncommitReport {
 	report := mrpb.NewStorageNodeUncommitReport(response.StorageNodeID)
 	report.UncommitReports = response.UncommitReports
@@ -759,7 +769,6 @@ func (rce *reportCollectExecutor) lookupNextCommitResults(ver types.Version) (*m
 }
 
 func newLogStreamCommitter(topicID types.TopicID, lsID types.LogStreamID, helper commitHelper, ver types.Version, status varlogpb.LogStreamStatus, sampleTracer *sampleTracer, tmStub *telemetryStub, logger *zap.Logger) *logStreamCommitter {
-
 	c := &logStreamCommitter{
 		topicID:      topicID,
 		lsID:         lsID,
