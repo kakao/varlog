@@ -7,15 +7,15 @@ import (
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
-	"go.uber.org/zap"
-
-	"github.com/kakao/varlog/pkg/util/testutil"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestRunner(t *testing.T) {
 	Convey("Runner", t, func() {
-		logger, _ := zap.NewDevelopment()
+		logger := zaptest.NewLogger(t)
 		r := New("test-runner", logger)
 
 		Reset(func() {
@@ -53,15 +53,15 @@ func TestRunner(t *testing.T) {
 			cancel, err := r.Run(worker)
 			So(err, ShouldBeNil)
 			So(running.Load(), ShouldBeTrue)
-			testutil.CompareWait(func() bool {
-				return r.NumTasks() == 1
-			}, time.Minute)
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				assert.Equal(collect, uint64(1), r.NumTasks())
+			}, time.Second, 10*time.Millisecond)
 			So(len(r.cancels), ShouldEqual, 1)
 			cancel()
 			So(len(r.cancels), ShouldBeZeroValue)
-			testutil.CompareWait(func() bool {
-				return r.NumTasks() == 0
-			}, time.Minute)
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				assert.Zero(collect, r.NumTasks())
+			}, time.Second, 10*time.Millisecond)
 			So(running.Load(), ShouldBeFalse)
 		})
 
@@ -76,7 +76,9 @@ func TestRunner(t *testing.T) {
 				panic("panic")
 			})
 			So(err, ShouldBeNil)
-			testutil.CompareWait(panicHappend.Load, time.Minute)
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				assert.True(collect, panicHappend.Load())
+			}, time.Second, 10*time.Millisecond)
 			cancel()
 			So(len(r.cancels), ShouldBeZeroValue)
 		})
@@ -105,13 +107,13 @@ func TestRunner(t *testing.T) {
 				})
 				So(err, ShouldBeNil)
 			}
-			testutil.CompareWait(func() bool {
-				return r.NumTasks() == uint64(repeat)
-			}, time.Minute)
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				assert.Equal(collect, uint64(repeat), r.NumTasks())
+			}, time.Second, 10*time.Millisecond)
 			r.Stop()
-			testutil.CompareWait(func() bool {
-				return r.NumTasks() == 0
-			}, time.Minute)
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				assert.Zero(collect, r.NumTasks())
+			}, time.Second, 10*time.Millisecond)
 			So(len(r.cancels), ShouldBeZeroValue)
 		})
 
@@ -121,18 +123,18 @@ func TestRunner(t *testing.T) {
 				<-ctx.Done()
 			})
 			So(err, ShouldBeNil)
-			testutil.CompareWait(func() bool {
-				return r.NumTasks() == 1
-			}, time.Minute)
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				assert.Equal(collect, uint64(1), r.NumTasks())
+			}, time.Second, 10*time.Millisecond)
 
 			Convey("the cancel of the task with unmanaged context should not be added to Runner.cancels", func() {
 				So(len(r.cancels), ShouldBeZeroValue)
 			})
 
 			cancel()
-			testutil.CompareWait(func() bool {
-				return r.NumTasks() == 0
-			}, time.Minute)
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				assert.Zero(collect, r.NumTasks())
+			}, time.Second, 10*time.Millisecond)
 			So(ctx.Err(), ShouldResemble, context.Canceled)
 
 			r.Stop()
@@ -147,9 +149,9 @@ func TestRunner(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			Convey("the task should increase Runner.NumTask", func() {
-				testutil.CompareWait(func() bool {
-					return r.NumTasks() == 1
-				}, time.Minute)
+				require.EventuallyWithT(t, func(collect *assert.CollectT) {
+					assert.Equal(collect, uint64(1), r.NumTasks())
+				}, time.Second, 10*time.Millisecond)
 
 				Convey("the task should not increase Runner.cancels", func() {
 					So(len(r.cancels), ShouldBeZeroValue)
@@ -165,10 +167,10 @@ func TestRunner(t *testing.T) {
 			So(stopped.Load(), ShouldBeFalse)
 			So(r.State(), ShouldEqual, Stopping)
 			cancel()
-			testutil.CompareWait(func() bool {
-				return r.NumTasks() == 0
-			}, time.Minute)
-			testutil.CompareWait(stopped.Load, time.Minute)
+			require.EventuallyWithT(t, func(collect *assert.CollectT) {
+				assert.Zero(collect, r.NumTasks())
+				assert.True(collect, stopped.Load())
+			}, time.Second, 10*time.Millisecond)
 			So(r.State(), ShouldEqual, Stopped)
 		})
 	})
