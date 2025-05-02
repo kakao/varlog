@@ -949,7 +949,7 @@ func TestCommit(t *testing.T) {
 				reportCollector.mu.RLock()
 				for _, executor := range reportCollector.executors {
 					reports, _ := executor.reportCtx.getReport()
-					for _, report := range reports.UncommitReports {
+					for _, report := range reports {
 						if !report.Version.Invalid() && report.Version < trimVer {
 							trimVer = report.Version
 						}
@@ -1068,10 +1068,10 @@ func TestCommitWithDelay(t *testing.T) {
 
 			So(testutil.CompareWaitN(10, func() bool {
 				report, ok := executor.reportCtx.getReport()
-				return ok && report.UncommitReports[0].Version == knownVer
+				return ok && report[0].Version == knownVer
 			}), ShouldBeTrue)
 			report, _ := executor.reportCtx.getReport()
-			reportedVer := report.UncommitReports[0].Version
+			reportedVer := report[0].Version
 
 			dummySN.DisableReport()
 
@@ -1092,7 +1092,7 @@ func TestCommitWithDelay(t *testing.T) {
 
 			time.Sleep(10 * time.Millisecond)
 			report, _ = executor.reportCtx.getReport()
-			So(report.UncommitReports[0].Version, ShouldEqual, reportedVer)
+			So(report[0].Version, ShouldEqual, reportedVer)
 
 			Convey("set commit delay & enable report to trim during catchup", func() {
 				dummySN.SetCommitDelay(100 * time.Millisecond)
@@ -1103,7 +1103,7 @@ func TestCommitWithDelay(t *testing.T) {
 
 				So(testutil.CompareWaitN(10, func() bool {
 					reports, ok := executor.reportCtx.getReport()
-					return ok && reports.UncommitReports[0].Version == knownVer
+					return ok && reports[0].Version == knownVer
 				}), ShouldBeTrue)
 
 				mr.trimGLS(knownVer)
@@ -1118,7 +1118,7 @@ func TestCommitWithDelay(t *testing.T) {
 
 					So(testutil.CompareWaitN(10, func() bool {
 						reports, ok := executor.reportCtx.getReport()
-						return ok && reports.UncommitReports[0].Version == knownVer
+						return ok && reports[0].Version == knownVer
 					}), ShouldBeTrue)
 				})
 			})
@@ -1260,19 +1260,18 @@ func TestReporterClientReconnect(t *testing.T) {
 }
 
 type testReportContextPtr struct {
-	report *mrpb.StorageNodeUncommitReport
+	report []snpb.LogStreamUncommitReport
 	mu     sync.RWMutex
 }
 
-func (rc *testReportContextPtr) saveReport(report *mrpb.StorageNodeUncommitReport) {
+func (rc *testReportContextPtr) saveReport(report []snpb.LogStreamUncommitReport) {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
-	rc.report = mrpb.NewStorageNodeUncommitReport(report.StorageNodeID)
-	rc.report.UncommitReports = report.UncommitReports
+	rc.report = report
 }
 
-func (rc *testReportContextPtr) getReport() *mrpb.StorageNodeUncommitReport {
+func (rc *testReportContextPtr) getReport() []snpb.LogStreamUncommitReport {
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 
@@ -1282,16 +1281,13 @@ func (rc *testReportContextPtr) getReport() *mrpb.StorageNodeUncommitReport {
 func BenchmarkSwapReport(b *testing.B) {
 	rcPtr := &testReportContextPtr{}
 	rc := &reportContext{}
-	report := &mrpb.StorageNodeUncommitReport{
-		StorageNodeID: 1,
-		UncommitReports: []snpb.LogStreamUncommitReport{
-			{
-				LogStreamID:           2,
-				UncommittedLLSNOffset: 3,
-				UncommittedLLSNLength: 4,
-				Version:               5,
-				HighWatermark:         6,
-			},
+	report := []snpb.LogStreamUncommitReport{
+		{
+			LogStreamID:           2,
+			UncommittedLLSNOffset: 3,
+			UncommittedLLSNLength: 4,
+			Version:               5,
+			HighWatermark:         6,
 		},
 	}
 

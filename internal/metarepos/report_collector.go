@@ -1,9 +1,11 @@
 package metarepos
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"io"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -99,7 +101,7 @@ type logStreamCommitter struct {
 }
 
 type reportContext struct {
-	report   *mrpb.StorageNodeUncommitReport
+	reports  []snpb.LogStreamUncommitReport
 	reloadAt time.Time
 	mu       sync.RWMutex
 }
@@ -640,10 +642,8 @@ func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
 		return err
 	}
 
-	report := rce.processReport(response)
-	defer report.Release()
-	if report.Len() > 0 {
-		if err := rce.helper.ProposeReport(rce.storageNodeID, report.UncommitReports); err != nil {
+	if report := rce.processReport(response.UncommitReports); len(report) > 0 {
+		if err := rce.helper.ProposeReport(rce.storageNodeID, report); err != nil {
 			rce.reportCtx.setExpire()
 		}
 	}
@@ -652,41 +652,39 @@ func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
 }
 
 // processReport computes the difference between the current and previous
-// uncommit reports. The current report is provided as the `response` parameter
-// of type `*snpb.GetReportResponse`. It returns a diff report of type
-// `*mrpb.StorageNodeUncommitReport`.
-func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse) *mrpb.StorageNodeUncommitReport {
-	report := mrpb.NewStorageNodeUncommitReport(response.StorageNodeID)
-	report.UncommitReports = response.UncommitReports
-
-	if report.Len() == 0 {
-		return report
+// uncommit reports and returns the resulting differences.
+//
+// This method sorts the current report and stores it in the report context.
+// Ownership of `currReport` is transferred to the report context, so the
+// caller must not modify `currReport` after invoking this method.
+func (rce *reportCollectExecutor) processReport(currReport []snpb.LogStreamUncommitReport) []snpb.LogStreamUncommitReport {
+	if len(currReport) == 0 {
+		return nil
 	}
 
-	report.Sort()
+	slices.SortFunc(currReport, func(a, b snpb.LogStreamUncommitReport) int {
+		return cmp.Compare(a.LogStreamID, b.LogStreamID)
+	})
 
-	prevReport, ok := rce.reportCtx.swapReport(report)
+	prevReport, ok := rce.reportCtx.swapReport(currReport)
 	if !ok || rce.reportCtx.isExpire() {
 		rce.reportCtx.reload()
-		return report
+		return currReport
 	}
 
-	diff := mrpb.NewStorageNodeUncommitReport(report.StorageNodeID)
-	diff.UncommitReports = make([]snpb.LogStreamUncommitReport, 0, len(report.UncommitReports))
-	defer report.Release()
-
+	diff := make([]snpb.LogStreamUncommitReport, 0, len(currReport))
 	i := 0
 	j := 0
-	for i < report.Len() && j < prevReport.Len() {
-		cur := report.UncommitReports[i]
-		prev := prevReport.UncommitReports[j]
+	for i < len(currReport) && j < len(prevReport) {
+		cur := currReport[i]
+		prev := prevReport[j]
 
 		if cur.Invalid() {
 			i++
 		} else if prev.Invalid() || prev.LogStreamID < cur.LogStreamID {
 			j++
 		} else if cur.LogStreamID < prev.LogStreamID {
-			diff.UncommitReports = append(diff.UncommitReports, cur)
+			diff = append(diff, cur)
 			i++
 		} else {
 			if cur.Version < prev.Version {
@@ -695,21 +693,21 @@ func (rce *reportCollectExecutor) processReport(response *snpb.GetReportResponse
 					zap.Any("cur", cur.Version))
 			} else if cur.UncommittedLLSNOffset > prev.UncommittedLLSNOffset ||
 				cur.UncommittedLLSNEnd() > prev.UncommittedLLSNEnd() {
-				diff.UncommitReports = append(diff.UncommitReports, cur)
+				diff = append(diff, cur)
 			}
 			i++
 			j++
 		}
 	}
 
-	for ; i < report.Len(); i++ {
-		cur := report.UncommitReports[i]
+	for ; i < len(currReport); i++ {
+		cur := currReport[i]
 		if !cur.Invalid() {
-			diff.UncommitReports = append(diff.UncommitReports, cur)
+			diff = append(diff, cur)
 		}
 	}
 
-	for _, r := range diff.UncommitReports {
+	for _, r := range diff {
 		rce.sampleTracer.report(r.LogStreamID, rce.storageNodeID, r)
 	}
 
@@ -752,12 +750,11 @@ func (rce *reportCollectExecutor) getReportedVersion(lsID types.LogStreamID) (ty
 		return types.InvalidVersion, false
 	}
 
-	r, ok := report.LookupReport(lsID)
-	if !ok {
-		return types.InvalidVersion, false
+	i := sort.Search(len(report), func(i int) bool { return report[i].LogStreamID >= lsID })
+	if i < len(report) && report[i].LogStreamID == lsID {
+		return report[i].Version, true
 	}
-
-	return r.Version, true
+	return types.InvalidVersion, false
 }
 
 func (rce *reportCollectExecutor) getLastCommitResults() *mrpb.LogStreamCommitResults {
@@ -914,36 +911,31 @@ func (lc *logStreamCommitter) setSentVersion(ver types.Version) {
 	lc.catchupHelper.sentAt = time.Now()
 }
 
-func (rc *reportContext) saveReport(report *mrpb.StorageNodeUncommitReport) {
+func (rc *reportContext) saveReport(report []snpb.LogStreamUncommitReport) {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
-	rc.report = mrpb.NewStorageNodeUncommitReport(report.StorageNodeID)
-	rc.report.UncommitReports = report.UncommitReports
+	rc.reports = report
 }
 
-func (rc *reportContext) swapReport(newReport *mrpb.StorageNodeUncommitReport) (old mrpb.StorageNodeUncommitReport, ok bool) {
+func (rc *reportContext) swapReport(new []snpb.LogStreamUncommitReport) (old []snpb.LogStreamUncommitReport, ok bool) {
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 
-	if rc.report != nil {
-		old = *rc.report
+	if len(rc.reports) > 0 {
+		old = rc.reports
 		ok = true
-		rc.report.Release()
 	}
-
-	rc.report = mrpb.NewStorageNodeUncommitReport(newReport.StorageNodeID)
-	rc.report.UncommitReports = newReport.UncommitReports
-
+	rc.reports = new
 	return old, ok
 }
 
-func (rc *reportContext) getReport() (report mrpb.StorageNodeUncommitReport, ok bool) {
+func (rc *reportContext) getReport() (report []snpb.LogStreamUncommitReport, ok bool) {
 	rc.mu.RLock()
 	defer rc.mu.RUnlock()
 
-	if rc.report != nil {
-		report = *rc.report
+	if len(rc.reports) > 0 {
+		report = rc.reports
 		ok = true
 	}
 
