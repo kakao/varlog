@@ -2,7 +2,6 @@ package mrpb
 
 import (
 	"sort"
-	"sync"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/snpb"
@@ -76,50 +75,8 @@ func (l *LogStreamUncommitReports) Deleted() bool {
 	return l.Status == varlogpb.LogStreamStatusDeleted
 }
 
-var storageNodeUncommitReportPool = sync.Pool{
-	New: func() any {
-		return new(StorageNodeUncommitReport)
-	},
-}
-
-func NewStorageNodeUncommitReport(snid types.StorageNodeID) *StorageNodeUncommitReport {
-	r := storageNodeUncommitReportPool.Get().(*StorageNodeUncommitReport)
-	r.StorageNodeID = snid
-	return r
-}
-
-func (l *StorageNodeUncommitReport) Release() {
-	l.StorageNodeID = types.StorageNodeID(0)
-	l.UncommitReports = nil
-	storageNodeUncommitReportPool.Put(l)
-}
-
 func (l *StorageNodeUncommitReport) Len() int {
 	return len(l.UncommitReports)
-}
-
-func (l *StorageNodeUncommitReport) Swap(i, j int) {
-	l.UncommitReports[i], l.UncommitReports[j] = l.UncommitReports[j], l.UncommitReports[i]
-}
-
-func (l *StorageNodeUncommitReport) Less(i, j int) bool {
-	return l.UncommitReports[i].LogStreamID < l.UncommitReports[j].LogStreamID
-}
-
-func (l *StorageNodeUncommitReport) Sort() {
-	sort.Sort(l)
-}
-
-func (l *StorageNodeUncommitReport) LookupReport(lsID types.LogStreamID) (snpb.LogStreamUncommitReport, bool) {
-	if l == nil {
-		return snpb.InvalidLogStreamUncommitReport, false
-	}
-
-	i := sort.Search(l.Len(), func(i int) bool { return l.UncommitReports[i].LogStreamID >= lsID })
-	if i < l.Len() && l.UncommitReports[i].LogStreamID == lsID {
-		return l.UncommitReports[i], true
-	}
-	return snpb.InvalidLogStreamUncommitReport, false
 }
 
 // return HighWatermark of the topic
