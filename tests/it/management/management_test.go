@@ -745,14 +745,13 @@ func TestGCZombieLogStream(t *testing.T) {
 				_, exist := meta.GetLogStream(lsID)
 				So(exist, ShouldBeTrue)
 
-				So(testutil.CompareWait(func() bool {
+				require.EventuallyWithT(t, func(collect *assert.CollectT) {
 					meta, err := snMCL.GetMetadata(context.TODO())
-					if err != nil {
-						return false
-					}
+					assert.NoError(collect, err)
+
 					_, exist := meta.GetLogStream(lsID)
-					return !exist
-				}, gcTimeout*2), ShouldBeTrue)
+					assert.False(collect, exist)
+				}, gcTimeout*2, reportInterval)
 			})
 		})
 	}))
