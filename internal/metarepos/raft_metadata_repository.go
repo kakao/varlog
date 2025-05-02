@@ -345,18 +345,17 @@ func (mr *RaftMetadataRepository) processReport(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			var reports *mrpb.Reports
-
+			var reportQueue []*mrpb.Report
 			mr.muReportQueue.Lock()
-			num := len(mr.reportQueue)
-			if num > 0 {
-				reports = mrpb.NewReports(mr.nodeID, time.Now())
-				reports.Reports = mr.reportQueue
+			if len(mr.reportQueue) > 0 {
+				reportQueue = mr.reportQueue
 				mr.reportQueue = mrpb.NewReportQueue()
 			}
 			mr.muReportQueue.Unlock()
 
-			if reports != nil {
+			if len(reportQueue) > 0 {
+				reports := mrpb.NewReports(mr.nodeID, time.Now())
+				reports.Reports = reportQueue
 				mr.propose(context.TODO(), reports, false) //nolint:errcheck,revive // TODO:: Handle an error returned.
 			}
 		}
