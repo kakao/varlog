@@ -272,7 +272,20 @@ func TestReportCommit(t *testing.T) {
 
 				knownVersions.Lock()
 				for lsid, ver := range knownVersions.vers {
-					rsp.UncommitReports = append(rsp.UncommitReports, reportsCommits[lsid][ver].report)
+					var report snpb.LogStreamUncommitReport
+					if rcs := reportsCommits[lsid]; len(rcs) <= int(ver) {
+						lastCommit := rcs[len(rcs)-1].expectedCommit
+						report = snpb.LogStreamUncommitReport{
+							LogStreamID:           lastCommit.LogStreamID,
+							UncommittedLLSNOffset: lastCommit.CommittedLLSNOffset + types.LLSN(lastCommit.CommittedGLSNLength),
+							UncommittedLLSNLength: 0,
+							Version:               ver,
+							HighWatermark:         lastCommit.HighWatermark,
+						}
+					} else {
+						report = rcs[ver].report
+					}
+					rsp.UncommitReports = append(rsp.UncommitReports, report)
 				}
 				knownVersions.Unlock()
 				sort.Slice(rsp.UncommitReports, func(i, j int) bool {
