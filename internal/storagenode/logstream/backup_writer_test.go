@@ -49,21 +49,21 @@ func TestBackupWriter_ShouldNotAcceptTasksWhileNotAppendable(t *testing.T) {
 	bw.logger = zap.NewNop()
 
 	lse.esm.store(executorStateSealing)
-	err := bw.send(context.Background(), &backupWriteTask{})
+	err := bw.send(context.Background(), &ReplicationTask{})
 	assert.Error(t, err)
 
 	lse.esm.store(executorStateSealed)
-	err = bw.send(context.Background(), &backupWriteTask{})
+	err = bw.send(context.Background(), &ReplicationTask{})
 	assert.Error(t, err)
 
 	lse.esm.store(executorStateClosed)
-	err = bw.send(context.Background(), &backupWriteTask{})
+	err = bw.send(context.Background(), &ReplicationTask{})
 	assert.Error(t, err)
 
 	lse.esm.store(executorStateAppendable)
 	canceledCtx, cancel := context.WithCancel(context.Background())
 	cancel()
-	err = bw.send(canceledCtx, &backupWriteTask{})
+	err = bw.send(canceledCtx, &ReplicationTask{})
 	assert.Error(t, err)
 }
 
@@ -81,13 +81,14 @@ func TestBackupWriter_Drain(t *testing.T) {
 
 	bw := &backupWriter{}
 	bw.lse = lse
-	bw.queue = make(chan *backupWriteTask, numTasks)
+	bw.queue = make(chan *ReplicationTask, numTasks)
 	bw.logger = zap.NewNop()
 
 	for i := 0; i < numTasks; i++ {
-		wb := stg.NewWriteBatch()
-		bwt := newBackupWriteTask(wb, types.LLSN(i+1), types.LLSN(i+2))
-		err := bw.send(context.Background(), bwt)
+		rst := NewReplicationTask()
+		rst.Req.BeginLLSN = types.LLSN(i + 1)
+		rst.Req.Data = [][]byte{nil}
+		err := bw.send(context.Background(), rst)
 		assert.NoError(t, err)
 	}
 
@@ -122,17 +123,17 @@ func TestBackupWriter_UnexpectedLLSN(t *testing.T) {
 		lsc: newLogStreamContext(),
 	}
 	lse.lsc.uncommittedLLSNEnd.Store(uncommittedLLSNEnd)
+	lse.stg = stg
 
 	bw := &backupWriter{}
-	bw.queue = make(chan *backupWriteTask, 1)
+	bw.queue = make(chan *ReplicationTask, 1)
 	bw.logger = zap.NewNop()
 	bw.lse = lse
 
-	wb := stg.NewWriteBatch()
-	err := wb.Set(uncommittedLLSNEnd+1, nil)
-	assert.NoError(t, err)
-	bwt := newBackupWriteTask(wb, uncommittedLLSNEnd+1, uncommittedLLSNEnd+2)
-	bw.writeLoopInternal(context.Background(), bwt)
+	rst := NewReplicationTask()
+	rst.Req.BeginLLSN = types.LLSN(uncommittedLLSNEnd + 1)
+	rst.Req.Data = [][]byte{nil}
+	bw.writeLoopInternal(context.Background(), rst)
 
 	// Keep the uncommittedLLSNEnd unchanged.
 	require.Equal(t, uncommittedLLSNEnd, bw.lse.lsc.uncommittedLLSNEnd.Load())

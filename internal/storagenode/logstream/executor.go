@@ -162,7 +162,12 @@ func NewExecutor(opts ...ExecutorOption) (lse *Executor, err error) {
 	return lse, err
 }
 
-func (lse *Executor) Replicate(ctx context.Context, beginLLSN types.LLSN, dataList [][]byte) error {
+// Replicate sends the replication task `rt` to the backup writer and enqueues
+// a commit wait task into the committer. Ownership of the argument `rt` is
+// transferred, so callers should neither modify nor release it after this
+// method succeeds. However, callers must release the replication task if this
+// method returns an error.
+func (lse *Executor) Replicate(ctx context.Context, rt *ReplicationTask) error {
 	lse.inflight.Add(1)
 	defer lse.inflight.Add(-1)
 
@@ -178,8 +183,7 @@ func (lse *Executor) Replicate(ctx context.Context, beginLLSN types.LLSN, dataLi
 	}
 
 	var startTime, prepEndTime time.Time
-	dataBytes := int64(0)
-	batchSize := len(dataList)
+	batchSize := len(rt.Req.Data)
 	defer func() {
 		if lse.lsm == nil {
 			return
@@ -190,25 +194,12 @@ func (lse *Executor) Replicate(ctx context.Context, beginLLSN types.LLSN, dataLi
 
 	startTime = time.Now()
 
-	oldLLSN, newLLSN := beginLLSN, beginLLSN+types.LLSN(batchSize)
-	wb := lse.stg.NewWriteBatch()
-	for i := 0; i < batchSize; i++ {
-		_ = wb.Set(beginLLSN+types.LLSN(i), dataList[i])
-		dataBytes += int64(len(dataList[i]))
-	}
-	cwt := newCommitWaitTask(nil, batchSize)
-	bwt := newBackupWriteTask(wb, oldLLSN, newLLSN)
-
-	prepEndTime = time.Now()
-
-	if err := lse.bw.send(ctx, bwt); err != nil {
+	if err := lse.bw.send(ctx, rt); err != nil {
 		lse.logger.Error("could not send backup batch write task", zap.Error(err))
-		_ = wb.Close()
-		bwt.release()
-		cwt.release()
 		return err
 	}
 
+	cwt := newCommitWaitTask(nil, batchSize)
 	if err := lse.cm.sendCommitWaitTask(ctx, cwt, false /*ignoreSealing*/); err != nil {
 		lse.logger.Error("could not send commit wait task list", zap.Error(err))
 		cwt.release()
