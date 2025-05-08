@@ -82,45 +82,24 @@ func (rs *replicationServer) SyncReplicateStream(stream snpb.Replicator_SyncRepl
 	return multierr.Append(err, stream.SendAndClose(&snpb.SyncReplicateResponse{}))
 }
 
-var replicationServerTaskPool = sync.Pool{
-	New: func() interface{} {
-		return &replicationServerTask{}
-	},
-}
-
-type replicationServerTask struct {
-	req snpb.ReplicateRequest
-	err error
-}
-
-func newReplicationServerTask() *replicationServerTask {
-	return replicationServerTaskPool.Get().(*replicationServerTask)
-}
-
-func (rst *replicationServerTask) release() {
-	rst.req.ResetReuse()
-	rst.err = nil
-	replicationServerTaskPool.Put(rst)
-}
-
-func (rs *replicationServer) recv(ctx context.Context, stream snpb.Replicator_ReplicateServer, wg *sync.WaitGroup) <-chan *replicationServerTask {
+func (rs *replicationServer) recv(ctx context.Context, stream snpb.Replicator_ReplicateServer, wg *sync.WaitGroup) <-chan *logstream.ReplicationTask {
 	wg.Add(1)
 	// TODO: add configuration
-	c := make(chan *replicationServerTask, 4096)
+	c := make(chan *logstream.ReplicationTask, 4096)
 	go func() {
 		defer wg.Done()
 		defer close(c)
 		for {
-			rst := newReplicationServerTask()
-			err := stream.RecvMsg(&rst.req)
-			rst.err = err
+			rst := logstream.NewReplicationTask()
+			err := stream.RecvMsg(&rst.Req)
+			rst.Err = err
 			select {
 			case c <- rst:
 				if err != nil {
 					return
 				}
 			case <-ctx.Done():
-				rst.release()
+				rst.Release()
 				return
 			}
 		}
@@ -128,7 +107,7 @@ func (rs *replicationServer) recv(ctx context.Context, stream snpb.Replicator_Re
 	return c
 }
 
-func (rs *replicationServer) replicate(ctx context.Context, requestC <-chan *replicationServerTask, wg *sync.WaitGroup) <-chan error {
+func (rs *replicationServer) replicate(ctx context.Context, requestC <-chan *logstream.ReplicationTask, wg *sync.WaitGroup) <-chan error {
 	wg.Add(1)
 	errC := make(chan error)
 	go func() {
@@ -138,7 +117,7 @@ func (rs *replicationServer) replicate(ctx context.Context, requestC <-chan *rep
 			close(errC)
 			wg.Done()
 		}()
-		var rst *replicationServerTask
+		var rst *logstream.ReplicationTask
 		var lse *logstream.Executor
 		var ok bool
 		for {
@@ -151,30 +130,30 @@ func (rs *replicationServer) replicate(ctx context.Context, requestC <-chan *rep
 			if !ok {
 				return
 			}
-			err = rst.err
+			err = rst.Err
 			if err != nil {
-				rst.release()
+				rst.Release()
 				return
 			}
 
 			if lse == nil {
 				var loaded bool
-				lse, loaded = rs.sn.executors.Load(rst.req.TopicID, rst.req.LogStreamID)
+				lse, loaded = rs.sn.executors.Load(rst.Req.TopicID, rst.Req.LogStreamID)
 				if !loaded {
-					err = fmt.Errorf("replication server: no log stream %v", rst.req.LogStreamID)
-					rst.release()
+					err = fmt.Errorf("replication server: no log stream %v", rst.Req.LogStreamID)
+					rst.Release()
 					return
 				}
 			}
 
 			lse.Metrics().ReplicateServerOperations.Add(1)
 
-			err = lse.Replicate(ctx, rst.req.BeginLLSN, rst.req.Data)
+			err = lse.Replicate(ctx, rst.Req.BeginLLSN, rst.Req.Data)
 			if err != nil {
-				rst.release()
+				rst.Release()
 				return
 			}
-			rst.release()
+			rst.Release()
 		}
 	}()
 	return errC
