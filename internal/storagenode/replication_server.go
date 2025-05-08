@@ -117,7 +117,7 @@ func (rs *replicationServer) replicate(ctx context.Context, requestC <-chan *log
 			close(errC)
 			wg.Done()
 		}()
-		var rst *logstream.ReplicationTask
+		var rt *logstream.ReplicationTask
 		var lse *logstream.Executor
 		var ok bool
 		for {
@@ -125,35 +125,34 @@ func (rs *replicationServer) replicate(ctx context.Context, requestC <-chan *log
 			case <-ctx.Done():
 				err = ctx.Err()
 				return
-			case rst, ok = <-requestC:
+			case rt, ok = <-requestC:
 			}
 			if !ok {
 				return
 			}
-			err = rst.Err
+			err = rt.Err
 			if err != nil {
-				rst.Release()
+				rt.Release()
 				return
 			}
 
 			if lse == nil {
 				var loaded bool
-				lse, loaded = rs.sn.executors.Load(rst.Req.TopicID, rst.Req.LogStreamID)
+				lse, loaded = rs.sn.executors.Load(rt.Req.TopicID, rt.Req.LogStreamID)
 				if !loaded {
-					err = fmt.Errorf("replication server: no log stream %v", rst.Req.LogStreamID)
-					rst.Release()
+					err = fmt.Errorf("replication server: no log stream %v", rt.Req.LogStreamID)
+					rt.Release()
 					return
 				}
 			}
 
 			lse.Metrics().ReplicateServerOperations.Add(1)
 
-			err = lse.Replicate(ctx, rst.Req.BeginLLSN, rst.Req.Data)
+			err = lse.Replicate(ctx, rt)
 			if err != nil {
-				rst.Release()
+				rt.Release()
 				return
 			}
-			rst.Release()
 		}
 	}()
 	return errC
