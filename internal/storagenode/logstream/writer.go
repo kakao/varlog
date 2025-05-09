@@ -72,30 +72,41 @@ func (w *writer) send(ctx context.Context, st *sequenceTask) (err error) {
 // writeLoop is the main loop of the writer.
 // It pops a sequence task from the queue and processes the task.
 func (w *writer) writeLoop(ctx context.Context) {
+	maxTasks := w.lse.maxWriteTaskBatchLength
+	sts := make([]*sequenceTask, 0, maxTasks)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case st := <-w.queue:
-			w.writeLoopInternal(ctx, st)
+			sts = append(sts, st)
+			remains := min(maxTasks-1, len(w.queue))
+			for range remains {
+				st := <-w.queue
+				sts = append(sts, st)
+			}
+			w.writeLoopInternal(ctx, sts)
+			sts = sts[:0]
 		}
 	}
 }
 
 // writeLoopInternal stores a batch of writes to the storage and modifies uncommittedLLSNEnd of the log stream which presents the next expected LLSN to be written.
-func (w *writer) writeLoopInternal(ctx context.Context, st *sequenceTask) {
+func (w *writer) writeLoopInternal(ctx context.Context, sts []*sequenceTask) {
 	startTime := time.Now()
 	var err error
-	cnt := len(st.dataBatch)
 	wb := w.lse.stg.NewWriteBatch()
 	defer func() {
 		if err != nil {
 			w.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
 		}
-		st.wwg.done(err)
 		_ = wb.Close()
-		st.release()
-		inflight := w.inflight.Add(-1)
+		for _, st := range sts {
+			st.wwg.done(err)
+			st.release()
+		}
+		inflight := w.inflight.Add(-int64(len(sts)))
 		if w.lse.lsm == nil {
 			return
 		}
@@ -103,7 +114,8 @@ func (w *writer) writeLoopInternal(ctx context.Context, st *sequenceTask) {
 		w.lse.lsm.WriterInflightOperations.Store(inflight)
 	}()
 
-	oldLLSN, newLLSN := st.awg.beginLSN.LLSN, st.awg.beginLSN.LLSN+types.LLSN(cnt)
+	oldLLSN := sts[0].awg.beginLSN.LLSN
+	newLLSN := sts[len(sts)-1].awg.beginLSN.LLSN + types.LLSN(len(sts[len(sts)-1].dataBatch))
 	if uncommittedLLSNEnd := w.lse.lsc.uncommittedLLSNEnd.Load(); uncommittedLLSNEnd != oldLLSN {
 		err = fmt.Errorf("unexpected LLSN: uncommittedLLSNEnd=%d, oldLLSN=%d, newLLSN=%d", uncommittedLLSNEnd, oldLLSN, newLLSN)
 		w.logger.Error("try to write log entries at unexpected LLSN in the primary replica",
@@ -115,12 +127,16 @@ func (w *writer) writeLoopInternal(ctx context.Context, st *sequenceTask) {
 		return
 	}
 
-	for i := range cnt {
-		llsn := oldLLSN + types.LLSN(i)
-		err = wb.Set(llsn, st.dataBatch[i])
-		if err != nil {
-			w.logger.Error("could not set data to batch", zap.Error(err))
-			return
+	var offset types.LLSN
+	for _, st := range sts {
+		for i := range st.dataBatch {
+			llsn := oldLLSN + offset
+			err = wb.Set(llsn, st.dataBatch[i])
+			if err != nil {
+				w.logger.Error("could not set data to batch", zap.Error(err))
+				return
+			}
+			offset++
 		}
 	}
 

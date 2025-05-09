@@ -124,7 +124,7 @@ func TestWriter_UnexpectedLLSN(t *testing.T) {
 
 	st := testSequenceTask()
 	st.awg.setBeginLLSN(uncommittedLLSNEnd - 1) // not expected LLSN
-	wr.writeLoopInternal(context.Background(), st)
+	wr.writeLoopInternal(context.Background(), []*sequenceTask{st})
 
 	// Keep the uncommittedLLSNEnd unchanged.
 	require.Equal(t, uncommittedLLSNEnd, lse.lsc.uncommittedLLSNEnd.Load())

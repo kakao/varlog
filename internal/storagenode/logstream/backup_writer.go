@@ -62,17 +62,27 @@ func (bw *backupWriter) send(ctx context.Context, rt *ReplicationTask) (err erro
 }
 
 func (bw *backupWriter) writeLoop(ctx context.Context) {
+	maxTasks := bw.lse.maxWriteTaskBatchLength
+	rts := make([]*ReplicationTask, 0, maxTasks)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case rt := <-bw.queue:
-			bw.writeLoopInternal(ctx, rt)
+			rts = append(rts, rt)
+			remains := min(maxTasks-1, len(bw.queue))
+			for range remains {
+				rst := <-bw.queue
+				rts = append(rts, rst)
+			}
+			bw.writeLoopInternal(ctx, rts)
+			rts = rts[:0]
 		}
 	}
 }
 
-func (bw *backupWriter) writeLoopInternal(ctx context.Context, rt *ReplicationTask) {
+func (bw *backupWriter) writeLoopInternal(ctx context.Context, rts []*ReplicationTask) {
 	startTime := time.Now()
 	var err error
 
@@ -83,17 +93,18 @@ func (bw *backupWriter) writeLoopInternal(ctx context.Context, rt *ReplicationTa
 			bw.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
 		}
 		_ = wb.Close()
-		rt.Release()
-		bw.inflight.Add(-1)
+		for _, rt := range rts {
+			rt.Release()
+		}
+		bw.inflight.Add(-int64(len(rts)))
 		if bw.lse.lsm == nil {
 			return
 		}
 		bw.lse.lsm.WriterOperationDuration.Record(ctx, time.Since(startTime).Microseconds())
 	}()
 
-	beginLLSN := rt.Req.BeginLLSN
-	batchSize := len(rt.Req.Data)
-	oldLLSN, newLLSN := beginLLSN, beginLLSN+types.LLSN(batchSize)
+	oldLLSN := rts[0].Req.BeginLLSN
+	newLLSN := rts[len(rts)-1].Req.BeginLLSN + types.LLSN(len(rts[len(rts)-1].Req.Data))
 
 	if uncommittedLLSNEnd := bw.lse.lsc.uncommittedLLSNEnd.Load(); uncommittedLLSNEnd != oldLLSN {
 		err = fmt.Errorf("unexpected LLSN: uncommittedLLSNEnd=%d, oldLLSN=%d, newLLSN=%d", uncommittedLLSNEnd, oldLLSN, newLLSN)
@@ -106,13 +117,17 @@ func (bw *backupWriter) writeLoopInternal(ctx context.Context, rt *ReplicationTa
 		return
 	}
 
-	for i := range batchSize {
-		err = wb.Set(beginLLSN+types.LLSN(i), rt.Req.Data[i])
-		if err != nil {
-			bw.logger.Error("could not set data to batch", zap.Error(err))
-			return
+	for _, rt := range rts {
+		beginLLSN := rt.Req.BeginLLSN
+		for i := range rt.Req.Data {
+			llsn := beginLLSN + types.LLSN(i)
+			err = wb.Set(llsn, rt.Req.Data[i])
+			if err != nil {
+				bw.logger.Error("could not set data to batch", zap.Error(err))
+				return
+			}
+			dataBytes += int64(len(rt.Req.Data[i]))
 		}
-		dataBytes += int64(len(rt.Req.Data[i]))
 	}
 
 	err = wb.Apply()
