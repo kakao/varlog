@@ -133,7 +133,7 @@ func TestBackupWriter_UnexpectedLLSN(t *testing.T) {
 	rst := NewReplicationTask()
 	rst.Req.BeginLLSN = types.LLSN(uncommittedLLSNEnd + 1)
 	rst.Req.Data = [][]byte{nil}
-	bw.writeLoopInternal(context.Background(), rst)
+	bw.writeLoopInternal(context.Background(), []*ReplicationTask{rst})
 
 	// Keep the uncommittedLLSNEnd unchanged.
 	require.Equal(t, uncommittedLLSNEnd, bw.lse.lsc.uncommittedLLSNEnd.Load())
