@@ -5,8 +5,8 @@ import (
 
 	"go.opentelemetry.io/otel/metric"
 
+	"github.com/kakao/varlog/internal/stats/opentelemetry"
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/telemetry"
 )
 
 type telemetryStub struct {
@@ -15,7 +15,7 @@ type telemetryStub struct {
 }
 
 func newTelemetryStub(ctx context.Context, name string, nodeID types.NodeID, endpoint string) (*telemetryStub, error) {
-	mp := telemetry.GetGlobalMeterProvider()
+	mp := opentelemetry.GetGlobalMeterProvider()
 
 	ts := &telemetryStub{
 		mp: mp,
