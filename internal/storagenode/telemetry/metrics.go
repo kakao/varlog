@@ -14,8 +14,8 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"google.golang.org/grpc/codes"
 
+	"github.com/kakao/varlog/internal/stats/opentelemetry"
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/telemetry"
 )
 
 // LogStreamMetrics is a set of metrics measured in each log stream.
@@ -617,12 +617,12 @@ func (m *Metrics) GetLogStreamMetrics(lsid types.LogStreamID) (*LogStreamMetrics
 
 func RegisterLogStreamMetrics(m *Metrics, tpid types.TopicID, lsid types.LogStreamID) (*LogStreamMetrics, error) {
 	attrs := attribute.NewSet(
-		telemetry.TopicID(tpid),
-		telemetry.LogStreamID(lsid),
+		opentelemetry.TopicID(tpid),
+		opentelemetry.LogStreamID(lsid),
 	)
 	kvs := []attribute.KeyValue{
-		telemetry.TopicID(tpid),
-		telemetry.LogStreamID(lsid),
+		opentelemetry.TopicID(tpid),
+		opentelemetry.LogStreamID(lsid),
 		semconv.RPCSystemGRPC,
 	}
 	lsm, loaded := m.metricsMap.LoadOrStore(lsid, &LogStreamMetrics{

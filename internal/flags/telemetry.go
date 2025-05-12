@@ -13,8 +13,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 
+	"github.com/kakao/varlog/internal/stats/opentelemetry"
 	"github.com/kakao/varlog/pkg/types"
-	"github.com/kakao/varlog/pkg/util/telemetry"
 )
 
 const (
@@ -89,7 +89,7 @@ var (
 	}
 )
 
-func ParseTelemetryFlags(ctx context.Context, c *cli.Context, serviceName, serviceInstanceID string, cid types.ClusterID) (opts []telemetry.MeterProviderOption, err error) {
+func ParseTelemetryFlags(ctx context.Context, c *cli.Context, serviceName, serviceInstanceID string, cid types.ClusterID) (opts []opentelemetry.MeterProviderOption, err error) {
 	const serviceNamespace = "varlog"
 
 	res, err := resource.New(ctx,
@@ -100,25 +100,25 @@ func ParseTelemetryFlags(ctx context.Context, c *cli.Context, serviceName, servi
 			semconv.ServiceName(serviceName),
 			semconv.ServiceNamespace(serviceNamespace),
 			semconv.ServiceInstanceID(serviceInstanceID),
-			telemetry.ClusterID(cid),
+			opentelemetry.ClusterID(cid),
 		))
 	if err != nil {
 		return nil, err
 	}
-	opts = append(opts, telemetry.WithResource(res))
+	opts = append(opts, opentelemetry.WithResource(res))
 
 	var exporter metricsdk.Exporter
 
 	switch strings.ToLower(c.String(TelemetryExporter.Name)) {
 	case TelemetryExporterStdout:
-		exporter, err = telemetry.NewStdoutExporter()
+		exporter, err = opentelemetry.NewStdoutExporter()
 	case TelemetryExporterOTLP:
 		var opts []otlpmetricgrpc.Option
 		if c.Bool(TelemetryOTLPInsecure.Name) {
 			opts = append(opts, otlpmetricgrpc.WithInsecure())
 		}
 		opts = append(opts, otlpmetricgrpc.WithEndpoint(c.String(TelemetryOTLPEndpoint.Name)))
-		exporter, err = telemetry.NewOLTPExporter(context.Background(), opts...)
+		exporter, err = opentelemetry.NewOLTPExporter(context.Background(), opts...)
 	case TelemetryExporterNOOP:
 		exporter = nil
 	}
@@ -126,13 +126,13 @@ func ParseTelemetryFlags(ctx context.Context, c *cli.Context, serviceName, servi
 		return nil, err
 	}
 
-	opts = append(opts, telemetry.WithExporter(exporter))
+	opts = append(opts, opentelemetry.WithExporter(exporter))
 
 	if c.Bool(TelemetryHost.Name) {
-		opts = append(opts, telemetry.WithHostInstrumentation())
+		opts = append(opts, opentelemetry.WithHostInstrumentation())
 	}
 	if c.Bool(TelemetryRuntime.Name) {
-		opts = append(opts, telemetry.WithRuntimeInstrumentation())
+		opts = append(opts, opentelemetry.WithRuntimeInstrumentation())
 	}
 
 	return opts, nil

@@ -22,12 +22,12 @@ import (
 
 	"github.com/kakao/varlog/internal/admin/sfgkey"
 	"github.com/kakao/varlog/internal/admin/snwatcher"
+	"github.com/kakao/varlog/internal/stats/opentelemetry"
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/rpc/interceptors/logging"
 	"github.com/kakao/varlog/pkg/rpc/interceptors/otelgrpc"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/netutil"
-	"github.com/kakao/varlog/pkg/util/telemetry"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/admpb"
 	"github.com/kakao/varlog/proto/mrpb"
@@ -80,7 +80,7 @@ func New(ctx context.Context, opts ...Option) (*Admin, error) {
 	grpcServerOpts := slices.Concat([]grpc.ServerOption{
 		grpc.ChainUnaryInterceptor(
 			logging.UnaryServerInterceptor(cfg.logger),
-			otelgrpc.UnaryServerInterceptor(telemetry.GetGlobalMeterProvider()),
+			otelgrpc.UnaryServerInterceptor(opentelemetry.GetGlobalMeterProvider()),
 		),
 	}, cfg.defaultGRPCServerOptions)
 	cm := &Admin{
