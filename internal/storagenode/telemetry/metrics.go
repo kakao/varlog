@@ -11,7 +11,7 @@ import (
 	"github.com/puzpuzpuz/xsync/v2"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.32.0"
 	"google.golang.org/grpc/codes"
 
 	"github.com/kakao/varlog/internal/stats/opentelemetry"
