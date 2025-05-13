@@ -177,20 +177,18 @@ func (lse *Executor) Replicate(ctx context.Context, beginLLSN types.LLSN, dataLi
 		return errors.New("log stream: not backup")
 	}
 
-	var preparationDuration time.Duration
-	startTime := time.Now()
+	var startTime, prepEndTime time.Time
 	dataBytes := int64(0)
 	batchSize := len(dataList)
 	defer func() {
 		if lse.lsm == nil {
 			return
 		}
-		lse.lsm.ReplicateLogs.Add(int64(batchSize))
-		lse.lsm.ReplicateBytes.Add(dataBytes)
-		lse.lsm.ReplicateDuration.Add(time.Since(startTime).Microseconds())
-		lse.lsm.ReplicateOperations.Add(1)
-		lse.lsm.ReplicatePreparationMicro.Add(preparationDuration.Microseconds())
+		lse.lsm.ReplicateDuration.Record(ctx, time.Since(startTime).Microseconds())
+		lse.lsm.ReplicateFanoutDuration.Record(ctx, time.Since(prepEndTime).Microseconds())
 	}()
+
+	startTime = time.Now()
 
 	oldLLSN, newLLSN := beginLLSN, beginLLSN+types.LLSN(batchSize)
 	wb := lse.stg.NewWriteBatch()
@@ -201,7 +199,7 @@ func (lse *Executor) Replicate(ctx context.Context, beginLLSN types.LLSN, dataLi
 	cwt := newCommitWaitTask(nil, batchSize)
 	bwt := newBackupWriteTask(wb, oldLLSN, newLLSN)
 
-	preparationDuration = time.Since(startTime)
+	prepEndTime = time.Now()
 
 	if err := lse.bw.send(ctx, bwt); err != nil {
 		lse.logger.Error("could not send backup batch write task", zap.Error(err))
@@ -216,6 +214,7 @@ func (lse *Executor) Replicate(ctx context.Context, beginLLSN types.LLSN, dataLi
 		cwt.release()
 		return err
 	}
+
 	return nil
 }
 
