@@ -94,9 +94,8 @@ func (sq *sequencer) sequenceLoopInternal(ctx context.Context, st *sequenceTask)
 		if sq.lse.lsm == nil {
 			return
 		}
-		sq.lse.lsm.SequencerFanoutDuration.Add(time.Since(operationEndTime).Microseconds())
-		sq.lse.lsm.SequencerOperationDuration.Add(int64(operationEndTime.Sub(startTime).Microseconds()))
-		sq.lse.lsm.SequencerOperations.Add(1)
+		sq.lse.lsm.SequencerFanoutDuration.Record(ctx, time.Since(operationEndTime).Microseconds())
+		sq.lse.lsm.SequencerOperationDuration.Record(ctx, int64(operationEndTime.Sub(startTime).Microseconds()))
 		sq.lse.lsm.ReplicateClientInflightOperations.Store(inflight)
 	}()
 

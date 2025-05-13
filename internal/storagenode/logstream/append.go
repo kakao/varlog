@@ -5,10 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/grpc/codes"
-
 	snerrors "github.com/kakao/varlog/internal/storagenode/errors"
-	"github.com/kakao/varlog/internal/storagenode/telemetry"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
@@ -28,6 +25,7 @@ type AppendTask struct {
 	apc          appendContext
 	dataBatchLen int
 
+	TopicID      types.TopicID
 	LogStreamID  types.LogStreamID
 	RPCStartTime time.Time
 }
@@ -117,9 +115,6 @@ func (at *AppendTask) WaitForCompletion(ctx context.Context) ([]snpb.AppendResul
 func appendTaskDeferredFunc(at *AppendTask) {
 	at.lse.inflight.Add(-1)
 	at.lse.inflightAppend.Add(-1)
-	if at.lse.lsm != nil {
-		at.lse.lsm.AppendDuration.Add(time.Since(at.start).Microseconds())
-	}
 }
 
 type appendContext struct {
@@ -154,13 +149,9 @@ func (lse *Executor) AppendAsync(ctx context.Context, dataBatch [][]byte, append
 	var preparationDuration time.Duration
 	defer func() {
 		if lse.lsm != nil {
-			lse.lsm.AppendLogs.Add(int64(dataBatchLen))
-			lse.lsm.AppendBytes.Add(totalBytes)
-			lse.lsm.AppendOperations.Add(1)
-			lse.lsm.AppendPreparationMicro.Add(preparationDuration.Microseconds())
-
-			lse.lsm.LogRPCServerBatchSize.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, totalBytes)
-			lse.lsm.LogRPCServerLogEntriesPerBatch.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, int64(dataBatchLen))
+			lse.lsm.AppendPreparationDuration.Record(context.Background(), preparationDuration.Microseconds())
+			lse.lsm.LogRPCServerBatchSize.Record(context.Background(), totalBytes)
+			lse.lsm.LogRPCServerLogEntriesPerBatch.Record(context.Background(), int64(dataBatchLen))
 		}
 	}()
 
@@ -199,8 +190,7 @@ func (lse *Executor) prepareAppendContext(dataBatch [][]byte, apc *appendContext
 		logEntrySize := int64(len(dataBatch[i]))
 		totalBytes += logEntrySize
 		if lse.lsm != nil {
-			// TODO: Set the correct status code.
-			lse.lsm.LogRPCServerLogEntrySize.Record(context.Background(), telemetry.RPCKindAppend, codes.OK, logEntrySize)
+			lse.lsm.LogRPCServerLogEntrySize.Record(context.Background(), logEntrySize)
 		}
 	}
 	awg := newAppendWaitGroup(st.wwg, len(dataBatch))

@@ -74,7 +74,7 @@ func (bw *backupWriter) writeLoop(ctx context.Context) {
 	}
 }
 
-func (bw *backupWriter) writeLoopInternal(_ context.Context, bwt *backupWriteTask) {
+func (bw *backupWriter) writeLoopInternal(ctx context.Context, bwt *backupWriteTask) {
 	startTime := time.Now()
 	var err error
 	wb, oldLLSN, newLLSN := bwt.wb, bwt.oldLLSN, bwt.newLLSN
@@ -88,8 +88,7 @@ func (bw *backupWriter) writeLoopInternal(_ context.Context, bwt *backupWriteTas
 		if bw.lse.lsm == nil {
 			return
 		}
-		bw.lse.lsm.WriterOperationDuration.Add(time.Since(startTime).Microseconds())
-		bw.lse.lsm.WriterOperations.Add(1)
+		bw.lse.lsm.WriterOperationDuration.Record(ctx, time.Since(startTime).Microseconds())
 	}()
 
 	if uncommittedLLSNEnd := bw.lse.lsc.uncommittedLLSNEnd.Load(); uncommittedLLSNEnd != oldLLSN {
