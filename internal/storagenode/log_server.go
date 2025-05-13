@@ -7,11 +7,15 @@ import (
 	"time"
 
 	pbtypes "github.com/gogo/protobuf/types"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.uber.org/multierr"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/kakao/varlog/internal/stats/opentelemetry"
 	snerrors "github.com/kakao/varlog/internal/storagenode/errors"
 	"github.com/kakao/varlog/internal/storagenode/logstream"
 	"github.com/kakao/varlog/internal/storagenode/telemetry"
@@ -118,6 +122,7 @@ func (ls *logServer) appendStreamRecvLoop(stream snpb.LogIO_AppendServer, cq cha
 			lsid = req.LogStreamID
 		}
 
+		appendTask.TopicID = tpid
 		appendTask.LogStreamID = lsid
 		appendTask.RPCStartTime = time.Now()
 
@@ -160,6 +165,7 @@ func (ls *logServer) appendStreamSendLoop(stream snpb.LogIO_AppendServer, cq <-c
 				return nil
 			}
 
+			tpid := appendTask.TopicID
 			lsid := appendTask.LogStreamID
 			res, err = appendTask.WaitForCompletion(ctx)
 			elapsed := time.Since(appendTask.RPCStartTime)
@@ -188,10 +194,18 @@ func (ls *logServer) appendStreamSendLoop(stream snpb.LogIO_AppendServer, cq <-c
 				}
 			}
 			if !lsid.Invalid() {
-				metrics, ok := ls.sn.metrics.GetLogStreamMetrics(lsid)
-				if ok {
-					metrics.LogRPCServerDuration.Record(ctx, telemetry.RPCKindAppend, code, elapsed.Microseconds())
-				}
+				ls.sn.metrics.LogRPCServerDuration.Record(ctx, lsid, elapsed.Microseconds(), func() []metric.RecordOption {
+					return []metric.RecordOption{
+						metric.WithAttributeSet(attribute.NewSet(
+							opentelemetry.TopicID(tpid),
+							opentelemetry.LogStreamID(lsid),
+							semconv.RPCSystemGRPC,
+							semconv.RPCService(telemetry.ServiceNames[telemetry.RPCKindAppend]),
+							semconv.RPCMethod(telemetry.MethodNames[telemetry.RPCKindAppend]),
+							semconv.RPCGRPCStatusCodeKey.Int64(int64(code)),
+						)),
+					}
+				})
 			}
 			if err != nil {
 				return err
