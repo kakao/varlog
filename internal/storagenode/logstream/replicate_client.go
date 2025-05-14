@@ -122,6 +122,16 @@ func (rc *replicateClient) sendLoop(ctx context.Context) {
 				rc.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
 				return
 			}
+
+			num := len(rc.queue)
+			for range num {
+				rt := <-rc.queue
+				if err := rc.sendLoopInternal(ctx, rt, req); err != nil {
+					rc.logger.Error("could not send replicated log", zap.Error(err))
+					rc.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
+					return
+				}
+			}
 		}
 	}
 }
