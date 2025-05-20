@@ -122,6 +122,7 @@ func (s *Storage) newDB(path string, cfg *dbConfig, cache *Cache) (*pebble.DB, e
 		ErrorIfExists:               false,
 		FlushDelayDeleteRange:       s.trimDelay,
 		TargetByteDeletionRate:      s.trimRateByte,
+		FormatMajorVersion:          pebble.FormatVirtualSSTables,
 	}
 	pebbleOpts.Levels[0].TargetFileSize = cfg.l0TargetFileSize
 	for i := 0; i < len(pebbleOpts.Levels); i++ {
@@ -142,12 +143,16 @@ func (s *Storage) newDB(path string, cfg *dbConfig, cache *Cache) (*pebble.DB, e
 	if s.verbose {
 		el := pebble.MakeLoggingEventListener(newLogAdaptor(s.logger))
 		pebbleOpts.EventListener = &el
-		// BackgroundError, DiskSlow, WriteStallBegin, WriteStallEnd
+		// Enabled events:
+		//  - BackgroundError
+		//  - DiskSlow
+		//  - FormatUpgrade
+		//  - WriteStallBegin
+		//  - WriteStallEnd
 		pebbleOpts.EventListener.CompactionBegin = nil
 		pebbleOpts.EventListener.CompactionEnd = nil
 		pebbleOpts.EventListener.FlushBegin = nil
 		pebbleOpts.EventListener.FlushEnd = nil
-		pebbleOpts.EventListener.FormatUpgrade = nil
 		pebbleOpts.EventListener.ManifestCreated = nil
 		pebbleOpts.EventListener.ManifestDeleted = nil
 		pebbleOpts.EventListener.TableCreated = nil
