@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,16 +35,19 @@ func TestStorage_CompatibilityV1(t *testing.T) {
 		golden string
 		old    pebble.FormatMajorVersion
 		new    pebble.FormatMajorVersion
+		skip   bool
 	}{
 		{
 			golden: "from_FormatMostCompatible_to_FormatFlushableIngest",
-			old:    pebble.FormatMostCompatible,
+			old:    pebble.FormatMajorVersion(1),
 			new:    pebble.FormatFlushableIngest,
+			skip:   true,
 		},
 		{
 			golden: "from_FormatMostCompatible_to_FormatVirtualSSTables",
-			old:    pebble.FormatMostCompatible,
+			old:    pebble.FormatMajorVersion(1),
 			new:    pebble.FormatVirtualSSTables,
+			skip:   true,
 		},
 		{
 			golden: "from_FormatFlushableIngest_to_FormatVirtualSSTables",
@@ -60,6 +63,10 @@ func TestStorage_CompatibilityV1(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.golden, func(t *testing.T) {
+			if tc.skip {
+				t.Skip("Skipping: FormatMostCompatible from v1 cannot be migrated to any v2 format")
+			}
+
 			path := filepath.Join(basepath, "testdata", tc.golden)
 			opts := &pebble.Options{}
 
