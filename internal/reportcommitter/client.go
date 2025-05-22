@@ -80,9 +80,15 @@ func NewClientWithConn(ctx context.Context, rpcConn *rpc.Conn) (Client, error) {
 // FIXME(jun): add response parameter to return the response without creating a new object.
 func (c *client) GetReport() (*snpb.GetReportResponse, error) {
 	if err := c.reportStream.Send(&c.getReportReq); err != nil {
+		_ = c.reportStream.CloseSend()
 		return nil, err
 	}
-	return c.reportStream.Recv()
+	rsp, err := c.reportStream.Recv()
+	if err != nil {
+		_ = c.reportStream.CloseSend()
+		return nil, err
+	}
+	return rsp, nil
 }
 
 // CommitBatch sends commit results to the connected storage node. This method
