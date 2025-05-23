@@ -71,11 +71,22 @@ func (at *AppendTask) WaitForCompletion(ctx context.Context) ([]snpb.AppendResul
 
 		err = at.apc.awg.wait(cctx)
 		if err != nil {
-			if cctx.Err() == nil {
-				// Since it's neither canceled nor timed out, we can release
-				// awg.
-				at.apc.awg.release()
-			}
+			// Unable to determine if awg can be safely released. Not releasing
+			// awg here is not a problem, since it is expected to be garbage
+			// collected.
+			//
+			// If the append operation failed, the operation might still be
+			// handled by another component, such as the committer. In this
+			// case, releasing awg here would prevent the committer from
+			// checking whether the append operation has completed, since awg
+			// would already be cleared. This could even introduce a data race
+			// that is not detected by the race detector. More severely, when
+			// this happens, the WaitGroup counter of awg can become negative,
+			// resulting in a panic.
+			//
+			// TODO(ijsong): Refactor waiting logic to clearly distinguish
+			// between user cancellation, storage node shutdown, and append
+			// operation failure.
 			return
 		}
 
