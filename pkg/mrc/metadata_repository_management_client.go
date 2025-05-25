@@ -6,8 +6,6 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
-	"go.uber.org/multierr"
-	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
@@ -31,18 +29,6 @@ func NewMetadataRepositoryManagementClient(ctx context.Context, address string) 
 	rpcConn, err := rpc.NewConn(ctx, address)
 	if err != nil {
 		return nil, err
-	}
-
-	client := grpc_health_v1.NewHealthClient(rpcConn.Conn)
-	rsp, err := client.Check(ctx, &grpc_health_v1.HealthCheckRequest{})
-	if err != nil {
-		err = errors.Wrapf(err, "mrmcl: addr = %s", address)
-		return nil, multierr.Append(err, rpcConn.Close())
-	}
-	status := rsp.GetStatus()
-	if status != grpc_health_v1.HealthCheckResponse_SERVING {
-		err := errors.Errorf("mrmcl: not ready (%+v)", status)
-		return nil, multierr.Append(err, rpcConn.Close())
 	}
 
 	return NewMetadataRepositoryManagementClientFromRPCConn(rpcConn)
