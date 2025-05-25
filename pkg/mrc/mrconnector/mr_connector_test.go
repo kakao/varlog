@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kakao/varlog/internal/metarepos"
@@ -102,6 +104,7 @@ func newTestMR(t *testing.T, portLease *ports.Lease, clusterID types.ClusterID, 
 			metarepos.WithPeers(raftAddrs...),
 			metarepos.WithRaftTick(vtesting.TestRaftTick()),
 			metarepos.WithSnapshotCount(10),
+			metarepos.WithLogger(zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller()))),
 		)
 	}
 
@@ -204,6 +207,7 @@ func TestConnectorRemovePeer(t *testing.T) {
 		WithInitCount(100),
 		WithInitRetryInterval(fetchInterval),
 		WithUpdateInterval(fetchInterval),
+		WithLogger(zaptest.NewLogger(t, zaptest.WrapOptions(zap.AddCaller()))),
 	)
 	require.NoError(t, err)
 	defer func() {
@@ -227,21 +231,34 @@ func TestConnectorRemovePeer(t *testing.T) {
 		return true
 	}, 10*time.Second, 100*time.Millisecond)
 
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		connectedNodeID := connector.ConnectedNodeID()
-		return len(connector.ActiveMRs()) == numMRs && connectedNodeID != types.InvalidNodeID
-	}, time.Minute, time.Second)
+		assert.NotEqual(collect, types.InvalidNodeID, connectedNodeID)
 
-	require.Eventually(t, func() bool {
 		mcl, err := connector.ManagementClient(context.Background())
-		if err != nil {
-			_ = mcl.Close()
-			return false
-		}
-		return mcl.RemovePeer(context.Background(), clusterID, mrs[0].nodeID) == nil
-	}, time.Minute, time.Second)
+		assert.NoError(collect, err)
 
-	require.Eventually(t, func() bool {
-		return len(connector.ActiveMRs()) == 1
-	}, time.Minute, time.Second)
+		rsp, err := mcl.GetClusterInfo(t.Context(), clusterID)
+		assert.NoError(collect, err)
+
+		assert.Len(collect, rsp.ClusterInfo.GetMembers(), numMRs)
+
+		assert.Len(collect, connector.ActiveMRs(), numMRs)
+	}, 10*time.Second, 100*time.Millisecond)
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		mcl, err := connector.ManagementClient(context.Background())
+		if !assert.NoError(collect, err) {
+			return
+		}
+
+		err = mcl.RemovePeer(t.Context(), clusterID, mrs[0].nodeID)
+		if !assert.NoError(collect, err) {
+			return
+		}
+	}, 10*time.Second, 100*time.Millisecond)
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.Len(collect, connector.ActiveMRs(), 1)
+	}, 10*time.Second, 100*time.Millisecond)
 }
