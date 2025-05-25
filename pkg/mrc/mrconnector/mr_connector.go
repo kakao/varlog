@@ -12,7 +12,6 @@ import (
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
-	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/rpc"
@@ -259,15 +258,6 @@ func (c *connectorImpl) connectToMR(ctx context.Context, addr string) (cl mrc.Me
 		return nil, nil, err
 	}
 
-	// health check
-	// FIXME: Which timeout should it use?
-	rsp, err := grpc_health_v1.NewHealthClient(conn.Conn).Check(connCtx, &grpc_health_v1.HealthCheckRequest{})
-	if err != nil || rsp.GetStatus() != grpc_health_v1.HealthCheckResponse_SERVING {
-		err = multierr.Append(conn.Close(), errors.Errorf("not ready, addr=%s status=%s", addr, rsp.GetStatus().String()))
-		return nil, nil, err
-	}
-
-	// It always returns nil as error value.
 	cl, _ = mrc.NewMetadataRepositoryClientFromRPCConn(conn)
 	mcl, _ = mrc.NewMetadataRepositoryManagementClientFromRPCConn(conn)
 	return cl, mcl, nil
