@@ -81,6 +81,7 @@ func TestWriter_DrainForce(t *testing.T) {
 	lse := &Executor{
 		esm: newExecutorStateManager(executorStateAppendable),
 	}
+	lse.stg = stg
 
 	wr := &writer{}
 	wr.lse = lse
@@ -88,7 +89,7 @@ func TestWriter_DrainForce(t *testing.T) {
 	wr.queue = make(chan *sequenceTask, numTasks)
 
 	for i := 0; i < numTasks; i++ {
-		st := testSequenceTask(stg)
+		st := testSequenceTask()
 		err := wr.send(context.Background(), st)
 		assert.NoError(t, err)
 	}
@@ -114,13 +115,14 @@ func TestWriter_UnexpectedLLSN(t *testing.T) {
 		lsc: newLogStreamContext(),
 	}
 	lse.lsc.uncommittedLLSNEnd.Store(uncommittedLLSNEnd)
+	lse.stg = stg
 
 	wr := &writer{}
 	wr.queue = make(chan *sequenceTask, 1)
 	wr.logger = zap.NewNop()
 	wr.lse = lse
 
-	st := testSequenceTask(stg)
+	st := testSequenceTask()
 	st.awg.setBeginLLSN(uncommittedLLSNEnd - 1) // not expected LLSN
 	wr.writeLoopInternal(context.Background(), st)
 
