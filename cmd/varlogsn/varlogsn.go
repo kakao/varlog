@@ -16,12 +16,12 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kakao/varlog/internal/flags"
+	"github.com/kakao/varlog/internal/stats/opentelemetry"
 	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/internal/storagenode"
 	"github.com/kakao/varlog/internal/storagenode/logstream"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/log"
-	"github.com/kakao/varlog/pkg/util/telemetry"
 	"github.com/kakao/varlog/pkg/util/units"
 )
 
@@ -78,11 +78,11 @@ func start(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	mp, stop, err := telemetry.NewMeterProvider(meterProviderOpts...)
+	mp, stop, err := opentelemetry.NewMeterProvider(meterProviderOpts...)
 	if err != nil {
 		return err
 	}
-	telemetry.SetGlobalMeterProvider(mp)
+	opentelemetry.SetGlobalMeterProvider(mp)
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), c.Duration(flags.TelemetryExporterStopTimeout.Name))
 		defer cancel()
