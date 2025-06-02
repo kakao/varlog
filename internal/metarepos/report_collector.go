@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"io"
 	"slices"
 	"sort"
 	"sync"
@@ -635,9 +634,6 @@ func (rce *reportCollectExecutor) getReport(ctx context.Context) error {
 
 	response, err := cli.GetReport()
 	if err != nil {
-		if err == io.EOF {
-			return nil
-		}
 		rce.closeClient(cli)
 		return err
 	}
