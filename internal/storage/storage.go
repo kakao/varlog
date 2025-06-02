@@ -25,8 +25,8 @@ var (
 type Storage struct {
 	config
 
-	dataStore          *pebble.DB
-	dataStoreWriteOpts *pebble.WriteOptions
+	valueStore          *pebble.DB
+	valueStoreWriteOpts *pebble.WriteOptions
 
 	commitStore          *pebble.DB
 	commitStoreWriteOpts *pebble.WriteOptions
@@ -50,23 +50,23 @@ func New(opts ...Option) (*Storage, error) {
 	}
 
 	// Check directory entries in s.path to see whether anything except
-	// dataStoreDirName and commitStoreDirName exists, which results in an
+	// valueStoreDirName and commitStoreDirName exists, which results in an
 	// error if it exists.
 	ds, err := os.ReadDir(s.path)
 	if err != nil {
 		return nil, err
 	}
 	for _, d := range ds {
-		if name := d.Name(); name != dataStoreDirName && name != commitStoreDirName {
+		if name := d.Name(); name != valueStoreDirName && name != commitStoreDirName {
 			return nil, fmt.Errorf("forbidden entry: %s", name)
 		}
 	}
-	dataStoreConfig, err := newStoreConfig(s.dataStoreOptions...)
+	valueStoreConfig, err := newStoreConfig(s.valueStoreOptions...)
 	if err != nil {
 		return nil, err
 	}
-	s.dataStoreWriteOpts = &pebble.WriteOptions{Sync: dataStoreConfig.sync}
-	s.dataStore, err = s.newStore(filepath.Join(s.path, dataStoreDirName), &dataStoreConfig, s.cache)
+	s.valueStoreWriteOpts = &pebble.WriteOptions{Sync: valueStoreConfig.sync}
+	s.valueStore, err = s.newStore(filepath.Join(s.path, valueStoreDirName), &valueStoreConfig, s.cache)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +157,7 @@ func (s *Storage) newStore(path string, cfg *storeConfig, cache *Cache) (*pebble
 
 // NewWriteBatch creates a batch for write operations.
 func (s *Storage) NewWriteBatch() *WriteBatch {
-	return newWriteBatch(s.dataStore.NewBatch(), s.dataStoreWriteOpts)
+	return newWriteBatch(s.valueStore.NewBatch(), s.valueStoreWriteOpts)
 }
 
 // NewCommitBatch creates a batch for commit operations.
@@ -173,7 +173,7 @@ func (s *Storage) NewCommitBatch(cc CommitContext) (*CommitBatch, error) {
 // NewAppendBatch creates a batch for appending log entries. It does not put
 // commit context.
 func (s *Storage) NewAppendBatch() *AppendBatch {
-	return newAppendBatch(s.dataStore.NewBatch(), s.commitStore.NewBatch(), s.dataStoreWriteOpts)
+	return newAppendBatch(s.valueStore.NewBatch(), s.commitStore.NewBatch(), s.valueStoreWriteOpts)
 }
 
 // NewScanner creates a scanner for the given key range.
@@ -189,7 +189,7 @@ func (s *Storage) NewScanner(opts ...ScanOption) (scanner *Scanner, err error) {
 	} else {
 		itOpt.LowerBound = encodeDataKeyInternal(scanner.begin.LLSN, scanner.dks.lower)
 		itOpt.UpperBound = encodeDataKeyInternal(scanner.end.LLSN, scanner.dks.upper)
-		scanner.it, err = s.dataStore.NewIter(itOpt)
+		scanner.it, err = s.valueStore.NewIter(itOpt)
 	}
 	if err != nil {
 		_ = scanner.Close()
@@ -280,7 +280,7 @@ func (s *Storage) Trim(glsn types.GLSN) error {
 
 	trimGLSN, trimLLSN := lem.GLSN, lem.LLSN
 
-	dataBatch := s.dataStore.NewBatch()
+	dataBatch := s.valueStore.NewBatch()
 	commitBatch := s.commitStore.NewBatch()
 	defer func() {
 		_ = dataBatch.Close()
@@ -301,7 +301,7 @@ func (s *Storage) Trim(glsn types.GLSN) error {
 	dkEnd = encodeDataKeyInternal(trimLLSN+1, dkEnd)
 	_ = dataBatch.DeleteRange(dkBegin, dkEnd, nil)
 
-	return errors.Join(commitBatch.Commit(s.commitStoreWriteOpts), dataBatch.Commit(s.dataStoreWriteOpts))
+	return errors.Join(commitBatch.Commit(s.commitStoreWriteOpts), dataBatch.Commit(s.valueStoreWriteOpts))
 }
 
 func (s *Storage) findLTE(glsn types.GLSN) (lem varlogpb.LogEntryMeta, err error) {
@@ -337,7 +337,7 @@ func (s *Storage) Path() string {
 }
 
 func (s *Storage) DiskUsage() uint64 {
-	usage := s.dataStore.Metrics().DiskSpaceUsage()
+	usage := s.valueStore.Metrics().DiskSpaceUsage()
 	usage += s.commitStore.Metrics().DiskSpaceUsage()
 	return usage
 }
@@ -355,7 +355,7 @@ func (s *Storage) startMetricsLogger() {
 			select {
 			case <-s.metricsLogger.ticker.C:
 				var sb strings.Builder
-				fmt.Fprintf(&sb, "DataStore Metrics\n%sCommitStore Metrics\n%s", s.dataStore.Metrics(), s.commitStore.Metrics())
+				fmt.Fprintf(&sb, "ValueStore Metrics\n%sCommitStore Metrics\n%s", s.valueStore.Metrics(), s.commitStore.Metrics())
 				s.logger.Info(sb.String())
 			case <-s.metricsLogger.stop:
 				return
@@ -376,12 +376,12 @@ func (s *Storage) stopMetricsLogger() {
 // Close closes the storage.
 func (s *Storage) Close() (err error) {
 	if !s.readOnly {
-		err = s.dataStore.Flush()
+		err = s.valueStore.Flush()
 		err = errors.Join(err, s.commitStore.Flush())
 	}
 	s.stopMetricsLogger()
 
-	err = errors.Join(err, s.dataStore.Close())
+	err = errors.Join(err, s.valueStore.Close())
 	err = errors.Join(err, s.commitStore.Close())
 	return err
 }

@@ -229,7 +229,7 @@ func parseStorageOptions(c *cli.Context) (opts []storage.Option, err error) {
 	}
 
 	opts = []storage.Option{
-		storage.WithDataStoreOptions(
+		storage.WithValueStoreOptions(
 			slices.Concat([]storage.StoreOption{
 				storage.WithWAL(!c.Bool(flagStorageDataDBDisableWAL.Name)),
 				storage.WithSync(!c.Bool(flagStorageDataDBNoSync.Name)),
