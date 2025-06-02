@@ -18,7 +18,7 @@ func TestNewStorage(tb testing.TB, opts ...Option) *Storage {
 	defaultOpts := []Option{
 		WithPath(tb.TempDir()),
 		WithCache(cache),
-		WithDataDBOptions(
+		WithDataStoreOptions(
 			WithSync(false), // Use only in mac since sync is too slow in mac os.
 		),
 	}
@@ -27,13 +27,13 @@ func TestNewStorage(tb testing.TB, opts ...Option) *Storage {
 	return s
 }
 
-// TestGetUnderlyingDB returns a pebble that is an internal database in the
+// TestGetUnderlyingStore returns a pebble that is an internal database in the
 // storage.
-func TestGetUnderlyingDB(tb testing.TB, stg *Storage) (dataDB, commitDB *pebble.DB) {
+func TestGetUnderlyingStore(tb testing.TB, stg *Storage) (dataStore, commitStore *pebble.DB) {
 	require.NotNil(tb, stg)
-	require.NotNil(tb, stg.dataDB)
-	require.NotNil(tb, stg.commitDB)
-	return stg.dataDB, stg.commitDB
+	require.NotNil(tb, stg.dataStore)
+	require.NotNil(tb, stg.commitStore)
+	return stg.dataStore, stg.commitStore
 }
 
 // TestWriteLogEntry stores data located by the llsn. The data is not committed
@@ -63,13 +63,13 @@ func TestSetCommitContext(tb testing.TB, stg *Storage, cc CommitContext) {
 }
 
 func TestDeleteCommitContext(tb testing.TB, stg *Storage) {
-	err := stg.commitDB.Delete(commitContextKey, pebble.Sync)
+	err := stg.commitStore.Delete(commitContextKey, pebble.Sync)
 	require.NoError(tb, err)
 }
 
 func TestDeleteLogEntry(tb testing.TB, stg *Storage, lsn varlogpb.LogSequenceNumber) {
-	dataBatch := stg.dataDB.NewBatch()
-	commitBatch := stg.commitDB.NewBatch()
+	dataBatch := stg.dataStore.NewBatch()
+	commitBatch := stg.commitStore.NewBatch()
 	defer func() {
 		err := errors.Join(dataBatch.Close(), commitBatch.Close())
 		require.NoError(tb, err)

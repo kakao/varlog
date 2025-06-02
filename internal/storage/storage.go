@@ -25,11 +25,11 @@ var (
 type Storage struct {
 	config
 
-	dataDB          *pebble.DB
-	dataDBWriteOpts *pebble.WriteOptions
+	dataStore          *pebble.DB
+	dataStoreWriteOpts *pebble.WriteOptions
 
-	commitDB          *pebble.DB
-	commitDBWriteOpts *pebble.WriteOptions
+	commitStore          *pebble.DB
+	commitStoreWriteOpts *pebble.WriteOptions
 
 	metricsLogger struct {
 		wg     sync.WaitGroup
@@ -49,64 +49,65 @@ func New(opts ...Option) (*Storage, error) {
 		config: cfg,
 	}
 
-	if cfg.separateDB {
+	if cfg.separateStore {
 		// Check directory entries in s.path to see whether anything except
-		// dataDBDirName and commitDBDirName exists, which results in an error
-		// if it exists.
+		// dataStoreDirName and commitStoreDirName exists, which results in an
+		// error if it exists.
 		ds, err := os.ReadDir(s.path)
 		if err != nil {
 			return nil, err
 		}
 		for _, d := range ds {
-			if name := d.Name(); name != dataDBDirName && name != commitDBDirName {
+			if name := d.Name(); name != dataStoreDirName && name != commitStoreDirName {
 				return nil, fmt.Errorf("forbidden entry: %s", name)
 			}
 		}
-		dataDBConfig, err := newDBConfig(s.dataDBOptions...)
+		dataStoreConfig, err := newStoreConfig(s.dataStoreOptions...)
 		if err != nil {
 			return nil, err
 		}
-		s.dataDBWriteOpts = &pebble.WriteOptions{Sync: dataDBConfig.sync}
-		s.dataDB, err = s.newDB(filepath.Join(s.path, dataDBDirName), &dataDBConfig, s.cache)
+		s.dataStoreWriteOpts = &pebble.WriteOptions{Sync: dataStoreConfig.sync}
+		s.dataStore, err = s.newStore(filepath.Join(s.path, dataStoreDirName), &dataStoreConfig, s.cache)
 		if err != nil {
 			return nil, err
 		}
-		commitDBConfig, err := newDBConfig(s.commitDBOptions...)
+		commitStoreConfig, err := newStoreConfig(s.commitStoreOptions...)
 		if err != nil {
 			return nil, err
 		}
-		s.commitDBWriteOpts = &pebble.WriteOptions{Sync: commitDBConfig.sync}
-		s.commitDB, err = s.newDB(filepath.Join(s.path, commitDBDirName), &commitDBConfig, s.cache)
+		s.commitStoreWriteOpts = &pebble.WriteOptions{Sync: commitStoreConfig.sync}
+		s.commitStore, err = s.newStore(filepath.Join(s.path, commitStoreDirName), &commitStoreConfig, s.cache)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		// Check directory entries in s.path to see whether dataDBDirName and
-		// commitDBDirName exist, which results in an error if it exists.
-		for _, dbDirName := range []string{dataDBDirName, commitDBDirName} {
-			if _, err := os.Stat(filepath.Join(s.path, dbDirName)); err == nil {
-				return nil, fmt.Errorf("non-separating database, but %s exists", dbDirName)
+		// Check directory entries in s.path to see whether dataStoreDirName
+		// and commitStoreDirName exist, which results in an error if it
+		// exists.
+		for _, dirName := range []string{dataStoreDirName, commitStoreDirName} {
+			if _, err := os.Stat(filepath.Join(s.path, dirName)); err == nil {
+				return nil, fmt.Errorf("non-separating database, but %s exists", dirName)
 			}
 		}
-		dataDBConfig, err := newDBConfig(s.dataDBOptions...)
+		dataStoreConfig, err := newStoreConfig(s.dataStoreOptions...)
 		if err != nil {
 			return nil, err
 		}
-		s.dataDBWriteOpts = &pebble.WriteOptions{Sync: dataDBConfig.sync}
-		s.dataDB, err = s.newDB(s.path, &dataDBConfig, s.cache)
+		s.dataStoreWriteOpts = &pebble.WriteOptions{Sync: dataStoreConfig.sync}
+		s.dataStore, err = s.newStore(s.path, &dataStoreConfig, s.cache)
 		if err != nil {
 			return nil, err
 		}
 
-		s.commitDB = s.dataDB
-		s.commitDBWriteOpts = s.dataDBWriteOpts
+		s.commitStore = s.dataStore
+		s.commitStoreWriteOpts = s.dataStoreWriteOpts
 	}
 	s.startMetricsLogger()
 
 	return s, nil
 }
 
-func (s *Storage) newDB(path string, cfg *dbConfig, cache *Cache) (*pebble.DB, error) {
+func (s *Storage) newStore(path string, cfg *storeConfig, cache *Cache) (*pebble.DB, error) {
 	pebbleOpts := &pebble.Options{
 		Cache:                       cache.get(),
 		DisableWAL:                  !cfg.wal,
@@ -179,12 +180,12 @@ func (s *Storage) newDB(path string, cfg *dbConfig, cache *Cache) (*pebble.DB, e
 
 // NewWriteBatch creates a batch for write operations.
 func (s *Storage) NewWriteBatch() *WriteBatch {
-	return newWriteBatch(s.dataDB.NewBatch(), s.dataDBWriteOpts)
+	return newWriteBatch(s.dataStore.NewBatch(), s.dataStoreWriteOpts)
 }
 
 // NewCommitBatch creates a batch for commit operations.
 func (s *Storage) NewCommitBatch(cc CommitContext) (*CommitBatch, error) {
-	cb := newCommitBatch(s.commitDB.NewBatch(), s.commitDBWriteOpts)
+	cb := newCommitBatch(s.commitStore.NewBatch(), s.commitStoreWriteOpts)
 	if err := cb.batch.Set(commitContextKey, encodeCommitContext(cc, cb.cc), nil); err != nil {
 		_ = cb.Close()
 		return nil, err
@@ -195,7 +196,7 @@ func (s *Storage) NewCommitBatch(cc CommitContext) (*CommitBatch, error) {
 // NewAppendBatch creates a batch for appending log entries. It does not put
 // commit context.
 func (s *Storage) NewAppendBatch() *AppendBatch {
-	return newAppendBatch(s.dataDB.NewBatch(), s.commitDB.NewBatch(), s.dataDBWriteOpts)
+	return newAppendBatch(s.dataStore.NewBatch(), s.commitStore.NewBatch(), s.dataStoreWriteOpts)
 }
 
 // NewScanner creates a scanner for the given key range.
@@ -207,11 +208,11 @@ func (s *Storage) NewScanner(opts ...ScanOption) (scanner *Scanner, err error) {
 	if scanner.withGLSN {
 		itOpt.LowerBound = encodeCommitKeyInternal(scanner.begin.GLSN, scanner.cks.lower)
 		itOpt.UpperBound = encodeCommitKeyInternal(scanner.end.GLSN, scanner.cks.upper)
-		scanner.it, err = s.commitDB.NewIter(itOpt)
+		scanner.it, err = s.commitStore.NewIter(itOpt)
 	} else {
 		itOpt.LowerBound = encodeDataKeyInternal(scanner.begin.LLSN, scanner.dks.lower)
 		itOpt.UpperBound = encodeDataKeyInternal(scanner.end.LLSN, scanner.dks.upper)
-		scanner.it, err = s.dataDB.NewIter(itOpt)
+		scanner.it, err = s.dataStore.NewIter(itOpt)
 	}
 	if err != nil {
 		_ = scanner.Close()
@@ -245,7 +246,7 @@ func (s *Storage) readGLSN(glsn types.GLSN) (le varlogpb.LogEntry, err error) {
 }
 
 func (s *Storage) readLLSN(llsn types.LLSN) (le varlogpb.LogEntry, err error) {
-	it, err := s.commitDB.NewIter(&pebble.IterOptions{
+	it, err := s.commitStore.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitKeyPrefix},
 		UpperBound: []byte{commitKeySentinelPrefix},
 	})
@@ -277,7 +278,7 @@ func (s *Storage) readLLSN(llsn types.LLSN) (le varlogpb.LogEntry, err error) {
 }
 
 func (s *Storage) ReadCommitContext() (cc CommitContext, err error) {
-	buf, closer, err := s.commitDB.Get(commitContextKey)
+	buf, closer, err := s.commitStore.Get(commitContextKey)
 	if err != nil {
 		if err == pebble.ErrNotFound {
 			err = ErrNoCommitContext
@@ -302,8 +303,8 @@ func (s *Storage) Trim(glsn types.GLSN) error {
 
 	trimGLSN, trimLLSN := lem.GLSN, lem.LLSN
 
-	dataBatch := s.dataDB.NewBatch()
-	commitBatch := s.commitDB.NewBatch()
+	dataBatch := s.dataStore.NewBatch()
+	commitBatch := s.commitStore.NewBatch()
 	defer func() {
 		_ = dataBatch.Close()
 		_ = commitBatch.Close()
@@ -323,7 +324,7 @@ func (s *Storage) Trim(glsn types.GLSN) error {
 	dkEnd = encodeDataKeyInternal(trimLLSN+1, dkEnd)
 	_ = dataBatch.DeleteRange(dkBegin, dkEnd, nil)
 
-	return errors.Join(commitBatch.Commit(s.commitDBWriteOpts), dataBatch.Commit(s.dataDBWriteOpts))
+	return errors.Join(commitBatch.Commit(s.commitStoreWriteOpts), dataBatch.Commit(s.dataStoreWriteOpts))
 }
 
 func (s *Storage) findLTE(glsn types.GLSN) (lem varlogpb.LogEntryMeta, err error) {
@@ -335,7 +336,7 @@ func (s *Storage) findLTE(glsn types.GLSN) (lem varlogpb.LogEntryMeta, err error
 		upper = []byte{commitKeySentinelPrefix}
 	}
 
-	it, err := s.commitDB.NewIter(&pebble.IterOptions{
+	it, err := s.commitStore.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitKeyPrefix},
 		UpperBound: upper,
 	})
@@ -359,9 +360,9 @@ func (s *Storage) Path() string {
 }
 
 func (s *Storage) DiskUsage() uint64 {
-	usage := s.dataDB.Metrics().DiskSpaceUsage()
-	if s.separateDB {
-		usage += s.commitDB.Metrics().DiskSpaceUsage()
+	usage := s.dataStore.Metrics().DiskSpaceUsage()
+	if s.separateStore {
+		usage += s.commitStore.Metrics().DiskSpaceUsage()
 	}
 	return usage
 }
@@ -379,10 +380,10 @@ func (s *Storage) startMetricsLogger() {
 			select {
 			case <-s.metricsLogger.ticker.C:
 				var sb strings.Builder
-				if s.separateDB {
-					fmt.Fprintf(&sb, "DataDB Metrics\n%sCommitDB Metrics\n%s", s.dataDB.Metrics(), s.commitDB.Metrics())
+				if s.separateStore {
+					fmt.Fprintf(&sb, "DataStore Metrics\n%sCommitStore Metrics\n%s", s.dataStore.Metrics(), s.commitStore.Metrics())
 				} else {
-					fmt.Fprintf(&sb, "DB Metrics\n%s", s.dataDB.Metrics())
+					fmt.Fprintf(&sb, "Store Metrics\n%s", s.dataStore.Metrics())
 				}
 				s.logger.Info(sb.String())
 			case <-s.metricsLogger.stop:
@@ -404,16 +405,16 @@ func (s *Storage) stopMetricsLogger() {
 // Close closes the storage.
 func (s *Storage) Close() (err error) {
 	if !s.readOnly {
-		err = s.dataDB.Flush()
-		if s.separateDB {
-			err = errors.Join(err, s.commitDB.Flush())
+		err = s.dataStore.Flush()
+		if s.separateStore {
+			err = errors.Join(err, s.commitStore.Flush())
 		}
 	}
 	s.stopMetricsLogger()
 
-	err = errors.Join(err, s.dataDB.Close())
-	if s.separateDB {
-		err = errors.Join(err, s.commitDB.Close())
+	err = errors.Join(err, s.dataStore.Close())
+	if s.separateStore {
+		err = errors.Join(err, s.commitStore.Close())
 	}
 	return err
 }

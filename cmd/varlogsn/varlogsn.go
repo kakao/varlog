@@ -213,8 +213,8 @@ func parseStorageOptions(c *cli.Context) (opts []storage.Option, err error) {
 		return nil, err
 	}
 
-	getStorageDBOptions := func(i int) []storage.DBOption {
-		return []storage.DBOption{
+	getStorageDBOptions := func(i int) []storage.StoreOption {
+		return []storage.StoreOption{
 			storage.WithL0CompactionFileThreshold(l0CompactionFileThreshold[i]),
 			storage.WithL0CompactionThreshold(l0CompactionThreshold[i]),
 			storage.WithL0StopWritesThreshold(l0StopWritesThreshold[i]),
@@ -229,8 +229,8 @@ func parseStorageOptions(c *cli.Context) (opts []storage.Option, err error) {
 	}
 
 	opts = []storage.Option{
-		storage.WithDataDBOptions(
-			slices.Concat([]storage.DBOption{
+		storage.WithDataStoreOptions(
+			slices.Concat([]storage.StoreOption{
 				storage.WithWAL(!c.Bool(flagStorageDataDBDisableWAL.Name)),
 				storage.WithSync(!c.Bool(flagStorageDataDBNoSync.Name)),
 			}, getStorageDBOptions(0))...,
@@ -239,9 +239,9 @@ func parseStorageOptions(c *cli.Context) (opts []storage.Option, err error) {
 	}
 	if c.Bool(flagExperimentalStorageSeparateDB.Name) {
 		opts = append(opts,
-			storage.SeparateDatabase(),
-			storage.WithCommitDBOptions(
-				slices.Concat([]storage.DBOption{
+			storage.SeparateStore(),
+			storage.WithCommitStoreOptions(
+				slices.Concat([]storage.StoreOption{
 					storage.WithWAL(!c.Bool(flagStorageDataDBDisableWAL.Name)),
 					storage.WithSync(!c.Bool(flagStorageDataDBNoSync.Name)),
 				}, getStorageDBOptions(1))...,

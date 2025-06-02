@@ -62,7 +62,7 @@ func TestStorage_New(t *testing.T) {
 				_, err := New(
 					WithPath(path),
 					WithCache(cache),
-					WithDataDBOptions(
+					WithDataStoreOptions(
 						WithWAL(false),
 						WithSync(true),
 					),
@@ -94,7 +94,7 @@ func TestStorage_New(t *testing.T) {
 					WithPath(path),
 					WithLogger(zap.NewNop()),
 					WithCache(cache),
-					SeparateDatabase(),
+					SeparateStore(),
 				)
 				require.NoError(t, err)
 				require.NoError(t, s.Close())
@@ -107,7 +107,7 @@ func TestStorage_New(t *testing.T) {
 
 				s, err := New(
 					WithPath(path),
-					SeparateDatabase(),
+					SeparateStore(),
 				)
 				require.NoError(t, err)
 				require.NoError(t, s.Close())
@@ -131,7 +131,7 @@ func TestStorage_New(t *testing.T) {
 
 				_, err = New(
 					WithPath(path),
-					SeparateDatabase(),
+					SeparateStore(),
 				)
 				require.Error(t, err)
 			},
@@ -142,7 +142,7 @@ func TestStorage_New(t *testing.T) {
 				path := t.TempDir()
 				opts := []Option{
 					WithPath(path),
-					SeparateDatabase(),
+					SeparateStore(),
 					WithVerboseLogging(),
 					WithMetricsLogInterval(time.Second),
 				}
@@ -1191,7 +1191,7 @@ func TestStorage_Trim(t *testing.T) {
 				err := stg.Trim(types.MinGLSN)
 				assert.NoError(t, err)
 
-				it, err := stg.dataDB.NewIter(&pebble.IterOptions{
+				it, err := stg.dataStore.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{dataKeyPrefix},
 					UpperBound: []byte{dataKeySentinelPrefix},
 				})
@@ -1202,7 +1202,7 @@ func TestStorage_Trim(t *testing.T) {
 				assert.Equal(t, types.LLSN(3), decodeDataKey(it.Key()))
 				assert.NoError(t, it.Close())
 
-				it, err = stg.commitDB.NewIter(&pebble.IterOptions{
+				it, err = stg.commitStore.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{commitKeyPrefix},
 					UpperBound: []byte{commitKeySentinelPrefix},
 				})
@@ -1225,7 +1225,7 @@ func TestStorage_Trim(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NoError(t, err)
 
-				it, err := stg.dataDB.NewIter(&pebble.IterOptions{
+				it, err := stg.dataStore.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{dataKeyPrefix},
 					UpperBound: []byte{dataKeySentinelPrefix},
 				})
@@ -1233,7 +1233,7 @@ func TestStorage_Trim(t *testing.T) {
 				assert.False(t, it.First())
 				assert.NoError(t, it.Close())
 
-				it, err = stg.commitDB.NewIter(&pebble.IterOptions{
+				it, err = stg.commitStore.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{commitKeyPrefix},
 					UpperBound: []byte{commitKeySentinelPrefix},
 				})
@@ -1252,7 +1252,7 @@ func TestStorage_Trim(t *testing.T) {
 				err := stg.Trim(types.MaxGLSN)
 				assert.NoError(t, err)
 
-				it, err := stg.dataDB.NewIter(&pebble.IterOptions{
+				it, err := stg.dataStore.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{dataKeyPrefix},
 					UpperBound: []byte{dataKeySentinelPrefix},
 				})
@@ -1260,7 +1260,7 @@ func TestStorage_Trim(t *testing.T) {
 				assert.False(t, it.First())
 				assert.NoError(t, it.Close())
 
-				it, err = stg.commitDB.NewIter(&pebble.IterOptions{
+				it, err = stg.commitStore.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{commitKeyPrefix},
 					UpperBound: []byte{commitKeySentinelPrefix},
 				})

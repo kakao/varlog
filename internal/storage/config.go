@@ -22,11 +22,11 @@ const (
 	DefaultMaxConcurrentCompactions    = 1
 	DefaultMetricsLogInterval          = time.Duration(0)
 
-	dataDBDirName   = "_data"
-	commitDBDirName = "_commit"
+	dataStoreDirName   = "_data"
+	commitStoreDirName = "_commit"
 )
 
-type dbConfig struct {
+type storeConfig struct {
 	wal                         bool
 	sync                        bool
 	l0CompactionFileThreshold   int
@@ -41,8 +41,8 @@ type dbConfig struct {
 	maxConcurrentCompaction     int
 }
 
-func newDBConfig(dbOpts ...DBOption) (dbConfig, error) {
-	cfg := dbConfig{
+func newStoreConfig(dbOpts ...StoreOption) (storeConfig, error) {
+	cfg := storeConfig{
 		wal:                         true,
 		sync:                        true,
 		l0CompactionFileThreshold:   DefaultL0CompactionFileThreshold,
@@ -60,111 +60,111 @@ func newDBConfig(dbOpts ...DBOption) (dbConfig, error) {
 		dbOpt.apply(&cfg)
 	}
 	if err := cfg.validate(); err != nil {
-		return dbConfig{}, err
+		return storeConfig{}, err
 	}
 	return cfg, nil
 }
 
-func (cfg dbConfig) validate() error {
+func (cfg storeConfig) validate() error {
 	if cfg.sync && !cfg.wal {
 		return errors.New("storage: sync, but wal disabled")
 	}
 	return nil
 }
 
-type DBOption interface {
-	apply(*dbConfig)
+type StoreOption interface {
+	apply(*storeConfig)
 }
 
-type funcDBOption struct {
-	f func(*dbConfig)
+type funcStoreOption struct {
+	f func(*storeConfig)
 }
 
-func newFuncDBOption(f func(*dbConfig)) *funcDBOption {
-	return &funcDBOption{f: f}
+func newFuncStoreOption(f func(*storeConfig)) *funcStoreOption {
+	return &funcStoreOption{f: f}
 }
 
-func (fo *funcDBOption) apply(cfg *dbConfig) {
+func (fo *funcStoreOption) apply(cfg *storeConfig) {
 	fo.f(cfg)
 }
 
-func WithWAL(wal bool) DBOption {
-	return newFuncDBOption(func(cfg *dbConfig) {
+func WithWAL(wal bool) StoreOption {
+	return newFuncStoreOption(func(cfg *storeConfig) {
 		cfg.wal = wal
 	})
 }
 
-func WithSync(sync bool) DBOption {
-	return newFuncDBOption(func(cfg *dbConfig) {
+func WithSync(sync bool) StoreOption {
+	return newFuncStoreOption(func(cfg *storeConfig) {
 		cfg.sync = sync
 	})
 }
 
-func WithL0CompactionFileThreshold(l0CompactionFileThreshold int) DBOption {
-	return newFuncDBOption(func(cfg *dbConfig) {
+func WithL0CompactionFileThreshold(l0CompactionFileThreshold int) StoreOption {
+	return newFuncStoreOption(func(cfg *storeConfig) {
 		cfg.l0CompactionFileThreshold = l0CompactionFileThreshold
 	})
 }
 
-func WithL0CompactionThreshold(l0CompactionThreshold int) DBOption {
-	return newFuncDBOption(func(cfg *dbConfig) {
+func WithL0CompactionThreshold(l0CompactionThreshold int) StoreOption {
+	return newFuncStoreOption(func(cfg *storeConfig) {
 		cfg.l0CompactionThreshold = l0CompactionThreshold
 	})
 }
 
-func WithL0StopWritesThreshold(l0StopWritesThreshold int) DBOption {
-	return newFuncDBOption(func(cfg *dbConfig) {
+func WithL0StopWritesThreshold(l0StopWritesThreshold int) StoreOption {
+	return newFuncStoreOption(func(cfg *storeConfig) {
 		cfg.l0StopWritesThreshold = l0StopWritesThreshold
 	})
 }
 
-func WithL0TargetFileSize(l0TargetFileSize int64) DBOption {
-	return newFuncDBOption(func(cfg *dbConfig) {
+func WithL0TargetFileSize(l0TargetFileSize int64) StoreOption {
+	return newFuncStoreOption(func(cfg *storeConfig) {
 		cfg.l0TargetFileSize = l0TargetFileSize
 	})
 }
 
-func WithFlushSplitBytes(flushSplitBytes int64) DBOption {
-	return newFuncDBOption(func(cfg *dbConfig) {
+func WithFlushSplitBytes(flushSplitBytes int64) StoreOption {
+	return newFuncStoreOption(func(cfg *storeConfig) {
 		cfg.flushSplitBytes = flushSplitBytes
 	})
 }
 
-func WithLBaseMaxBytes(lbaseMaxBytes int64) DBOption {
-	return newFuncDBOption(func(cfg *dbConfig) {
+func WithLBaseMaxBytes(lbaseMaxBytes int64) StoreOption {
+	return newFuncStoreOption(func(cfg *storeConfig) {
 		cfg.lbaseMaxBytes = lbaseMaxBytes
 	})
 }
 
-func WithMaxOpenFiles(maxOpenFiles int) DBOption {
-	return newFuncDBOption(func(cfg *dbConfig) {
+func WithMaxOpenFiles(maxOpenFiles int) StoreOption {
+	return newFuncStoreOption(func(cfg *storeConfig) {
 		cfg.maxOpenFiles = maxOpenFiles
 	})
 }
 
-func WithMemTableSize(memTableSize int) DBOption {
-	return newFuncDBOption(func(cfg *dbConfig) {
+func WithMemTableSize(memTableSize int) StoreOption {
+	return newFuncStoreOption(func(cfg *storeConfig) {
 		cfg.memTableSize = memTableSize
 	})
 }
 
-func WithMemTableStopWritesThreshold(memTableStopWritesThreshold int) DBOption {
-	return newFuncDBOption(func(cfg *dbConfig) {
+func WithMemTableStopWritesThreshold(memTableStopWritesThreshold int) StoreOption {
+	return newFuncStoreOption(func(cfg *storeConfig) {
 		cfg.memTableStopWritesThreshold = memTableStopWritesThreshold
 	})
 }
 
-func WithMaxConcurrentCompaction(maxConcurrentCompaction int) DBOption {
-	return newFuncDBOption(func(cfg *dbConfig) {
+func WithMaxConcurrentCompaction(maxConcurrentCompaction int) StoreOption {
+	return newFuncStoreOption(func(cfg *storeConfig) {
 		cfg.maxConcurrentCompaction = maxConcurrentCompaction
 	})
 }
 
 type config struct {
 	path               string
-	separateDB         bool
-	dataDBOptions      []DBOption
-	commitDBOptions    []DBOption
+	separateStore      bool
+	dataStoreOptions   []StoreOption
+	commitStoreOptions []StoreOption
 	verbose            bool
 	metricsLogInterval time.Duration
 	trimDelay          time.Duration
@@ -220,21 +220,21 @@ func WithPath(path string) Option {
 	})
 }
 
-func SeparateDatabase() Option {
+func SeparateStore() Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.separateDB = true
+		cfg.separateStore = true
 	})
 }
 
-func WithDataDBOptions(dataDBOpts ...DBOption) Option {
+func WithDataStoreOptions(dataStoreOpts ...StoreOption) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.dataDBOptions = dataDBOpts
+		cfg.dataStoreOptions = dataStoreOpts
 	})
 }
 
-func WithCommitDBOptions(commitDBOpts ...DBOption) Option {
+func WithCommitStoreOptions(commitStoreOpts ...StoreOption) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.commitDBOptions = commitDBOpts
+		cfg.commitStoreOptions = commitStoreOpts
 	})
 }
 
