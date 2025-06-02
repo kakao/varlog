@@ -62,7 +62,7 @@ func TestStorage_New(t *testing.T) {
 				_, err := New(
 					WithPath(path),
 					WithCache(cache),
-					WithDataStoreOptions(
+					WithValueStoreOptions(
 						WithWAL(false),
 						WithSync(true),
 					),
@@ -1134,7 +1134,7 @@ func TestStorage_Trim(t *testing.T) {
 				err := stg.Trim(types.MinGLSN)
 				assert.NoError(t, err)
 
-				it, err := stg.dataStore.NewIter(&pebble.IterOptions{
+				it, err := stg.valueStore.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{dataKeyPrefix},
 					UpperBound: []byte{dataKeySentinelPrefix},
 				})
@@ -1168,7 +1168,7 @@ func TestStorage_Trim(t *testing.T) {
 				assert.NoError(t, err)
 				assert.NoError(t, err)
 
-				it, err := stg.dataStore.NewIter(&pebble.IterOptions{
+				it, err := stg.valueStore.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{dataKeyPrefix},
 					UpperBound: []byte{dataKeySentinelPrefix},
 				})
@@ -1195,7 +1195,7 @@ func TestStorage_Trim(t *testing.T) {
 				err := stg.Trim(types.MaxGLSN)
 				assert.NoError(t, err)
 
-				it, err := stg.dataStore.NewIter(&pebble.IterOptions{
+				it, err := stg.valueStore.NewIter(&pebble.IterOptions{
 					LowerBound: []byte{dataKeyPrefix},
 					UpperBound: []byte{dataKeySentinelPrefix},
 				})

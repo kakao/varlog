@@ -84,7 +84,7 @@ func (s *Storage) readLastCommitContext() (*CommitContext, error) {
 }
 
 func (s *Storage) readLogEntryBoundaries() (first, last *varlogpb.LogSequenceNumber, err error) {
-	dit, err := s.dataStore.NewIter(&pebble.IterOptions{
+	dit, err := s.valueStore.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{dataKeyPrefix},
 		UpperBound: []byte{dataKeySentinelPrefix},
 	})
@@ -127,8 +127,8 @@ func (s *Storage) getFirstLogSequenceNumber(cit, dit *pebble.Iterator) *varlogpb
 	cLLSN := decodeDataKey(cit.Value())
 	dLLSN := decodeDataKey(dit.Key())
 	s.logger.Info("read recovery points: try to get first log sequence number",
-		zap.Uint64("commitDB.firstLLSN", uint64(cLLSN)),
-		zap.Uint64("dataDB.firstLLSN", uint64(dLLSN)),
+		zap.Uint64("commitStore.firstLLSN", uint64(cLLSN)),
+		zap.Uint64("valueStore.firstLLSN", uint64(dLLSN)),
 	)
 	for cLLSN != dLLSN {
 		if dLLSN < cLLSN {
@@ -210,7 +210,7 @@ func (s *Storage) getLastLogSequenceNumber(cit, dit *pebble.Iterator, first *var
 func (s *Storage) readUncommittedLogEntryBoundaries(uncommittedBegin types.LLSN) (begin, end types.LLSN, err error) {
 	dk := make([]byte, dataKeyLength)
 	dk = encodeDataKeyInternal(uncommittedBegin, dk)
-	it, err := s.dataStore.NewIter(&pebble.IterOptions{
+	it, err := s.valueStore.NewIter(&pebble.IterOptions{
 		LowerBound: dk,
 		UpperBound: []byte{dataKeySentinelPrefix},
 	})

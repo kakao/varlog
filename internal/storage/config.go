@@ -22,7 +22,7 @@ const (
 	DefaultMaxConcurrentCompactions    = 1
 	DefaultMetricsLogInterval          = time.Duration(0)
 
-	dataStoreDirName   = "_data"
+	valueStoreDirName  = "_data"
 	commitStoreDirName = "_commit"
 )
 
@@ -162,7 +162,7 @@ func WithMaxConcurrentCompaction(maxConcurrentCompaction int) StoreOption {
 
 type config struct {
 	path               string
-	dataStoreOptions   []StoreOption
+	valueStoreOptions  []StoreOption
 	commitStoreOptions []StoreOption
 	verbose            bool
 	metricsLogInterval time.Duration
@@ -219,9 +219,9 @@ func WithPath(path string) Option {
 	})
 }
 
-func WithDataStoreOptions(dataStoreOpts ...StoreOption) Option {
+func WithValueStoreOptions(valueStoreOpts ...StoreOption) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.dataStoreOptions = dataStoreOpts
+		cfg.valueStoreOptions = valueStoreOpts
 	})
 }
 

@@ -119,7 +119,7 @@ func (s *Scanner) initLazyIterator(beginKey []byte, beginLLSN types.LLSN) (err e
 		UpperBound: s.lazy.dkUpper,
 	}
 
-	s.lazy.dataIt, err = s.stg.dataStore.NewIter(itOpt)
+	s.lazy.dataIt, err = s.stg.valueStore.NewIter(itOpt)
 	if err != nil {
 		return err
 	}
