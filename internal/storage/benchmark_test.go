@@ -24,7 +24,7 @@ func BenchmarkStorage_WriteBatch(b *testing.B) {
 			name := fmt.Sprintf("batchLen=%d_dataLen=%d", batchLen, dataLen)
 			b.Run(name, func(b *testing.B) {
 				stg := TestNewStorage(b,
-					WithDataDBOptions(
+					WithDataStoreOptions(
 						WithSync(false), // Use only in mac since sync is too slow in mac os.
 						WithL0CompactionThreshold(2),
 						WithL0StopWritesThreshold(1000),
@@ -65,7 +65,7 @@ func BenchmarkStorage_ScanWithGLSN(b *testing.B) {
 	for _, numLogs := range numLogsList {
 		b.Run(fmt.Sprintf("numLogs=%d", numLogs), func(b *testing.B) {
 			stg := TestNewStorage(b,
-				WithDataDBOptions(
+				WithDataStoreOptions(
 					WithSync(false), // Use only in mac since sync is too slow in mac os.
 					WithL0CompactionThreshold(2),
 					WithL0StopWritesThreshold(1000),
@@ -75,7 +75,7 @@ func BenchmarkStorage_ScanWithGLSN(b *testing.B) {
 					WithMemTableStopWritesThreshold(4),
 					WithMaxConcurrentCompaction(3),
 				),
-				WithCommitDBOptions(
+				WithCommitStoreOptions(
 					WithL0CompactionThreshold(2),
 					WithL0StopWritesThreshold(1000),
 					WithLBaseMaxBytes(64<<20),
