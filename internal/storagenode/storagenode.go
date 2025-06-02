@@ -334,6 +334,7 @@ func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID
 			sn.defaultGRPCDialOptions...,
 		),
 		logstream.WithLogStreamMetrics(lsm),
+		logstream.WithMaxWriteTaskBatchLength(3),
 	)
 
 	lse, err := logstream.NewExecutor(lseOpts...)
