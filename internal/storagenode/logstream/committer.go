@@ -253,9 +253,8 @@ func (cm *committer) commitInternal(cc storage.CommitContext) (err error) {
 		if cm.lse.lsm == nil {
 			return
 		}
-		cm.lse.lsm.CommitterOperationDuration.Add(int64(time.Since(startTime).Microseconds()))
-		cm.lse.lsm.CommitterOperations.Add(1)
-		cm.lse.lsm.CommitterLogs.Add(int64(numCommits))
+		cm.lse.lsm.CommitterOperationDuration.Record(context.Background(), int64(time.Since(startTime).Microseconds()))
+		cm.lse.lsm.CommitterLogs.Record(context.Background(), int64(numCommits))
 	}()
 
 	iter := cm.commitWaitQ.peekIterator()
