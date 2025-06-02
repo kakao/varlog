@@ -49,58 +49,35 @@ func New(opts ...Option) (*Storage, error) {
 		config: cfg,
 	}
 
-	if cfg.separateStore {
-		// Check directory entries in s.path to see whether anything except
-		// dataStoreDirName and commitStoreDirName exists, which results in an
-		// error if it exists.
-		ds, err := os.ReadDir(s.path)
-		if err != nil {
-			return nil, err
+	// Check directory entries in s.path to see whether anything except
+	// dataStoreDirName and commitStoreDirName exists, which results in an
+	// error if it exists.
+	ds, err := os.ReadDir(s.path)
+	if err != nil {
+		return nil, err
+	}
+	for _, d := range ds {
+		if name := d.Name(); name != dataStoreDirName && name != commitStoreDirName {
+			return nil, fmt.Errorf("forbidden entry: %s", name)
 		}
-		for _, d := range ds {
-			if name := d.Name(); name != dataStoreDirName && name != commitStoreDirName {
-				return nil, fmt.Errorf("forbidden entry: %s", name)
-			}
-		}
-		dataStoreConfig, err := newStoreConfig(s.dataStoreOptions...)
-		if err != nil {
-			return nil, err
-		}
-		s.dataStoreWriteOpts = &pebble.WriteOptions{Sync: dataStoreConfig.sync}
-		s.dataStore, err = s.newStore(filepath.Join(s.path, dataStoreDirName), &dataStoreConfig, s.cache)
-		if err != nil {
-			return nil, err
-		}
-		commitStoreConfig, err := newStoreConfig(s.commitStoreOptions...)
-		if err != nil {
-			return nil, err
-		}
-		s.commitStoreWriteOpts = &pebble.WriteOptions{Sync: commitStoreConfig.sync}
-		s.commitStore, err = s.newStore(filepath.Join(s.path, commitStoreDirName), &commitStoreConfig, s.cache)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		// Check directory entries in s.path to see whether dataStoreDirName
-		// and commitStoreDirName exist, which results in an error if it
-		// exists.
-		for _, dirName := range []string{dataStoreDirName, commitStoreDirName} {
-			if _, err := os.Stat(filepath.Join(s.path, dirName)); err == nil {
-				return nil, fmt.Errorf("non-separating database, but %s exists", dirName)
-			}
-		}
-		dataStoreConfig, err := newStoreConfig(s.dataStoreOptions...)
-		if err != nil {
-			return nil, err
-		}
-		s.dataStoreWriteOpts = &pebble.WriteOptions{Sync: dataStoreConfig.sync}
-		s.dataStore, err = s.newStore(s.path, &dataStoreConfig, s.cache)
-		if err != nil {
-			return nil, err
-		}
-
-		s.commitStore = s.dataStore
-		s.commitStoreWriteOpts = s.dataStoreWriteOpts
+	}
+	dataStoreConfig, err := newStoreConfig(s.dataStoreOptions...)
+	if err != nil {
+		return nil, err
+	}
+	s.dataStoreWriteOpts = &pebble.WriteOptions{Sync: dataStoreConfig.sync}
+	s.dataStore, err = s.newStore(filepath.Join(s.path, dataStoreDirName), &dataStoreConfig, s.cache)
+	if err != nil {
+		return nil, err
+	}
+	commitStoreConfig, err := newStoreConfig(s.commitStoreOptions...)
+	if err != nil {
+		return nil, err
+	}
+	s.commitStoreWriteOpts = &pebble.WriteOptions{Sync: commitStoreConfig.sync}
+	s.commitStore, err = s.newStore(filepath.Join(s.path, commitStoreDirName), &commitStoreConfig, s.cache)
+	if err != nil {
+		return nil, err
 	}
 	s.startMetricsLogger()
 
@@ -361,9 +338,7 @@ func (s *Storage) Path() string {
 
 func (s *Storage) DiskUsage() uint64 {
 	usage := s.dataStore.Metrics().DiskSpaceUsage()
-	if s.separateStore {
-		usage += s.commitStore.Metrics().DiskSpaceUsage()
-	}
+	usage += s.commitStore.Metrics().DiskSpaceUsage()
 	return usage
 }
 
@@ -380,11 +355,7 @@ func (s *Storage) startMetricsLogger() {
 			select {
 			case <-s.metricsLogger.ticker.C:
 				var sb strings.Builder
-				if s.separateStore {
-					fmt.Fprintf(&sb, "DataStore Metrics\n%sCommitStore Metrics\n%s", s.dataStore.Metrics(), s.commitStore.Metrics())
-				} else {
-					fmt.Fprintf(&sb, "Store Metrics\n%s", s.dataStore.Metrics())
-				}
+				fmt.Fprintf(&sb, "DataStore Metrics\n%sCommitStore Metrics\n%s", s.dataStore.Metrics(), s.commitStore.Metrics())
 				s.logger.Info(sb.String())
 			case <-s.metricsLogger.stop:
 				return
@@ -406,15 +377,11 @@ func (s *Storage) stopMetricsLogger() {
 func (s *Storage) Close() (err error) {
 	if !s.readOnly {
 		err = s.dataStore.Flush()
-		if s.separateStore {
-			err = errors.Join(err, s.commitStore.Flush())
-		}
+		err = errors.Join(err, s.commitStore.Flush())
 	}
 	s.stopMetricsLogger()
 
 	err = errors.Join(err, s.dataStore.Close())
-	if s.separateStore {
-		err = errors.Join(err, s.commitStore.Close())
-	}
+	err = errors.Join(err, s.commitStore.Close())
 	return err
 }

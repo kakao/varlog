@@ -81,13 +81,6 @@ var (
 	}
 
 	// flags for storage.
-	flagExperimentalStorageSeparateDB = &cli.BoolFlag{
-		Name:     "experimental-storage-separate-db",
-		Category: categoryStorage,
-		EnvVars:  []string{"EXPERIMENTAL_STORAGE_SEPARATE_DB"},
-		Usage:    "Separate databases of storage experimentally.",
-	}
-
 	flagStorageDataDBDisableWAL = &cli.BoolFlag{
 		Name:     "storage-datadb-disable-wal",
 		Category: categoryStorage,

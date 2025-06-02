@@ -65,7 +65,6 @@ func newStartCommand() *cli.Command {
 			flagAppendPipelineSize,
 
 			// storage options
-			flagExperimentalStorageSeparateDB,
 			flagStorageDataDBDisableWAL,
 			flagStorageDataDBNoSync,
 			flagStorageCommitDBDisableWAL,

@@ -55,7 +55,6 @@ OPTIONS:
 
    Storage:
 
-   --experimental-storage-separate-db                                                                                                                                                                   Separate databases of storage experimentally. (default: false) [$EXPERIMENTAL_STORAGE_SEPARATE_DB]
    --storage-cache-size value                                                                                                                                                                           Size of storage cache shared across all storages. (default: "128MiB") [$STORAGE_CACHE_SIZE]
    --storage-commitdb-disable-wal                                                                                                                                                                       Disable the Write-Ahead Logging (WAL) for the commit database in storage. If --experimental-storage-separate-db is not used, this setting is ignored. (default: false) [$STORAGE_COMMITDB_DISABLE_WAL]
    --storage-commitdb-no-sync                                                                                                                                                                           Disable synchronization for the commit database in storage. If true, written data might be lost on process termination. If --experimental-storage-separate-db is not used, this setting is ignored. (default: false) [$STORAGE_COMMITDB_NO_SYNC]
