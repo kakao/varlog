@@ -237,17 +237,14 @@ func parseStorageOptions(c *cli.Context) (opts []storage.Option, err error) {
 		),
 		storage.WithMetricsLogInterval(c.Duration(flagStorageMetricsLogInterval.Name)),
 	}
-	if c.Bool(flagExperimentalStorageSeparateDB.Name) {
-		opts = append(opts,
-			storage.SeparateStore(),
-			storage.WithCommitStoreOptions(
-				slices.Concat([]storage.StoreOption{
-					storage.WithWAL(!c.Bool(flagStorageDataDBDisableWAL.Name)),
-					storage.WithSync(!c.Bool(flagStorageDataDBNoSync.Name)),
-				}, getStorageDBOptions(1))...,
-			),
-		)
-	}
+	opts = append(opts,
+		storage.WithCommitStoreOptions(
+			slices.Concat([]storage.StoreOption{
+				storage.WithWAL(!c.Bool(flagStorageDataDBDisableWAL.Name)),
+				storage.WithSync(!c.Bool(flagStorageDataDBNoSync.Name)),
+			}, getStorageDBOptions(1))...,
+		),
+	)
 	if c.Bool(flagStorageVerbose.Name) {
 		opts = append(opts, storage.WithVerboseLogging())
 	}

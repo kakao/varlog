@@ -94,70 +94,13 @@ func TestStorage_New(t *testing.T) {
 					WithPath(path),
 					WithLogger(zap.NewNop()),
 					WithCache(cache),
-					SeparateStore(),
 				)
 				require.NoError(t, err)
 				require.NoError(t, s.Close())
 			},
 		},
 		{
-			name: "SeparateAndNotSeparate",
-			testf: func(t *testing.T) {
-				path := t.TempDir()
-
-				s, err := New(
-					WithPath(path),
-					SeparateStore(),
-				)
-				require.NoError(t, err)
-				require.NoError(t, s.Close())
-
-				_, err = New(
-					WithPath(path),
-				)
-				require.Error(t, err)
-			},
-		},
-		{
-			name: "NotSeparateAndSeparate",
-			testf: func(t *testing.T) {
-				path := t.TempDir()
-
-				s, err := New(
-					WithPath(path),
-				)
-				require.NoError(t, err)
-				require.NoError(t, s.Close())
-
-				_, err = New(
-					WithPath(path),
-					SeparateStore(),
-				)
-				require.Error(t, err)
-			},
-		},
-		{
-			name: "NewAndCloseSeparateDB",
-			testf: func(t *testing.T) {
-				path := t.TempDir()
-				opts := []Option{
-					WithPath(path),
-					SeparateStore(),
-					WithVerboseLogging(),
-					WithMetricsLogInterval(time.Second),
-				}
-
-				s, err := New(opts...)
-				require.NoError(t, err)
-				require.NoError(t, s.Close())
-
-				s, err = New(opts...)
-				require.NoError(t, err)
-				require.NoError(t, s.Close())
-			},
-		},
-		{
-			name: "NewAndCloseNotSeparateDB",
+			name: "NewAndClose",
 			testf: func(t *testing.T) {
 				path := t.TempDir()
 				opts := []Option{

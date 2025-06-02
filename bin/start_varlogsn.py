@@ -175,8 +175,6 @@ def start(args: argparse.Namespace) -> None:
                 cmd.append(f"--append-pipeline-size={args.append_pipeline_size}")
 
             # storage options
-            if args.experimental_storage_separate_db:
-                cmd.append("--experimental-storage-separate-db")
             if args.storage_datadb_disable_wal:
                 cmd.append("--storage-datadb-disable-wal")
             if args.storage_datadb_no_sync:
@@ -268,7 +266,6 @@ def main() -> None:
     parser.add_argument("--append-pipeline-size", type=int)
 
     # storage options
-    parser.add_argument("--experimental-storage-separate-db", action="store_true")
     parser.add_argument("--storage-datadb-disable-wal", action="store_true")
     parser.add_argument("--storage-datadb-no-sync", action="store_true")
     parser.add_argument("--storage-commitdb-disable-wal", action="store_true")

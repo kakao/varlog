@@ -162,7 +162,6 @@ func WithMaxConcurrentCompaction(maxConcurrentCompaction int) StoreOption {
 
 type config struct {
 	path               string
-	separateStore      bool
 	dataStoreOptions   []StoreOption
 	commitStoreOptions []StoreOption
 	verbose            bool
@@ -217,12 +216,6 @@ func (fo *funcOption) apply(cfg *config) {
 func WithPath(path string) Option {
 	return newFuncOption(func(cfg *config) {
 		cfg.path = path
-	})
-}
-
-func SeparateStore() Option {
-	return newFuncOption(func(cfg *config) {
-		cfg.separateStore = true
 	})
 }
 
