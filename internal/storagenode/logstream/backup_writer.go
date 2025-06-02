@@ -3,13 +3,11 @@ package logstream
 import (
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
 
-	"github.com/kakao/varlog/internal/storage"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/util/runner"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -17,7 +15,7 @@ import (
 
 type backupWriter struct {
 	backupWriterConfig
-	queue    chan *backupWriteTask
+	queue    chan *ReplicationTask
 	inflight atomic.Int64
 	runner   *runner.Runner
 }
@@ -28,7 +26,7 @@ func newBackupWriter(cfg backupWriterConfig) (*backupWriter, error) {
 	}
 	sq := &backupWriter{
 		backupWriterConfig: cfg,
-		queue:              make(chan *backupWriteTask, cfg.queueCapacity),
+		queue:              make(chan *ReplicationTask, cfg.queueCapacity),
 		runner:             runner.New("backup writer", cfg.logger),
 	}
 	if _, err := sq.runner.Run(sq.writeLoop); err != nil {
@@ -37,7 +35,7 @@ func newBackupWriter(cfg backupWriterConfig) (*backupWriter, error) {
 	return sq, nil
 }
 
-func (bw *backupWriter) send(ctx context.Context, bwt *backupWriteTask) (err error) {
+func (bw *backupWriter) send(ctx context.Context, rt *ReplicationTask) (err error) {
 	bw.inflight.Add(1)
 	defer func() {
 		if err != nil {
@@ -56,7 +54,7 @@ func (bw *backupWriter) send(ctx context.Context, bwt *backupWriteTask) (err err
 	}
 
 	select {
-	case bw.queue <- bwt:
+	case bw.queue <- rt:
 	case <-ctx.Done():
 		err = ctx.Err()
 	}
@@ -68,28 +66,34 @@ func (bw *backupWriter) writeLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case bwt := <-bw.queue:
-			bw.writeLoopInternal(ctx, bwt)
+		case rt := <-bw.queue:
+			bw.writeLoopInternal(ctx, rt)
 		}
 	}
 }
 
-func (bw *backupWriter) writeLoopInternal(ctx context.Context, bwt *backupWriteTask) {
+func (bw *backupWriter) writeLoopInternal(ctx context.Context, rt *ReplicationTask) {
 	startTime := time.Now()
 	var err error
-	wb, oldLLSN, newLLSN := bwt.wb, bwt.oldLLSN, bwt.newLLSN
+
+	dataBytes := int64(0)
+	wb := bw.lse.stg.NewWriteBatch()
 	defer func() {
 		if err != nil {
 			bw.lse.esm.compareAndSwap(executorStateAppendable, executorStateSealing)
 		}
 		_ = wb.Close()
-		bwt.release()
+		rt.Release()
 		bw.inflight.Add(-1)
 		if bw.lse.lsm == nil {
 			return
 		}
 		bw.lse.lsm.WriterOperationDuration.Record(ctx, time.Since(startTime).Microseconds())
 	}()
+
+	beginLLSN := rt.Req.BeginLLSN
+	batchSize := len(rt.Req.Data)
+	oldLLSN, newLLSN := beginLLSN, beginLLSN+types.LLSN(batchSize)
 
 	if uncommittedLLSNEnd := bw.lse.lsc.uncommittedLLSNEnd.Load(); uncommittedLLSNEnd != oldLLSN {
 		err = fmt.Errorf("unexpected LLSN: uncommittedLLSNEnd=%d, oldLLSN=%d, newLLSN=%d", uncommittedLLSNEnd, oldLLSN, newLLSN)
@@ -100,6 +104,15 @@ func (bw *backupWriter) writeLoopInternal(ctx context.Context, bwt *backupWriteT
 			zap.Error(err),
 		)
 		return
+	}
+
+	for i := range batchSize {
+		err = wb.Set(beginLLSN+types.LLSN(i), rt.Req.Data[i])
+		if err != nil {
+			bw.logger.Error("could not set data to batch", zap.Error(err))
+			return
+		}
+		dataBytes += int64(len(rt.Req.Data[i]))
 	}
 
 	err = wb.Apply()
@@ -143,8 +156,8 @@ func (bw *backupWriter) waitForDrainage(forceDrain bool) {
 		select {
 		case <-timer.C:
 			timer.Reset(tick)
-		case bt := <-bw.queue:
-			bt.release()
+		case rt := <-bw.queue:
+			rt.Release()
 			bw.inflight.Add(-1)
 		}
 	}
@@ -175,31 +188,4 @@ func (cfg backupWriterConfig) validate() error {
 		return fmt.Errorf("backup writer: %w", errLoggerIsNil)
 	}
 	return nil
-}
-
-var backupWriteTaskPool = sync.Pool{
-	New: func() interface{} {
-		return &backupWriteTask{}
-	},
-}
-
-type backupWriteTask struct {
-	wb      *storage.WriteBatch
-	oldLLSN types.LLSN
-	newLLSN types.LLSN
-}
-
-func newBackupWriteTask(wb *storage.WriteBatch, oldLLSN, newLLSN types.LLSN) *backupWriteTask {
-	bwt := backupWriteTaskPool.Get().(*backupWriteTask)
-	bwt.wb = wb
-	bwt.oldLLSN = oldLLSN
-	bwt.newLLSN = newLLSN
-	return bwt
-}
-
-func (bwt *backupWriteTask) release() {
-	bwt.wb = nil
-	bwt.oldLLSN = types.InvalidLLSN
-	bwt.newLLSN = types.InvalidLLSN
-	backupWriteTaskPool.Put(bwt)
 }
