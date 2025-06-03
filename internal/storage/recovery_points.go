@@ -84,7 +84,7 @@ func (s *Storage) readLastCommitContext() (*CommitContext, error) {
 }
 
 func (s *Storage) readLogEntryBoundaries() (first, last *varlogpb.LogSequenceNumber, err error) {
-	dit, err := s.valueStore.NewIter(&pebble.IterOptions{
+	dit, err := s.valueStore.db.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{dataKeyPrefix},
 		UpperBound: []byte{dataKeySentinelPrefix},
 	})
@@ -94,7 +94,7 @@ func (s *Storage) readLogEntryBoundaries() (first, last *varlogpb.LogSequenceNum
 	defer func() {
 		_ = dit.Close()
 	}()
-	cit, err := s.commitStore.NewIter(&pebble.IterOptions{
+	cit, err := s.commitStore.db.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitKeyPrefix},
 		UpperBound: []byte{commitKeySentinelPrefix},
 	})
@@ -210,7 +210,7 @@ func (s *Storage) getLastLogSequenceNumber(cit, dit *pebble.Iterator, first *var
 func (s *Storage) readUncommittedLogEntryBoundaries(uncommittedBegin types.LLSN) (begin, end types.LLSN, err error) {
 	dk := make([]byte, dataKeyLength)
 	dk = encodeDataKeyInternal(uncommittedBegin, dk)
-	it, err := s.valueStore.NewIter(&pebble.IterOptions{
+	it, err := s.valueStore.db.NewIter(&pebble.IterOptions{
 		LowerBound: dk,
 		UpperBound: []byte{dataKeySentinelPrefix},
 	})
