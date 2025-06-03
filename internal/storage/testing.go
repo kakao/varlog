@@ -18,11 +18,11 @@ func TestNewStorage(tb testing.TB, opts ...Option) *Storage {
 	defaultOpts := []Option{
 		WithPath(tb.TempDir()),
 		WithValueStoreOptions(
-			WithSync(false), // Use only in mac since sync is too slow in mac os.
+			WithSyncWAL(false), // Use only in mac since sync is too slow in mac os.
 			WithCache(cache),
 		),
 		WithCommitStoreOptions(
-			WithSync(false), // Use only in mac since sync is too slow in mac os.
+			WithSyncWAL(false), // Use only in mac since sync is too slow in mac os.
 			WithCache(cache),
 		),
 	}

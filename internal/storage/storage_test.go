@@ -54,7 +54,7 @@ func TestStorage_New(t *testing.T) {
 					WithPath(path),
 					WithValueStoreOptions(
 						WithWAL(false),
-						WithSync(true),
+						WithSyncWAL(true),
 					),
 				)
 				require.Error(t, err)

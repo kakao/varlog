@@ -39,7 +39,7 @@ func newStore(path string, opts ...StoreOption) (*store, error) {
 	s := &store{
 		storeConfig: cfg,
 	}
-	s.writeOpts = &pebble.WriteOptions{Sync: cfg.sync}
+	s.writeOpts = &pebble.WriteOptions{Sync: cfg.syncWAL}
 
 	pebbleOpts := &pebble.Options{
 		Cache:                       s.cache.get(),
@@ -128,7 +128,7 @@ func (s *store) close() (err error) {
 
 type storeConfig struct {
 	wal                         bool
-	sync                        bool
+	syncWAL                     bool
 	l0CompactionFileThreshold   int
 	l0CompactionThreshold       int
 	l0StopWritesThreshold       int
@@ -150,7 +150,7 @@ type storeConfig struct {
 func newStoreConfig(dbOpts ...StoreOption) (storeConfig, error) {
 	cfg := storeConfig{
 		wal:                         true,
-		sync:                        true,
+		syncWAL:                     true,
 		l0CompactionFileThreshold:   DefaultL0CompactionFileThreshold,
 		l0CompactionThreshold:       DefaultL0CompactionThreshold,
 		l0StopWritesThreshold:       DefaultL0StopWritesThreshold,
@@ -172,7 +172,7 @@ func newStoreConfig(dbOpts ...StoreOption) (storeConfig, error) {
 }
 
 func (cfg storeConfig) validate() error {
-	if cfg.sync && !cfg.wal {
+	if cfg.syncWAL && !cfg.wal {
 		return errors.New("storage: sync, but wal disabled")
 	}
 	return nil
@@ -200,9 +200,17 @@ func WithWAL(wal bool) StoreOption {
 	})
 }
 
-func WithSync(sync bool) StoreOption {
+// WithSyncWAL sets whether write operations are synchronized to disk by
+// waiting for the Pebble WAL (Write-Ahead Log) to be flushed to durable
+// storage.
+//
+// Enabling this option ensures each write is durable, but may reduce write
+// performance. Disabling it can improve performance but risks recent writes
+// being lost if a process or machine crash occurs, as data may only be
+// buffered in memory.
+func WithSyncWAL(syncWAL bool) StoreOption {
 	return newFuncStoreOption(func(cfg *storeConfig) {
-		cfg.sync = sync
+		cfg.syncWAL = syncWAL
 	})
 }
 

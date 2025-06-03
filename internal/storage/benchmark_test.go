@@ -25,7 +25,7 @@ func BenchmarkStorage_WriteBatch(b *testing.B) {
 			b.Run(name, func(b *testing.B) {
 				stg := TestNewStorage(b,
 					WithValueStoreOptions(
-						WithSync(false), // Use only in mac since sync is too slow in mac os.
+						WithSyncWAL(false), // Use only in mac since sync is too slow in mac os.
 						WithL0CompactionThreshold(2),
 						WithL0StopWritesThreshold(1000),
 						WithLBaseMaxBytes(64<<20),
@@ -66,7 +66,7 @@ func BenchmarkStorage_ScanWithGLSN(b *testing.B) {
 		b.Run(fmt.Sprintf("numLogs=%d", numLogs), func(b *testing.B) {
 			stg := TestNewStorage(b,
 				WithValueStoreOptions(
-					WithSync(false), // Use only in mac since sync is too slow in mac os.
+					WithSyncWAL(false), // Use only in mac since sync is too slow in mac os.
 					WithL0CompactionThreshold(2),
 					WithL0StopWritesThreshold(1000),
 					WithLBaseMaxBytes(64<<20),
