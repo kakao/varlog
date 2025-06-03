@@ -230,13 +230,13 @@ func parseStorageOptions(c *cli.Context, commonStoreOpts ...storage.StoreOption)
 
 	valueStoreOpts := slices.Concat(commonStoreOpts, []storage.StoreOption{
 		storage.WithWAL(!c.Bool(flagStorageDataDBDisableWAL.Name)),
-		storage.WithSync(!c.Bool(flagStorageDataDBNoSync.Name)),
+		storage.WithSyncWAL(!c.Bool(flagStorageDataDBNoSync.Name)),
 		storage.WithVerbose(c.Bool(flagStorageVerbose.Name)),
 	}, getStorageDBOptions(0))
 
 	commitStoreOpts := slices.Concat(commonStoreOpts, []storage.StoreOption{
 		storage.WithWAL(!c.Bool(flagStorageCommitDBDisableWAL.Name)),
-		storage.WithSync(!c.Bool(flagStorageCommitDBNoSync.Name)),
+		storage.WithSyncWAL(!c.Bool(flagStorageCommitDBNoSync.Name)),
 		storage.WithVerbose(c.Bool(flagStorageVerbose.Name)),
 	}, getStorageDBOptions(1))
 
