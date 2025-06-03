@@ -89,17 +89,17 @@ func start(c *cli.Context) error {
 		_ = stop(ctx)
 	}()
 
-	storageOpts, err := parseStorageOptions(c)
-	if err != nil {
-		return err
-	}
 	cacheSize, err := units.FromByteSizeString(c.String(flagStorageCacheSize.Name))
 	if err != nil {
 		return err
 	}
 	storageCache := storage.NewCache(cacheSize)
 	defer storageCache.Unref()
-	storageOpts = append(storageOpts, storage.WithCache(storageCache))
+
+	storageOpts, err := parseStorageOptions(c, storage.WithCache(storageCache))
+	if err != nil {
+		return err
+	}
 
 	snOpts := []storagenode.Option{
 		storagenode.WithClusterID(clusterID),
@@ -146,7 +146,7 @@ func start(c *cli.Context) error {
 	return g.Wait()
 }
 
-func parseStorageOptions(c *cli.Context) (opts []storage.Option, err error) {
+func parseStorageOptions(c *cli.Context, commonStoreOpts ...storage.StoreOption) (opts []storage.Option, err error) {
 	l0CompactionFileThreshold, err := getStorageDBFlagValues(c.IntSlice(flagStorageL0CompactionFileThreshold.Name))
 	if err != nil {
 		return nil, err
@@ -228,36 +228,38 @@ func parseStorageOptions(c *cli.Context) (opts []storage.Option, err error) {
 		}
 	}
 
-	opts = []storage.Option{
-		storage.WithValueStoreOptions(
-			slices.Concat([]storage.StoreOption{
-				storage.WithWAL(!c.Bool(flagStorageDataDBDisableWAL.Name)),
-				storage.WithSync(!c.Bool(flagStorageDataDBNoSync.Name)),
-			}, getStorageDBOptions(0))...,
-		),
-		storage.WithMetricsLogInterval(c.Duration(flagStorageMetricsLogInterval.Name)),
-	}
-	opts = append(opts,
-		storage.WithCommitStoreOptions(
-			slices.Concat([]storage.StoreOption{
-				storage.WithWAL(!c.Bool(flagStorageDataDBDisableWAL.Name)),
-				storage.WithSync(!c.Bool(flagStorageDataDBNoSync.Name)),
-			}, getStorageDBOptions(1))...,
-		),
-	)
-	if c.Bool(flagStorageVerbose.Name) {
-		opts = append(opts, storage.WithVerboseLogging())
-	}
+	valueStoreOpts := slices.Concat(commonStoreOpts, []storage.StoreOption{
+		storage.WithWAL(!c.Bool(flagStorageDataDBDisableWAL.Name)),
+		storage.WithSync(!c.Bool(flagStorageDataDBNoSync.Name)),
+		storage.WithVerbose(c.Bool(flagStorageVerbose.Name)),
+	}, getStorageDBOptions(0))
+
+	commitStoreOpts := slices.Concat(commonStoreOpts, []storage.StoreOption{
+		storage.WithWAL(!c.Bool(flagStorageDataDBDisableWAL.Name)),
+		storage.WithSync(!c.Bool(flagStorageDataDBNoSync.Name)),
+		storage.WithVerbose(c.Bool(flagStorageVerbose.Name)),
+	}, getStorageDBOptions(1))
+
 	if name := flagStorageTrimDelay.Name; c.IsSet(name) {
-		opts = append(opts, storage.WithTrimDelay(c.Duration(name)))
+		valueStoreOpts = append(valueStoreOpts, storage.WithTrimDelay(c.Duration(name)))
+		commitStoreOpts = append(commitStoreOpts, storage.WithTrimDelay(c.Duration(name)))
 	}
+
 	if name := flagStorageTrimRate.Name; c.IsSet(name) {
 		rate, err := units.FromByteSizeString(c.String(name))
 		if err != nil {
 			return nil, err
 		}
-		opts = append(opts, storage.WithTrimRateByte(int(rate)))
+		valueStoreOpts = append(valueStoreOpts, storage.WithTrimRateByte(int(rate)))
+		commitStoreOpts = append(commitStoreOpts, storage.WithTrimRateByte(int(rate)))
 	}
+
+	opts = []storage.Option{
+		storage.WithValueStoreOptions(valueStoreOpts...),
+		storage.WithCommitStoreOptions(commitStoreOpts...),
+		storage.WithMetricsLogInterval(c.Duration(flagStorageMetricsLogInterval.Name)),
+	}
+
 	return opts, nil
 }
 

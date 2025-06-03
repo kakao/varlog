@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/pebble/v2"
-	"github.com/cockroachdb/pebble/v2/bloom"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -25,11 +25,8 @@ var (
 type Storage struct {
 	config
 
-	valueStore          *pebble.DB
-	valueStoreWriteOpts *pebble.WriteOptions
-
-	commitStore          *pebble.DB
-	commitStoreWriteOpts *pebble.WriteOptions
+	valueStore  *store
+	commitStore *store
 
 	metricsLogger struct {
 		wg     sync.WaitGroup
@@ -61,108 +58,36 @@ func New(opts ...Option) (*Storage, error) {
 			return nil, fmt.Errorf("forbidden entry: %s", name)
 		}
 	}
-	valueStoreConfig, err := newStoreConfig(s.valueStoreOptions...)
+
+	s.valueStore, err = newStore(
+		filepath.Join(s.path, valueStoreDirName),
+		slices.Concat(s.valueStoreOptions, []StoreOption{withLogger(s.logger)})...,
+	)
 	if err != nil {
 		return nil, err
 	}
-	s.valueStoreWriteOpts = &pebble.WriteOptions{Sync: valueStoreConfig.sync}
-	s.valueStore, err = s.newStore(filepath.Join(s.path, valueStoreDirName), &valueStoreConfig, s.cache)
+
+	s.commitStore, err = newStore(
+		filepath.Join(s.path, commitStoreDirName),
+		slices.Concat(s.commitStoreOptions, []StoreOption{withLogger(s.logger)})...,
+	)
 	if err != nil {
 		return nil, err
 	}
-	commitStoreConfig, err := newStoreConfig(s.commitStoreOptions...)
-	if err != nil {
-		return nil, err
-	}
-	s.commitStoreWriteOpts = &pebble.WriteOptions{Sync: commitStoreConfig.sync}
-	s.commitStore, err = s.newStore(filepath.Join(s.path, commitStoreDirName), &commitStoreConfig, s.cache)
-	if err != nil {
-		return nil, err
-	}
+
 	s.startMetricsLogger()
 
 	return s, nil
 }
 
-func (s *Storage) newStore(path string, cfg *storeConfig, cache *Cache) (*pebble.DB, error) {
-	pebbleOpts := &pebble.Options{
-		Cache:                       cache.get(),
-		DisableWAL:                  !cfg.wal,
-		L0CompactionFileThreshold:   cfg.l0CompactionFileThreshold,
-		L0CompactionThreshold:       cfg.l0CompactionThreshold,
-		L0StopWritesThreshold:       cfg.l0StopWritesThreshold,
-		LBaseMaxBytes:               cfg.lbaseMaxBytes,
-		MaxOpenFiles:                cfg.maxOpenFiles,
-		MemTableSize:                uint64(cfg.memTableSize),
-		MemTableStopWritesThreshold: cfg.memTableStopWritesThreshold,
-		MaxConcurrentCompactions:    func() int { return cfg.maxConcurrentCompaction },
-		Levels:                      make([]pebble.LevelOptions, 7),
-		ErrorIfExists:               false,
-		FlushDelayDeleteRange:       s.trimDelay,
-		TargetByteDeletionRate:      s.trimRateByte,
-		FormatMajorVersion:          pebble.FormatVirtualSSTables,
-	}
-	pebbleOpts.Levels[0].TargetFileSize = cfg.l0TargetFileSize
-	for i := 0; i < len(pebbleOpts.Levels); i++ {
-		l := &pebbleOpts.Levels[i]
-		l.BlockSize = 32 << 10
-		l.IndexBlockSize = 256 << 10
-		l.FilterPolicy = bloom.FilterPolicy(10)
-		l.FilterType = pebble.TableFilter
-		if i > 0 {
-			l.TargetFileSize = pebbleOpts.Levels[i-1].TargetFileSize * 2
-		}
-		l.EnsureDefaults()
-	}
-	pebbleOpts.Levels[6].FilterPolicy = nil
-	pebbleOpts.FlushSplitBytes = cfg.flushSplitBytes
-	pebbleOpts.EnsureDefaults()
-
-	if s.verbose {
-		el := pebble.MakeLoggingEventListener(newLogAdaptor(s.logger))
-		pebbleOpts.EventListener = &el
-		// Enabled events:
-		//  - BackgroundError
-		//  - DiskSlow
-		//  - FormatUpgrade
-		//  - WriteStallBegin
-		//  - WriteStallEnd
-		pebbleOpts.EventListener.CompactionBegin = nil
-		pebbleOpts.EventListener.CompactionEnd = nil
-		pebbleOpts.EventListener.FlushBegin = nil
-		pebbleOpts.EventListener.FlushEnd = nil
-		pebbleOpts.EventListener.ManifestCreated = nil
-		pebbleOpts.EventListener.ManifestDeleted = nil
-		pebbleOpts.EventListener.TableCreated = nil
-		pebbleOpts.EventListener.TableDeleted = nil
-		pebbleOpts.EventListener.TableIngested = nil
-		pebbleOpts.EventListener.TableStatsLoaded = nil
-		pebbleOpts.EventListener.TableValidated = nil
-		pebbleOpts.EventListener.WALCreated = nil
-		pebbleOpts.EventListener.WALDeleted = nil
-	}
-	if s.readOnly {
-		pebbleOpts.ReadOnly = true
-	}
-	var sb strings.Builder
-	sb.WriteString("opening database: path=")
-	sb.WriteString(path)
-	if s.verbose {
-		sb.WriteString("\n")
-		sb.WriteString(pebbleOpts.String())
-	}
-	s.logger.Info(sb.String())
-	return pebble.Open(path, pebbleOpts)
-}
-
 // NewWriteBatch creates a batch for write operations.
 func (s *Storage) NewWriteBatch() *WriteBatch {
-	return newWriteBatch(s.valueStore.NewBatch(), s.valueStoreWriteOpts)
+	return newWriteBatch(s.valueStore.db.NewBatch(), s.valueStore.writeOpts)
 }
 
 // NewCommitBatch creates a batch for commit operations.
 func (s *Storage) NewCommitBatch(cc CommitContext) (*CommitBatch, error) {
-	cb := newCommitBatch(s.commitStore.NewBatch(), s.commitStoreWriteOpts)
+	cb := newCommitBatch(s.commitStore.db.NewBatch(), s.commitStore.writeOpts)
 	if err := cb.batch.Set(commitContextKey, encodeCommitContext(cc, cb.cc), nil); err != nil {
 		_ = cb.Close()
 		return nil, err
@@ -173,7 +98,7 @@ func (s *Storage) NewCommitBatch(cc CommitContext) (*CommitBatch, error) {
 // NewAppendBatch creates a batch for appending log entries. It does not put
 // commit context.
 func (s *Storage) NewAppendBatch() *AppendBatch {
-	return newAppendBatch(s.valueStore.NewBatch(), s.commitStore.NewBatch(), s.valueStoreWriteOpts)
+	return newAppendBatch(s.valueStore.db.NewBatch(), s.commitStore.db.NewBatch(), s.valueStore.writeOpts)
 }
 
 // NewScanner creates a scanner for the given key range.
@@ -185,11 +110,11 @@ func (s *Storage) NewScanner(opts ...ScanOption) (scanner *Scanner, err error) {
 	if scanner.withGLSN {
 		itOpt.LowerBound = encodeCommitKeyInternal(scanner.begin.GLSN, scanner.cks.lower)
 		itOpt.UpperBound = encodeCommitKeyInternal(scanner.end.GLSN, scanner.cks.upper)
-		scanner.it, err = s.commitStore.NewIter(itOpt)
+		scanner.it, err = s.commitStore.db.NewIter(itOpt)
 	} else {
 		itOpt.LowerBound = encodeDataKeyInternal(scanner.begin.LLSN, scanner.dks.lower)
 		itOpt.UpperBound = encodeDataKeyInternal(scanner.end.LLSN, scanner.dks.upper)
-		scanner.it, err = s.valueStore.NewIter(itOpt)
+		scanner.it, err = s.valueStore.db.NewIter(itOpt)
 	}
 	if err != nil {
 		_ = scanner.Close()
@@ -223,7 +148,7 @@ func (s *Storage) readGLSN(glsn types.GLSN) (le varlogpb.LogEntry, err error) {
 }
 
 func (s *Storage) readLLSN(llsn types.LLSN) (le varlogpb.LogEntry, err error) {
-	it, err := s.commitStore.NewIter(&pebble.IterOptions{
+	it, err := s.commitStore.db.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitKeyPrefix},
 		UpperBound: []byte{commitKeySentinelPrefix},
 	})
@@ -255,7 +180,7 @@ func (s *Storage) readLLSN(llsn types.LLSN) (le varlogpb.LogEntry, err error) {
 }
 
 func (s *Storage) ReadCommitContext() (cc CommitContext, err error) {
-	buf, closer, err := s.commitStore.Get(commitContextKey)
+	buf, closer, err := s.commitStore.db.Get(commitContextKey)
 	if err != nil {
 		if err == pebble.ErrNotFound {
 			err = ErrNoCommitContext
@@ -280,8 +205,8 @@ func (s *Storage) Trim(glsn types.GLSN) error {
 
 	trimGLSN, trimLLSN := lem.GLSN, lem.LLSN
 
-	dataBatch := s.valueStore.NewBatch()
-	commitBatch := s.commitStore.NewBatch()
+	dataBatch := s.valueStore.db.NewBatch()
+	commitBatch := s.commitStore.db.NewBatch()
 	defer func() {
 		_ = dataBatch.Close()
 		_ = commitBatch.Close()
@@ -301,7 +226,7 @@ func (s *Storage) Trim(glsn types.GLSN) error {
 	dkEnd = encodeDataKeyInternal(trimLLSN+1, dkEnd)
 	_ = dataBatch.DeleteRange(dkBegin, dkEnd, nil)
 
-	return errors.Join(commitBatch.Commit(s.commitStoreWriteOpts), dataBatch.Commit(s.valueStoreWriteOpts))
+	return errors.Join(commitBatch.Commit(s.commitStore.writeOpts), dataBatch.Commit(s.valueStore.writeOpts))
 }
 
 func (s *Storage) findLTE(glsn types.GLSN) (lem varlogpb.LogEntryMeta, err error) {
@@ -313,7 +238,7 @@ func (s *Storage) findLTE(glsn types.GLSN) (lem varlogpb.LogEntryMeta, err error
 		upper = []byte{commitKeySentinelPrefix}
 	}
 
-	it, err := s.commitStore.NewIter(&pebble.IterOptions{
+	it, err := s.commitStore.db.NewIter(&pebble.IterOptions{
 		LowerBound: []byte{commitKeyPrefix},
 		UpperBound: upper,
 	})
@@ -337,8 +262,8 @@ func (s *Storage) Path() string {
 }
 
 func (s *Storage) DiskUsage() uint64 {
-	usage := s.valueStore.Metrics().DiskSpaceUsage()
-	usage += s.commitStore.Metrics().DiskSpaceUsage()
+	usage := s.valueStore.db.Metrics().DiskSpaceUsage()
+	usage += s.commitStore.db.Metrics().DiskSpaceUsage()
 	return usage
 }
 
@@ -355,7 +280,7 @@ func (s *Storage) startMetricsLogger() {
 			select {
 			case <-s.metricsLogger.ticker.C:
 				var sb strings.Builder
-				fmt.Fprintf(&sb, "ValueStore Metrics\n%sCommitStore Metrics\n%s", s.valueStore.Metrics(), s.commitStore.Metrics())
+				fmt.Fprintf(&sb, "ValueStore Metrics\n%sCommitStore Metrics\n%s", s.valueStore.db.Metrics(), s.commitStore.db.Metrics())
 				s.logger.Info(sb.String())
 			case <-s.metricsLogger.stop:
 				return
@@ -375,13 +300,8 @@ func (s *Storage) stopMetricsLogger() {
 
 // Close closes the storage.
 func (s *Storage) Close() (err error) {
-	if !s.readOnly {
-		err = s.valueStore.Flush()
-		err = errors.Join(err, s.commitStore.Flush())
-	}
 	s.stopMetricsLogger()
 
-	err = errors.Join(err, s.valueStore.Close())
-	err = errors.Join(err, s.commitStore.Close())
-	return err
+	err = s.valueStore.close()
+	return errors.Join(err, s.commitStore.close())
 }
