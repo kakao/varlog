@@ -82,12 +82,12 @@ func New(opts ...Option) (*Storage, error) {
 
 // NewWriteBatch creates a batch for write operations.
 func (s *Storage) NewWriteBatch() *WriteBatch {
-	return newWriteBatch(s.valueStore.db.NewBatch(), s.valueStore.writeOpts)
+	return newWriteBatch(s.valueStore)
 }
 
 // NewCommitBatch creates a batch for commit operations.
 func (s *Storage) NewCommitBatch(cc CommitContext) (*CommitBatch, error) {
-	cb := newCommitBatch(s.commitStore.db.NewBatch(), s.commitStore.writeOpts)
+	cb := newCommitBatch(s.commitStore)
 	if err := cb.batch.Set(commitContextKey, encodeCommitContext(cc, cb.cc), nil); err != nil {
 		_ = cb.Close()
 		return nil, err

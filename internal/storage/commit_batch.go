@@ -19,23 +19,26 @@ var commitBatchPool = sync.Pool{
 }
 
 type CommitBatch struct {
-	batch     *pebble.Batch
-	writeOpts *pebble.WriteOptions
-	cc        []byte
-	ck        []byte
-	dk        []byte
+	batch          *pebble.Batch
+	writeOpts      *pebble.WriteOptions
+	cc             []byte
+	ck             []byte
+	dk             []byte
+	metricRecorder MetricRecorder
 }
 
-func newCommitBatch(batch *pebble.Batch, writeOpts *pebble.WriteOptions) *CommitBatch {
+func newCommitBatch(s *store) *CommitBatch {
 	cb := commitBatchPool.Get().(*CommitBatch)
-	cb.batch = batch
-	cb.writeOpts = writeOpts
+	cb.batch = s.db.NewBatch()
+	cb.writeOpts = s.writeOpts
+	cb.metricRecorder = s.metricRecorder
 	return cb
 }
 
 func (cb *CommitBatch) release() {
 	cb.batch = nil
 	cb.writeOpts = nil
+	cb.metricRecorder = nil
 	commitBatchPool.Put(cb)
 }
 
@@ -44,7 +47,11 @@ func (cb *CommitBatch) Set(llsn types.LLSN, glsn types.GLSN) error {
 }
 
 func (cb *CommitBatch) Apply() error {
-	return cb.batch.Commit(cb.writeOpts)
+	if err := cb.batch.Commit(cb.writeOpts); err != nil {
+		return err
+	}
+	cb.metricRecorder.RecordBatchCommitStats(todoContext, BatchCommitStats{cb.batch.CommitStats()})
+	return nil
 }
 
 func (cb *CommitBatch) Close() error {

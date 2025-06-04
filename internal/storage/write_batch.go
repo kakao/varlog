@@ -18,21 +18,24 @@ var writeBatchPool = sync.Pool{
 
 // WriteBatch is a batch of writes to storage.
 type WriteBatch struct {
-	batch     *pebble.Batch
-	writeOpts *pebble.WriteOptions
-	dk        []byte
+	batch          *pebble.Batch
+	writeOpts      *pebble.WriteOptions
+	dk             []byte
+	metricRecorder MetricRecorder
 }
 
-func newWriteBatch(batch *pebble.Batch, writeOpts *pebble.WriteOptions) *WriteBatch {
+func newWriteBatch(s *store) *WriteBatch {
 	wb := writeBatchPool.Get().(*WriteBatch)
-	wb.batch = batch
-	wb.writeOpts = writeOpts
+	wb.batch = s.db.NewBatch()
+	wb.writeOpts = s.writeOpts
+	wb.metricRecorder = s.metricRecorder
 	return wb
 }
 
 func (wb *WriteBatch) release() {
 	wb.batch = nil
 	wb.writeOpts = nil
+	wb.metricRecorder = nil
 	writeBatchPool.Put(wb)
 }
 
@@ -43,7 +46,11 @@ func (wb *WriteBatch) Set(llsn types.LLSN, data []byte) error {
 
 // Apply applies the batch to the underlying storage.
 func (wb *WriteBatch) Apply() error {
-	return wb.batch.Commit(wb.writeOpts)
+	if err := wb.batch.Commit(wb.writeOpts); err != nil {
+		return err
+	}
+	wb.metricRecorder.RecordBatchCommitStats(todoContext, BatchCommitStats{wb.batch.CommitStats()})
+	return nil
 }
 
 // Close releases acquired resources.

@@ -145,6 +145,7 @@ type storeConfig struct {
 	readOnly                    bool
 	logger                      *zap.Logger
 	verbose                     bool
+	metricRecorder              MetricRecorder
 }
 
 func newStoreConfig(dbOpts ...StoreOption) (storeConfig, error) {
@@ -161,6 +162,7 @@ func newStoreConfig(dbOpts ...StoreOption) (storeConfig, error) {
 		memTableSize:                DefaultMemTableSize,
 		memTableStopWritesThreshold: DefaultMemTableStopWritesThreshold,
 		maxConcurrentCompaction:     DefaultMaxConcurrentCompactions,
+		metricRecorder:              defaultMetricRecorder,
 	}
 	for _, dbOpt := range dbOpts {
 		dbOpt.applyStore(&cfg)
@@ -318,5 +320,12 @@ func WithVerbose(verbose bool) StoreOption {
 func withLogger(logger *zap.Logger) StoreOption {
 	return newFuncStoreOption(func(cfg *storeConfig) {
 		cfg.logger = logger
+	})
+}
+
+// WithMetricRecorder sets the MetricRecorder for the store.
+func WithMetricRecorder(metricRecorder MetricRecorder) StoreOption {
+	return newFuncStoreOption(func(cfg *storeConfig) {
+		cfg.metricRecorder = metricRecorder
 	})
 }
