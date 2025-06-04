@@ -246,6 +246,17 @@ type Metrics struct {
 	replicateDuration *opentelemetry.Int64HistogramSet[types.LogStreamID]
 
 	replicateFanoutDuration *opentelemetry.Int64HistogramSet[types.LogStreamID]
+
+	// StoreBatchCommitDuration measures the time spent committing a batch in
+	// the storage layer.
+	//
+	// - Name: sn.storage.store.batch_commit.duration
+	// - Unit: nanoseconds
+	// - Attributes:
+	//   - varlog.logstream.id
+	//   - varlog.storage.store.kind
+	//   - varlog.storage.store.batch_commit.duration_kind
+	StoreBatchCommitDuration *opentelemetry.Int64HistogramSet[int64]
 }
 
 func RegisterMetrics(meter metric.Meter) (m *Metrics, err error) {
@@ -432,6 +443,47 @@ func RegisterMetrics(meter metric.Meter) (m *Metrics, err error) {
 		metric.WithExplicitBucketBoundaries(
 			1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536,
 		),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	boundaries = nil
+	// 10us, 20us, 30us, ..., 100us (step: 10us)
+	for dur := 1 * time.Microsecond; dur <= 100*time.Microsecond; dur += 10 * time.Microsecond {
+		boundaries = append(boundaries, float64(dur.Nanoseconds()))
+	}
+	// 150us, 200us, 250us, ..., 1000us (step: 50us)
+	for dur := 150 * time.Microsecond; dur <= 1000*time.Microsecond; dur += 50 * time.Microsecond {
+		boundaries = append(boundaries, float64(dur.Nanoseconds()))
+	}
+	// 2ms, 3ms, 4ms, ..., 10ms (step: 1ms)
+	for dur := 2 * time.Millisecond; dur <= 10*time.Millisecond; dur += time.Millisecond {
+		boundaries = append(boundaries, float64(dur.Nanoseconds()))
+	}
+	// 15ms, 20ms, 25ms, ..., 100ms (step: 5ms)
+	for dur := 15 * time.Millisecond; dur <= 100*time.Millisecond; dur += 5 * time.Millisecond {
+		boundaries = append(boundaries, float64(dur.Nanoseconds()))
+	}
+	// 110ms, 120ms, 130ms, ..., 200ms (step: 10ms)
+	for dur := 110 * time.Millisecond; dur <= 200*time.Millisecond; dur += 10 * time.Millisecond {
+		boundaries = append(boundaries, float64(dur.Nanoseconds()))
+	}
+	// 250ms, 300ms, 350ms, ..., 500ms (step: 50ms)
+	for dur := 250 * time.Millisecond; dur <= 500*time.Millisecond; dur += 50 * time.Millisecond {
+		boundaries = append(boundaries, float64(dur.Nanoseconds()))
+	}
+	// 600ms, 700ms, 800ms, ..., 1000ms (step: 100ms)
+	for dur := 600 * time.Millisecond; dur <= 1000*time.Millisecond; dur += 100 * time.Millisecond {
+		boundaries = append(boundaries, float64(dur.Nanoseconds()))
+	}
+
+	m.StoreBatchCommitDuration, err = opentelemetry.NewInt64HistogramSet[int64](
+		meter,
+		"sn.storage.store.batch_commit.duration",
+		metric.WithDescription("Time spent in batch commit in nanoseconds"),
+		metric.WithUnit("ns"),
+		metric.WithExplicitBucketBoundaries(boundaries...),
 	)
 	if err != nil {
 		return nil, err

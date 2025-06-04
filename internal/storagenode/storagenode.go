@@ -316,6 +316,12 @@ func (sn *StorageNode) runLogStreamReplica(_ context.Context, tpid types.TopicID
 	stgOpts = append(stgOpts,
 		storage.WithPath(lsPath),
 		storage.WithLogger(sn.logger.Named("storage").With(zap.String("path", lsPath))),
+		storage.WithValueStoreOptions(
+			storage.WithMetricRecorder(storage.NewOTELMetricRecorder(sn.metrics.StoreBatchCommitDuration, lsid, storage.StoreKindValue)),
+		),
+		storage.WithCommitStoreOptions(
+			storage.WithMetricRecorder(storage.NewOTELMetricRecorder(sn.metrics.StoreBatchCommitDuration, lsid, storage.StoreKindCommit)),
+		),
 	)
 	stg, err := storage.New(stgOpts...)
 	if err != nil {
