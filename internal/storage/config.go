@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"slices"
 	"time"
 
 	"go.uber.org/zap"
@@ -70,15 +71,19 @@ func WithPath(path string) Option {
 	})
 }
 
+// WithValueStoreOptions adds options for the value store. Options set earlier
+// are overridden by options set later.
 func WithValueStoreOptions(valueStoreOpts ...StoreOption) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.valueStoreOptions = valueStoreOpts
+		cfg.valueStoreOptions = slices.Concat(cfg.valueStoreOptions, valueStoreOpts)
 	})
 }
 
+// WithCommitStoreOptions adds options for the commit store. Options set
+// earlier are overridden by options set later.
 func WithCommitStoreOptions(commitStoreOpts ...StoreOption) Option {
 	return newFuncOption(func(cfg *config) {
-		cfg.commitStoreOptions = commitStoreOpts
+		cfg.commitStoreOptions = slices.Concat(cfg.commitStoreOptions, commitStoreOpts)
 	})
 }
 
