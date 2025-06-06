@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/pebble/v2"
+	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/proto/varlogpb"
@@ -61,7 +62,9 @@ func New(opts ...Option) (*Storage, error) {
 
 	s.valueStore, err = newStore(
 		filepath.Join(s.path, valueStoreDirName),
-		slices.Concat(s.valueStoreOptions, []StoreOption{withLogger(s.logger)})...,
+		slices.Concat(s.valueStoreOptions, []StoreOption{
+			withLogger(s.logger.With(zap.String("store", "value"))),
+		})...,
 	)
 	if err != nil {
 		return nil, err
@@ -69,7 +72,9 @@ func New(opts ...Option) (*Storage, error) {
 
 	s.commitStore, err = newStore(
 		filepath.Join(s.path, commitStoreDirName),
-		slices.Concat(s.commitStoreOptions, []StoreOption{withLogger(s.logger)})...,
+		slices.Concat(s.commitStoreOptions, []StoreOption{
+			withLogger(s.logger.With(zap.String("store", "commit"))),
+		})...,
 	)
 	if err != nil {
 		return nil, err

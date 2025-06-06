@@ -84,6 +84,8 @@ func newStartCommand() *cli.Command {
 			flagStorageTrimDelay,
 			flagStorageTrimRate,
 			flagStorageCacheSize,
+			flagStorageValueStore,
+			flagStorageCommitStore,
 
 			// logger options
 			flags.LogDir,

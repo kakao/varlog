@@ -101,6 +101,42 @@ func start(c *cli.Context) error {
 		return err
 	}
 
+	for _, flagStorageStore := range []*cli.GenericFlag{flagStorageValueStore, flagStorageCommitStore} {
+		iface := c.Generic(flagStorageStore.Name)
+		if iface == nil {
+			continue
+		}
+		s, ok := iface.(*StorageStoreSetting)
+		if !ok || s == nil {
+			continue
+		}
+
+		storeOpts := []storage.StoreOption{
+			storage.WithWAL(s.wal),
+			storage.WithSyncWAL(s.syncWAL),
+			storage.WithMemTableSize(int(s.memTableSize)),
+			storage.WithMemTableStopWritesThreshold(s.memTableStopWritesThreshold),
+			storage.WithFlushSplitBytes(s.flushSplitBytes),
+			storage.WithL0CompactionFileThreshold(s.l0CompactionFileThreshold),
+			storage.WithL0CompactionThreshold(s.l0CompactionThreshold),
+			storage.WithL0StopWritesThreshold(s.l0StopWritesThreshold),
+			storage.WithL0TargetFileSize(s.l0TargetFileSize),
+			storage.WithLBaseMaxBytes(s.lbaseMaxBytes),
+			storage.WithMaxConcurrentCompaction(s.maxConcurrentCompactions),
+			storage.WithTrimDelay(s.trimDelay),
+			storage.WithTrimRateByte(int(s.trimRate)),
+			storage.WithMaxOpenFiles(s.maxOpenFiles),
+			storage.WithVerbose(s.verbose),
+		}
+		switch flagStorageStore.Name {
+		case flagStorageValueStore.Name:
+			storageOpts = append(storageOpts, storage.WithValueStoreOptions(storeOpts...))
+		case flagStorageCommitStore.Name:
+			storageOpts = append(storageOpts, storage.WithCommitStoreOptions(storeOpts...))
+		}
+
+	}
+
 	snOpts := []storagenode.Option{
 		storagenode.WithClusterID(clusterID),
 		storagenode.WithStorageNodeID(storageNodeID),

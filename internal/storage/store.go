@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -82,8 +83,6 @@ func newStore(path string, opts ...StoreOption) (*store, error) {
 	//  - FormatUpgrade
 	//  - WriteStallBegin
 	//  - WriteStallEnd
-	pebbleOpts.EventListener.CompactionBegin = nil
-	pebbleOpts.EventListener.CompactionEnd = nil
 	pebbleOpts.EventListener.FlushBegin = nil
 	pebbleOpts.EventListener.FlushEnd = nil
 	pebbleOpts.EventListener.ManifestCreated = nil
@@ -106,6 +105,10 @@ func newStore(path string, opts ...StoreOption) (*store, error) {
 	var sb strings.Builder
 	sb.WriteString("opening database: path=")
 	sb.WriteString(path)
+	sb.WriteString(", wal=")
+	sb.WriteString(strconv.FormatBool(s.wal))
+	sb.WriteString(", wal_sync=")
+	sb.WriteString(strconv.FormatBool(s.syncWAL))
 	if s.verbose {
 		sb.WriteString("\n")
 		sb.WriteString(pebbleOpts.String())
