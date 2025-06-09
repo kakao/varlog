@@ -22,6 +22,8 @@ const (
 	DefaultMemTableSize                = 4 << 20
 	DefaultMemTableStopWritesThreshold = 2
 	DefaultMaxConcurrentCompactions    = 1
+	DefaultWALBytesPerSync             = 0
+	DefaultSSTBytesPerSync             = 512 << 10
 )
 
 type store struct {
@@ -45,6 +47,8 @@ func newStore(path string, opts ...StoreOption) (*store, error) {
 	pebbleOpts := &pebble.Options{
 		Cache:                       s.cache.get(),
 		DisableWAL:                  !s.wal,
+		WALBytesPerSync:             s.walBytesPerSync,
+		BytesPerSync:                s.sstBytesPerSync,
 		L0CompactionFileThreshold:   s.l0CompactionFileThreshold,
 		L0CompactionThreshold:       s.l0CompactionThreshold,
 		L0StopWritesThreshold:       s.l0StopWritesThreshold,
@@ -72,7 +76,7 @@ func newStore(path string, opts ...StoreOption) (*store, error) {
 		l.EnsureDefaults()
 	}
 	pebbleOpts.Levels[6].FilterPolicy = nil
-	pebbleOpts.FlushSplitBytes = cfg.flushSplitBytes
+	pebbleOpts.FlushSplitBytes = s.flushSplitBytes
 	pebbleOpts.EnsureDefaults()
 
 	el := pebble.MakeLoggingEventListener(newLogAdaptor(s.logger))
@@ -132,6 +136,8 @@ func (s *store) close() (err error) {
 type storeConfig struct {
 	wal                         bool
 	syncWAL                     bool
+	walBytesPerSync             int
+	sstBytesPerSync             int
 	l0CompactionFileThreshold   int
 	l0CompactionThreshold       int
 	l0StopWritesThreshold       int
@@ -155,6 +161,8 @@ func newStoreConfig(dbOpts ...StoreOption) (storeConfig, error) {
 	cfg := storeConfig{
 		wal:                         true,
 		syncWAL:                     true,
+		walBytesPerSync:             DefaultWALBytesPerSync,
+		sstBytesPerSync:             DefaultSSTBytesPerSync,
 		l0CompactionFileThreshold:   DefaultL0CompactionFileThreshold,
 		l0CompactionThreshold:       DefaultL0CompactionThreshold,
 		l0StopWritesThreshold:       DefaultL0StopWritesThreshold,
@@ -216,6 +224,26 @@ func WithWAL(wal bool) StoreOption {
 func WithSyncWAL(syncWAL bool) StoreOption {
 	return newFuncStoreOption(func(cfg *storeConfig) {
 		cfg.syncWAL = syncWAL
+	})
+}
+
+// WithWALBytesPerSync sets the number of bytes to write to the WAL
+// (Write-Ahead Log) before triggering a background sync. This helps smooth out
+// disk write latencies and avoids large, sudden disk writes. This option maps
+// to Pebble's WALBytesPerSync. The default value is 0 (no background syncing).
+func WithWALBytesPerSync(walBytesPerSync int) StoreOption {
+	return newFuncStoreOption(func(cfg *storeConfig) {
+		cfg.walBytesPerSync = walBytesPerSync
+	})
+}
+
+// WithSSTBytesperSync sets the number of bytes to write to SSTables before
+// triggering a background sync. This helps avoid latency spikes caused by the
+// OS flushing large amounts of dirty data at once. This option only affects
+// SSTable syncs and maps to Pebble's BytesPerSync. The default value is 512KB.
+func WithSSTBytesperSync(sstBytesPerSync int) StoreOption {
+	return newFuncStoreOption(func(cfg *storeConfig) {
+		cfg.sstBytesPerSync = sstBytesPerSync
 	})
 }
 

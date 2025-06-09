@@ -238,8 +238,11 @@ var (
 )
 
 type StorageStoreSetting struct {
-	wal     bool
-	syncWAL bool
+	wal             bool
+	syncWAL         bool
+	walBytesPerSync int64
+
+	sstBytesPerSync int64
 
 	memTableSize                int64
 	memTableStopWritesThreshold int
@@ -268,6 +271,8 @@ func (setting *StorageStoreSetting) init() {
 	*setting = StorageStoreSetting{
 		wal:                         true,
 		syncWAL:                     true,
+		walBytesPerSync:             storage.DefaultWALBytesPerSync,
+		sstBytesPerSync:             storage.DefaultSSTBytesPerSync,
 		memTableSize:                storage.DefaultMemTableSize,
 		memTableStopWritesThreshold: storage.DefaultMemTableStopWritesThreshold,
 		l0CompactionFileThreshold:   storage.DefaultL0CompactionFileThreshold,
@@ -300,6 +305,16 @@ func (setting *StorageStoreSetting) Set(value string) (err error) {
 			setting.syncWAL, err = strconv.ParseBool(v)
 			if err != nil {
 				return fmt.Errorf("invalid value for sync_wal: %w", err)
+			}
+		case "wal_bytes_per_sync":
+			setting.walBytesPerSync, err = units.FromByteSizeString(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for wal_bytes_per_sync: %w", err)
+			}
+		case "sst_bytes_per_sync", "bytes_per_sync":
+			setting.sstBytesPerSync, err = units.FromByteSizeString(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for sst_bytes_per_sync: %w", err)
 			}
 		case "mem_table_size":
 			setting.memTableSize, err = units.FromByteSizeString(v)
@@ -382,6 +397,12 @@ func (setting *StorageStoreSetting) String() string {
 	}
 	if setting.syncWAL {
 		opts = append(opts, "sync_wal=true")
+	}
+	if setting.walBytesPerSync > 0 {
+		opts = append(opts, fmt.Sprintf("wal_bytes_per_sync=%s", units.ToByteSizeString(float64(setting.walBytesPerSync))))
+	}
+	if setting.sstBytesPerSync > 0 {
+		opts = append(opts, fmt.Sprintf("sst_bytes_per_sync=%s", units.ToByteSizeString(float64(setting.sstBytesPerSync))))
 	}
 	if setting.memTableSize > 0 {
 		opts = append(opts, fmt.Sprintf("mem_table_size=%s", units.ToByteSizeString(float64(setting.memTableSize))))
