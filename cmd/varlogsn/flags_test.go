@@ -18,10 +18,12 @@ func TestStorageStoreSetting(t *testing.T) {
 	}{
 		{
 			name:  "ValidFullSettings",
-			input: "--storage-value-store=wal=true,sync_wal=false,mem_table_size=64MiB,mem_table_stop_writes_threshold=4,flush_split_bytes=32MiB,l0_compaction_file_threshold=500,l0_compaction_threshold=2,l0_stop_writes_threshold=1000,l0_target_file_size=64MiB,lbase_max_bytes=64MiB,max_concurrent_compactions=4,trim_delay=10s,trim_rate=128MiB,max_open_files=16384,verbose=true",
+			input: "--storage-value-store=wal=true,sync_wal=false,wal_bytes_per_sync=128KiB,sst_bytes_per_sync=1MiB,mem_table_size=64MiB,mem_table_stop_writes_threshold=4,flush_split_bytes=32MiB,l0_compaction_file_threshold=500,l0_compaction_threshold=2,l0_stop_writes_threshold=1000,l0_target_file_size=64MiB,lbase_max_bytes=64MiB,max_concurrent_compactions=4,trim_delay=10s,trim_rate=128MiB,max_open_files=16384,verbose=true",
 			want: &StorageStoreSetting{
 				wal:                         true,
 				syncWAL:                     false,
+				walBytesPerSync:             131072,
+				sstBytesPerSync:             1048576,
 				memTableSize:                64 << 20,
 				memTableStopWritesThreshold: 4,
 				flushSplitBytes:             32 << 20,

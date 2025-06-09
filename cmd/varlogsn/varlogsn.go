@@ -114,6 +114,8 @@ func start(c *cli.Context) error {
 		storeOpts := []storage.StoreOption{
 			storage.WithWAL(s.wal),
 			storage.WithSyncWAL(s.syncWAL),
+			storage.WithWALBytesPerSync(int(s.walBytesPerSync)),
+			storage.WithSSTBytesperSync(int(s.sstBytesPerSync)),
 			storage.WithMemTableSize(int(s.memTableSize)),
 			storage.WithMemTableStopWritesThreshold(s.memTableStopWritesThreshold),
 			storage.WithFlushSplitBytes(s.flushSplitBytes),
