@@ -262,6 +262,8 @@ type StorageStoreSetting struct {
 
 	maxOpenFiles int
 
+	enableTelemetry bool
+
 	verbose bool
 }
 
@@ -282,6 +284,7 @@ func (setting *StorageStoreSetting) init() {
 		lbaseMaxBytes:               storage.DefaultLBaseMaxBytes,
 		maxConcurrentCompactions:    storage.DefaultMaxConcurrentCompactions,
 		maxOpenFiles:                storage.DefaultMaxOpenFiles,
+		enableTelemetry:             false,
 		verbose:                     false,
 	}
 }
@@ -376,6 +379,11 @@ func (setting *StorageStoreSetting) Set(value string) (err error) {
 			if err != nil {
 				return fmt.Errorf("invalid value for max_open_files: %w", err)
 			}
+		case "enable_telemetry":
+			setting.enableTelemetry, err = strconv.ParseBool(v)
+			if err != nil {
+				return fmt.Errorf("invalid value for enable_telemetry: %w", err)
+			}
 		case "verbose":
 			setting.verbose, err = strconv.ParseBool(v)
 			if err != nil {
@@ -439,6 +447,9 @@ func (setting *StorageStoreSetting) String() string {
 	}
 	if setting.maxOpenFiles > 0 {
 		opts = append(opts, fmt.Sprintf("max_open_files=%d", setting.maxOpenFiles))
+	}
+	if setting.enableTelemetry {
+		opts = append(opts, "enable_telemetry=true")
 	}
 	if setting.verbose {
 		opts = append(opts, "verbose=true")

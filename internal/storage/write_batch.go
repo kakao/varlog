@@ -18,24 +18,24 @@ var writeBatchPool = sync.Pool{
 
 // WriteBatch is a batch of writes to storage.
 type WriteBatch struct {
-	batch          *pebble.Batch
-	writeOpts      *pebble.WriteOptions
-	dk             []byte
-	metricRecorder MetricRecorder
+	batch     *pebble.Batch
+	writeOpts *pebble.WriteOptions
+	dk        []byte
+	s         *store
 }
 
 func newWriteBatch(s *store) *WriteBatch {
 	wb := writeBatchPool.Get().(*WriteBatch)
 	wb.batch = s.db.NewBatch()
 	wb.writeOpts = s.writeOpts
-	wb.metricRecorder = s.metricRecorder
+	wb.s = s
 	return wb
 }
 
 func (wb *WriteBatch) release() {
 	wb.batch = nil
 	wb.writeOpts = nil
-	wb.metricRecorder = nil
+	wb.s = nil
 	writeBatchPool.Put(wb)
 }
 
@@ -49,7 +49,9 @@ func (wb *WriteBatch) Apply() error {
 	if err := wb.batch.Commit(wb.writeOpts); err != nil {
 		return err
 	}
-	wb.metricRecorder.RecordBatchCommitStats(todoContext, BatchCommitStats{wb.batch.CommitStats()})
+	if wb.s.telemetryConfig.enable {
+		wb.s.telemetryConfig.metricRecorder.RecordBatchCommitStats(todoContext, BatchCommitStats{wb.batch.CommitStats()})
+	}
 	return nil
 }
 
