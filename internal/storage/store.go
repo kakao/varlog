@@ -133,6 +133,11 @@ func (s *store) close() (err error) {
 	return errors.Join(err, s.db.Close())
 }
 
+type telemetryConfig struct {
+	metricRecorder MetricRecorder
+	enable         bool
+}
+
 type storeConfig struct {
 	wal                         bool
 	syncWAL                     bool
@@ -154,7 +159,8 @@ type storeConfig struct {
 	readOnly                    bool
 	logger                      *zap.Logger
 	verbose                     bool
-	metricRecorder              MetricRecorder
+
+	telemetryConfig telemetryConfig
 }
 
 func newStoreConfig(dbOpts ...StoreOption) (storeConfig, error) {
@@ -173,7 +179,10 @@ func newStoreConfig(dbOpts ...StoreOption) (storeConfig, error) {
 		memTableSize:                DefaultMemTableSize,
 		memTableStopWritesThreshold: DefaultMemTableStopWritesThreshold,
 		maxConcurrentCompaction:     DefaultMaxConcurrentCompactions,
-		metricRecorder:              defaultMetricRecorder,
+		telemetryConfig: telemetryConfig{
+			metricRecorder: defaultMetricRecorder,
+			enable:         false,
+		},
 	}
 	for _, dbOpt := range dbOpts {
 		dbOpt.applyStore(&cfg)
@@ -354,9 +363,20 @@ func withLogger(logger *zap.Logger) StoreOption {
 	})
 }
 
-// WithMetricRecorder sets the MetricRecorder for the store.
+// EnableTelemetry enables or disables telemetry for the store. When disabled,
+// even if WithMetricRecorder is set, no metrics will be recorded. It is
+// disabled by default.
+func EnableTelemetry(enableTelemetry bool) StoreOption {
+	return newFuncStoreOption(func(cfg *storeConfig) {
+		cfg.telemetryConfig.enable = enableTelemetry
+	})
+}
+
+// WithMetricRecorder sets the MetricRecorder for the store. If telemetry is
+// disabled via EnableTelemetry(false), the provided MetricRecorder will not
+// record metrics. This option allows integration with custom metrics backends.
 func WithMetricRecorder(metricRecorder MetricRecorder) StoreOption {
 	return newFuncStoreOption(func(cfg *storeConfig) {
-		cfg.metricRecorder = metricRecorder
+		cfg.telemetryConfig.metricRecorder = metricRecorder
 	})
 }

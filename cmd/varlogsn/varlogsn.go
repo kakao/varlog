@@ -128,6 +128,7 @@ func start(c *cli.Context) error {
 			storage.WithTrimDelay(s.trimDelay),
 			storage.WithTrimRateByte(int(s.trimRate)),
 			storage.WithMaxOpenFiles(s.maxOpenFiles),
+			storage.EnableTelemetry(s.enableTelemetry),
 			storage.WithVerbose(s.verbose),
 		}
 		switch flagStorageStore.Name {

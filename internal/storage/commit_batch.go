@@ -19,26 +19,26 @@ var commitBatchPool = sync.Pool{
 }
 
 type CommitBatch struct {
-	batch          *pebble.Batch
-	writeOpts      *pebble.WriteOptions
-	cc             []byte
-	ck             []byte
-	dk             []byte
-	metricRecorder MetricRecorder
+	batch     *pebble.Batch
+	writeOpts *pebble.WriteOptions
+	cc        []byte
+	ck        []byte
+	dk        []byte
+	s         *store
 }
 
 func newCommitBatch(s *store) *CommitBatch {
 	cb := commitBatchPool.Get().(*CommitBatch)
 	cb.batch = s.db.NewBatch()
 	cb.writeOpts = s.writeOpts
-	cb.metricRecorder = s.metricRecorder
+	cb.s = s
 	return cb
 }
 
 func (cb *CommitBatch) release() {
 	cb.batch = nil
 	cb.writeOpts = nil
-	cb.metricRecorder = nil
+	cb.s = nil
 	commitBatchPool.Put(cb)
 }
 
@@ -50,7 +50,9 @@ func (cb *CommitBatch) Apply() error {
 	if err := cb.batch.Commit(cb.writeOpts); err != nil {
 		return err
 	}
-	cb.metricRecorder.RecordBatchCommitStats(todoContext, BatchCommitStats{cb.batch.CommitStats()})
+	if cb.s.telemetryConfig.enable {
+		cb.s.telemetryConfig.metricRecorder.RecordBatchCommitStats(todoContext, BatchCommitStats{cb.batch.CommitStats()})
+	}
 	return nil
 }
 
