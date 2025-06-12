@@ -4,7 +4,6 @@ package reportcommitter
 
 import (
 	"context"
-	"io"
 	"sync"
 
 	"go.uber.org/multierr"
@@ -92,14 +91,12 @@ func (c *client) GetReport() (*snpb.GetReportResponse, error) {
 	defer c.muReportStream.Unlock()
 
 	if err := c.reportStream.Send(&c.getReportReq); err != nil {
+		_ = c.reportStream.CloseSend()
 		return nil, err
 	}
 	rsp, err := c.reportStream.Recv()
 	if err != nil {
-		if err == io.EOF {
-			// NOTE(jun,pharrell): Zero value of GetReportResponse should be handled.
-			return &snpb.GetReportResponse{}, nil
-		}
+		_ = c.reportStream.CloseSend()
 		return nil, err
 	}
 	return rsp, nil
