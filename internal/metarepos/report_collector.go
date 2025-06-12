@@ -19,7 +19,9 @@ import (
 )
 
 const DefaultReportRefreshTime = time.Second
+
 const DefaultCatchupRefreshTime = 3 * time.Millisecond
+
 const DefaultSampleReportsRate = 10000
 
 type sampleTracer struct {
@@ -759,7 +761,6 @@ func (rce *reportCollectExecutor) lookupNextCommitResults(ver types.Version) (*m
 }
 
 func newLogStreamCommitter(topicID types.TopicID, lsID types.LogStreamID, helper commitHelper, ver types.Version, status varlogpb.LogStreamStatus, sampleTracer *sampleTracer, tmStub *telemetryStub, logger *zap.Logger) *logStreamCommitter {
-
 	c := &logStreamCommitter{
 		topicID:      topicID,
 		lsID:         lsID,
