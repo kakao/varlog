@@ -34,6 +34,16 @@ type executorConfig struct {
 	logger                       *zap.Logger
 	lsm                          *telemetry.LogStreamMetrics
 	syncTimeout                  time.Duration
+
+	// maxWriteTaskBatchLength sets how many tasks are batched together in a
+	// writer or backupWriter. Each task may contain multiple writes (as
+	// [][]byte) to the storage layer.
+	//
+	// If each task has N writes and maxWriteTaskBatchLength is M, then up to
+	// N*M writes can be flushed to storage at once when M or more tasks are
+	// queued. To control the number of writes sent to storage, M is limited
+	// from 1 to 3.
+	maxWriteTaskBatchLength int
 }
 
 func newExecutorConfig(opts []ExecutorOption) (executorConfig, error) {
@@ -48,6 +58,7 @@ func newExecutorConfig(opts []ExecutorOption) (executorConfig, error) {
 	for _, opt := range opts {
 		opt.applyExecutor(&cfg)
 	}
+	cfg.ensureDefaults()
 	if err := cfg.validate(); err != nil {
 		return cfg, err
 	}
@@ -78,6 +89,10 @@ func (cfg executorConfig) validate() error {
 		return errLoggerIsNil
 	}
 	return nil
+}
+
+func (cfg *executorConfig) ensureDefaults() {
+	cfg.maxWriteTaskBatchLength = min(max(cfg.maxWriteTaskBatchLength, 1), 3)
 }
 
 type ExecutorOption interface {
@@ -180,5 +195,17 @@ func WithLogStreamMetrics(lsm *telemetry.LogStreamMetrics) ExecutorOption {
 func WithSyncTimeout(syncTimeout time.Duration) ExecutorOption {
 	return newFuncExecutorOption(func(cfg *executorConfig) {
 		cfg.syncTimeout = syncTimeout
+	})
+}
+
+// WithMaxWriteTaskBatchLength sets the maximum number of write tasks that can
+// be grouped together to optimize write operations by reducing overhead. Each
+// write task may already batch multiple writes, so the number of grouped tasks
+// is capped at 3 for efficiency.
+// If the provided value is zero or negative, it defaults to 1. If the value is
+// 4 or greater, it defaults to 3.
+func WithMaxWriteTaskBatchLength(maxWriteBatchLength int) ExecutorOption {
+	return newFuncExecutorOption(func(cfg *executorConfig) {
+		cfg.maxWriteTaskBatchLength = maxWriteBatchLength
 	})
 }
