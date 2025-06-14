@@ -127,7 +127,7 @@ func (rc *replicateClient) sendLoop(ctx context.Context) {
 }
 
 // sendLoopInternal sends a replicate task to the backup replica.
-func (rc *replicateClient) sendLoopInternal(_ context.Context, rt *replicateTask, req *snpb.ReplicateRequest) error {
+func (rc *replicateClient) sendLoopInternal(ctx context.Context, rt *replicateTask, req *snpb.ReplicateRequest) error {
 	startTime := time.Now()
 	req.Data = rt.dataList
 	req.BeginLLSN = rt.beginLLSN
@@ -136,8 +136,7 @@ func (rc *replicateClient) sendLoopInternal(_ context.Context, rt *replicateTask
 	inflight := rc.inflight.Add(-1)
 	if rc.lse.lsm != nil {
 		rc.lse.lsm.ReplicateClientInflightOperations.Store(inflight)
-		rc.lse.lsm.ReplicateClientOperationDuration.Add(time.Since(startTime).Microseconds())
-		rc.lse.lsm.ReplicateClientOperations.Add(1)
+		rc.lse.lsm.ReplicateClientOperationDuration.Record(ctx, time.Since(startTime).Microseconds())
 	}
 	return err
 }

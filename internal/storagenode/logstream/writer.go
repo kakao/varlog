@@ -83,7 +83,7 @@ func (w *writer) writeLoop(ctx context.Context) {
 }
 
 // writeLoopInternal stores a batch of writes to the storage and modifies uncommittedLLSNEnd of the log stream which presents the next expected LLSN to be written.
-func (w *writer) writeLoopInternal(_ context.Context, st *sequenceTask) {
+func (w *writer) writeLoopInternal(ctx context.Context, st *sequenceTask) {
 	startTime := time.Now()
 	var err error
 	cnt := len(st.dataBatch)
@@ -98,8 +98,7 @@ func (w *writer) writeLoopInternal(_ context.Context, st *sequenceTask) {
 		if w.lse.lsm == nil {
 			return
 		}
-		w.lse.lsm.WriterOperationDuration.Add(time.Since(startTime).Microseconds())
-		w.lse.lsm.WriterOperations.Add(1)
+		w.lse.lsm.WriterOperationDuration.Record(ctx, time.Since(startTime).Microseconds())
 		w.lse.lsm.WriterInflightOperations.Store(inflight)
 	}()
 

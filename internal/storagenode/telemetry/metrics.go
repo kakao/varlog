@@ -29,15 +29,6 @@ import (
 type LogStreamMetrics struct {
 	attrs attribute.Set
 
-	// LogRPCServerDuration records the time spent processing inbound RPC calls
-	// in microseconds. It helps to monitor and analyze the performance of RPC
-	// calls in the Varlog system.
-	//
-	// Internally, it is a wrapper of Metrics.logRPCServerDuration with
-	// attributes cache. It avoids creating a new attribute set for each
-	// observation.
-	LogRPCServerDuration *Int64HistogramRecorder
-
 	// LogRPCServerLogEntrySize records the size of individual log entries
 	// appended. It is useful for tracking the amount of data being processed
 	// and stored in the Varlog system.
@@ -45,7 +36,7 @@ type LogStreamMetrics struct {
 	// Internally, it is a wrapper of Metrics.logRPCServerLogEntrySize with
 	// attributes cache. It avoids creating a new attribute set for each
 	// observation.
-	LogRPCServerLogEntrySize *Int64HistogramRecorder
+	LogRPCServerLogEntrySize *opentelemetry.Int64Histogram
 
 	// LogRPCServerBatchSize records the size of log entry batches appended.
 	// This metric helps to understand the batch sizes being handled and
@@ -54,7 +45,7 @@ type LogStreamMetrics struct {
 	// Internally, it is a wrapper of Metrics.logRPCServerBatchSize with
 	// attributes cache. It avoids creating a new attribute set for each
 	// observation.
-	LogRPCServerBatchSize *Int64HistogramRecorder
+	LogRPCServerBatchSize *opentelemetry.Int64Histogram
 
 	// LogRPCServerLogEntriesPerBatch records the number of log entries per
 	// appended batch. It provides insights into the batch processing
@@ -64,39 +55,27 @@ type LogStreamMetrics struct {
 	// Internally, it is a wrapper of Metrics.logRPCServerLogEntriesPerBatch
 	// with attributes cache. It avoids creating a new attribute set for each
 	// observation.
-	LogRPCServerLogEntriesPerBatch *Int64HistogramRecorder
+	LogRPCServerLogEntriesPerBatch *opentelemetry.Int64Histogram
 
-	AppendLogs             atomic.Int64
-	AppendBytes            atomic.Int64
-	AppendDuration         atomic.Int64
-	AppendOperations       atomic.Int64
-	AppendPreparationMicro atomic.Int64
-	AppendBatchCommitGap   atomic.Int64
+	AppendPreparationDuration *opentelemetry.Int64Histogram
 
-	SequencerOperationDuration  atomic.Int64
-	SequencerFanoutDuration     atomic.Int64
-	SequencerOperations         atomic.Int64
+	SequencerOperationDuration  *opentelemetry.Int64Histogram
+	SequencerFanoutDuration     *opentelemetry.Int64Histogram
 	SequencerInflightOperations atomic.Int64
 
-	WriterOperationDuration  atomic.Int64
-	WriterOperations         atomic.Int64
+	WriterOperationDuration  *opentelemetry.Int64Histogram
 	WriterInflightOperations atomic.Int64
 
-	CommitterOperationDuration atomic.Int64
-	CommitterOperations        atomic.Int64
-	CommitterLogs              atomic.Int64
+	CommitterOperationDuration *opentelemetry.Int64Histogram
+	CommitterLogs              *opentelemetry.Int64Histogram
 
-	ReplicateClientOperationDuration  atomic.Int64
-	ReplicateClientOperations         atomic.Int64
+	ReplicateClientOperationDuration  *opentelemetry.Int64Histogram
 	ReplicateClientInflightOperations atomic.Int64
 
 	ReplicateServerOperations atomic.Int64
 
-	ReplicateLogs             atomic.Int64
-	ReplicateBytes            atomic.Int64
-	ReplicateDuration         atomic.Int64
-	ReplicateOperations       atomic.Int64
-	ReplicatePreparationMicro atomic.Int64
+	ReplicateDuration       *opentelemetry.Int64Histogram
+	ReplicateFanoutDuration *opentelemetry.Int64Histogram
 }
 
 type Int64HistogramRecorder struct {
@@ -126,8 +105,8 @@ func (r *Int64HistogramRecorder) Record(ctx context.Context, rpcKind RPCKind, co
 		opts, ok = r.options[key]
 		if !ok {
 			attrs := slices.Concat(r.defaultAttrs, []attribute.KeyValue{
-				semconv.RPCService(serviceNames[rpcKind]),
-				semconv.RPCMethod(methodNames[rpcKind]),
+				semconv.RPCService(ServiceNames[rpcKind]),
+				semconv.RPCMethod(MethodNames[rpcKind]),
 				semconv.RPCGRPCStatusCodeKey.Int64(int64(code)),
 			})
 			r.options[key] = []metric.RecordOption{
@@ -146,12 +125,12 @@ const (
 	RPCKindReplicate
 )
 
-var serviceNames = []string{
+var ServiceNames = []string{
 	"varlog.snpb.LogIO",
 	"varlog.snpb.Replicator",
 }
 
-var methodNames = []string{
+var MethodNames = []string{
 	"Append",
 	"Replicate",
 }
@@ -161,7 +140,7 @@ var methodNames = []string{
 type Metrics struct {
 	metricsMap sync.Map // map[types.LogStreamID]*LogStreamMetrics
 
-	// logRPCServerDuration measures the time spent processing inbound RPC
+	// LogRPCServerDuration measures the time spent processing inbound RPC
 	// calls in microseconds. Its name is log_rpc.server.duration.
 	//
 	// It is similar to rpc.server.duration defined by OpenTelemetry, but it
@@ -185,7 +164,7 @@ type Metrics struct {
 	//   - https://opentelemetry.io/docs/specs/semconv/rpc/rpc-metrics/#attributes
 	//   - https://opentelemetry.io/docs/specs/semconv/rpc/grpc/#grpc-attributes
 	//   - https://github.com/grpc/proposal/blob/master/A66-otel-stats.md#units
-	logRPCServerDuration metric.Int64Histogram
+	LogRPCServerDuration *opentelemetry.Int64HistogramSet[types.LogStreamID]
 
 	// logRPCServerLogEntrySize measures the sizes of appended log entries in
 	// bytes. Its name is log_rpc.server.log_entry.size.
@@ -207,7 +186,7 @@ type Metrics struct {
 	// References:
 	//   - https://opentelemetry.io/docs/specs/semconv/rpc/rpc-metrics/#metric-rpcserverrequestsize
 	//   - https://github.com/grpc/proposal/blob/master/A66-otel-stats.md#units
-	logRPCServerLogEntrySize metric.Int64Histogram
+	logRPCServerLogEntrySize *opentelemetry.Int64HistogramSet[types.LogStreamID]
 
 	// logRPCServerBatchSize measures the size of appended batches in bytes.
 	// Its name is log_rpc.server.batch.size. It also includes additional
@@ -224,7 +203,7 @@ type Metrics struct {
 	// References:
 	//   - https://opentelemetry.io/docs/specs/semconv/rpc/rpc-metrics/#metric-rpcserverrequestsize
 	//   - https://github.com/grpc/proposal/blob/master/A66-otel-stats.md#units
-	logRPCServerBatchSize metric.Int64Histogram
+	logRPCServerBatchSize *opentelemetry.Int64HistogramSet[types.LogStreamID]
 
 	// logRPCServerLogEntriesPerBatch measures the number of log entries per
 	// batch appended. Its name is log_rpc.server.log_entries_per_batch.
@@ -247,7 +226,26 @@ type Metrics struct {
 	// References:
 	//   - https://opentelemetry.io/docs/specs/semconv/rpc/rpc-metrics/#metric-rpcserverrequests_per_rpc
 	//   - https://github.com/grpc/proposal/blob/master/A66-otel-stats.md#units
-	logRPCServerLogEntriesPerBatch metric.Int64Histogram
+	logRPCServerLogEntriesPerBatch *opentelemetry.Int64HistogramSet[types.LogStreamID]
+
+	// appendPreparationDuration measures the time spent preparing append operation in microseconds.
+	appendPreparationDuration *opentelemetry.Int64HistogramSet[types.LogStreamID]
+
+	sequencerOperationDuration *opentelemetry.Int64HistogramSet[types.LogStreamID]
+
+	sequencerFanoutDuration *opentelemetry.Int64HistogramSet[types.LogStreamID]
+
+	writerOperationDuration *opentelemetry.Int64HistogramSet[types.LogStreamID]
+
+	committerOperationDuration *opentelemetry.Int64HistogramSet[types.LogStreamID]
+
+	committerLogs *opentelemetry.Int64HistogramSet[types.LogStreamID]
+
+	replicateClientOperationDuration *opentelemetry.Int64HistogramSet[types.LogStreamID]
+
+	replicateDuration *opentelemetry.Int64HistogramSet[types.LogStreamID]
+
+	replicateFanoutDuration *opentelemetry.Int64HistogramSet[types.LogStreamID]
 }
 
 func RegisterMetrics(meter metric.Meter) (m *Metrics, err error) {
@@ -266,9 +264,108 @@ func RegisterMetrics(meter metric.Meter) (m *Metrics, err error) {
 	for dur := 150 * time.Millisecond; dur <= 3000*time.Millisecond; dur += 50 * time.Millisecond {
 		boundaries = append(boundaries, float64(dur.Nanoseconds())/1000.0)
 	}
-	m.logRPCServerDuration, err = meter.Int64Histogram(
+	m.LogRPCServerDuration, err = opentelemetry.NewInt64HistogramSet[types.LogStreamID](
+		meter,
 		"log_rpc.server.duration",
 		metric.WithDescription("Time spent processing inbound RPC in microseconds."),
+		metric.WithUnit("us"),
+		metric.WithExplicitBucketBoundaries(boundaries...),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	boundaries = nil
+	// 10us, 20us, 30us, ..., 1000us
+	for dur := 10 * time.Microsecond; dur <= 1000*time.Microsecond; dur += 10 * time.Microsecond {
+		boundaries = append(boundaries, float64(dur.Nanoseconds())/float64(time.Microsecond))
+	}
+	// 1050us, 1100us, 1150us, ..., 5000us
+	for dur := 1050 * time.Microsecond; dur <= 5000*time.Microsecond; dur += 50 * time.Microsecond {
+		boundaries = append(boundaries, float64(dur.Nanoseconds())/float64(time.Microsecond))
+	}
+	// 5100us, 5200us, 5300us, ..., 10000us
+	for dur := 5100 * time.Microsecond; dur <= 10000*time.Microsecond; dur += 100 * time.Microsecond {
+		boundaries = append(boundaries, float64(dur.Nanoseconds())/float64(time.Microsecond))
+	}
+	// 11000us, 12000us, 13000us, ..., 50000us
+	for dur := 11000 * time.Microsecond; dur <= 50000*time.Microsecond; dur += 1000 * time.Microsecond {
+		boundaries = append(boundaries, float64(dur.Nanoseconds())/float64(time.Microsecond))
+	}
+	m.appendPreparationDuration, err = opentelemetry.NewInt64HistogramSet[types.LogStreamID](
+		meter,
+		"sn.append.preparation",
+		metric.WithDescription("Time spent preparing append operation in microseconds"),
+		metric.WithUnit("us"),
+		metric.WithExplicitBucketBoundaries(boundaries...),
+	)
+	if err != nil {
+		return nil, err
+	}
+	m.sequencerOperationDuration, err = opentelemetry.NewInt64HistogramSet[types.LogStreamID](
+		meter,
+		"sn.sequencer.operation.duration",
+		metric.WithDescription("Time spent in sequencer operation in microseconds"),
+		metric.WithUnit("us"),
+		metric.WithExplicitBucketBoundaries(boundaries...),
+	)
+	if err != nil {
+		return nil, err
+	}
+	m.sequencerFanoutDuration, err = opentelemetry.NewInt64HistogramSet[types.LogStreamID](
+		meter,
+		"sn.sequencer.fanout.duration",
+		metric.WithDescription("Time spent in sequencer fanout in microseconds"),
+		metric.WithUnit("us"),
+		metric.WithExplicitBucketBoundaries(boundaries...),
+	)
+	if err != nil {
+		return nil, err
+	}
+	m.writerOperationDuration, err = opentelemetry.NewInt64HistogramSet[types.LogStreamID](
+		meter,
+		"sn.writer.operation.duration",
+		metric.WithDescription("Time spent in writer operation in microseconds"),
+		metric.WithUnit("us"),
+		metric.WithExplicitBucketBoundaries(boundaries...),
+	)
+	if err != nil {
+		return nil, err
+	}
+	m.committerOperationDuration, err = opentelemetry.NewInt64HistogramSet[types.LogStreamID](
+		meter,
+		"sn.committer.operation.duration",
+		metric.WithDescription("Time spent in committer operation in microseconds"),
+		metric.WithUnit("us"),
+		metric.WithExplicitBucketBoundaries(boundaries...),
+	)
+	if err != nil {
+		return nil, err
+	}
+	m.replicateClientOperationDuration, err = opentelemetry.NewInt64HistogramSet[types.LogStreamID](
+		meter,
+		"sn.replicate.client.operation.duration",
+		metric.WithDescription("Time spent in replicate client operation in microseconds"),
+		metric.WithUnit("us"),
+		metric.WithExplicitBucketBoundaries(boundaries...),
+	)
+	if err != nil {
+		return nil, err
+	}
+	m.replicateDuration, err = opentelemetry.NewInt64HistogramSet[types.LogStreamID](
+		meter,
+		"sn.replicate.duration",
+		metric.WithDescription("Time spent replicating from the log stream in microseconds"),
+		metric.WithUnit("us"),
+		metric.WithExplicitBucketBoundaries(boundaries...),
+	)
+	if err != nil {
+		return nil, err
+	}
+	m.replicateFanoutDuration, err = opentelemetry.NewInt64HistogramSet[types.LogStreamID](
+		meter,
+		"sn.replicate.fanout.duration",
+		metric.WithDescription("Time spent in replicate server fanout in microseconds"),
 		metric.WithUnit("us"),
 		metric.WithExplicitBucketBoundaries(boundaries...),
 	)
@@ -293,7 +390,8 @@ func RegisterMetrics(meter metric.Meter) (m *Metrics, err error) {
 	for sz := 1500_000; sz <= 20_000_000; sz += 500_000 {
 		boundaries = append(boundaries, float64(sz))
 	}
-	m.logRPCServerLogEntrySize, err = meter.Int64Histogram(
+	m.logRPCServerLogEntrySize, err = opentelemetry.NewInt64HistogramSet[types.LogStreamID](
+		meter,
 		"log_rpc.server.log_entry.size",
 		metric.WithDescription("Size of appended log entries."),
 		metric.WithUnit("By"),
@@ -303,7 +401,8 @@ func RegisterMetrics(meter metric.Meter) (m *Metrics, err error) {
 		return nil, err
 	}
 
-	m.logRPCServerBatchSize, err = meter.Int64Histogram(
+	m.logRPCServerBatchSize, err = opentelemetry.NewInt64HistogramSet[types.LogStreamID](
+		meter,
 		"log_rpc.server.batch.size",
 		metric.WithDescription("Size of appended log entry batches."),
 		metric.WithUnit("By"),
@@ -313,7 +412,8 @@ func RegisterMetrics(meter metric.Meter) (m *Metrics, err error) {
 		return nil, err
 	}
 
-	m.logRPCServerLogEntriesPerBatch, err = meter.Int64Histogram(
+	m.logRPCServerLogEntriesPerBatch, err = opentelemetry.NewInt64HistogramSet[types.LogStreamID](
+		meter,
 		"log_rpc.server.log_entries_per_batch",
 		metric.WithDescription("Number of log entries per appended batch."),
 		metric.WithUnit("{count}"),
@@ -324,109 +424,28 @@ func RegisterMetrics(meter metric.Meter) (m *Metrics, err error) {
 	if err != nil {
 		return nil, err
 	}
+	m.committerLogs, err = opentelemetry.NewInt64HistogramSet[types.LogStreamID](
+		meter,
+		"sn.committer.logs",
+		metric.WithDescription("Number of logs committed"),
+		metric.WithUnit("{count}"),
+		metric.WithExplicitBucketBoundaries(
+			1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536,
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	var (
-		appendLogs                    metric.Int64ObservableCounter
-		appendBytes                   metric.Int64ObservableCounter
-		appendDuration                metric.Int64ObservableCounter
-		appendOperations              metric.Int64ObservableCounter
-		appendPreparationMicroseconds metric.Int64ObservableCounter
-		appendBatchCommitGap          metric.Int64ObservableCounter
-
-		sequencerOperationDuration  metric.Int64ObservableCounter
-		sequencerFanoutDuration     metric.Int64ObservableCounter
-		sequencerOperations         metric.Int64ObservableCounter
-		sequencerInflightOperations metric.Int64ObservableGauge
-
-		writerOperationDuration  metric.Int64ObservableCounter
-		writerOperations         metric.Int64ObservableCounter
-		writerInflightOperations metric.Int64ObservableGauge
-
-		committerOperationDuration metric.Int64ObservableCounter
-		committerOperations        metric.Int64ObservableCounter
-		committerLogs              metric.Int64ObservableCounter
-
-		replicateClientOperationDuration  metric.Int64ObservableCounter
-		replicateClientOperations         metric.Int64ObservableCounter
+		sequencerInflightOperations       metric.Int64ObservableGauge
+		writerInflightOperations          metric.Int64ObservableGauge
 		replicateClientInflightOperations metric.Int64ObservableGauge
-
-		replicateServerOperations metric.Int64ObservableCounter
-
-		replicateLogs                    metric.Int64ObservableCounter
-		replicateBytes                   metric.Int64ObservableCounter
-		replicateDuration                metric.Int64ObservableCounter
-		replicateOperations              metric.Int64ObservableCounter
-		replicatePreparationMicroseconds metric.Int64ObservableCounter
+		replicateServerOperations         metric.Int64ObservableCounter
 
 		mu sync.Mutex
 	)
 
-	appendLogs, err = meter.Int64ObservableCounter(
-		"sn.append.logs",
-		metric.WithDescription("Number of logs appended to the log stream"),
-	)
-	if err != nil {
-		return nil, err
-	}
-	appendBytes, err = meter.Int64ObservableCounter(
-		"sn.append.bytes",
-		metric.WithDescription("Bytes appended to the log stream"),
-		metric.WithUnit("By"),
-	)
-	if err != nil {
-		return nil, err
-	}
-	appendDuration, err = meter.Int64ObservableCounter(
-		"sn.append.duration",
-		metric.WithDescription("Time spent appending to the log stream in microseconds"),
-	)
-	if err != nil {
-		return nil, err
-	}
-	appendOperations, err = meter.Int64ObservableCounter(
-		"sn.append.operations",
-		metric.WithDescription("Number of append operations"),
-	)
-	if err != nil {
-		return nil, err
-	}
-	appendPreparationMicroseconds, err = meter.Int64ObservableCounter(
-		"sn.append.preparation.us",
-		metric.WithDescription("Time spent preparing append operation in microseconds"),
-	)
-	if err != nil {
-		return nil, err
-	}
-	appendBatchCommitGap, err = meter.Int64ObservableCounter(
-		"sn.append.batch.commit.gap",
-		metric.WithDescription("Time gap between the first and last commit in a batch"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	sequencerOperationDuration, err = meter.Int64ObservableCounter(
-		"sn.sequencer.operation.duration",
-		metric.WithDescription("Time spent in sequencer operation"),
-		metric.WithUnit("ms"),
-	)
-	if err != nil {
-		return nil, err
-	}
-	sequencerFanoutDuration, err = meter.Int64ObservableCounter(
-		"sn.sequencer.fanout.duration",
-		metric.WithDescription("Time spent in sequencer fanout in microseconds"),
-	)
-	if err != nil {
-		return nil, err
-	}
-	sequencerOperations, err = meter.Int64ObservableCounter(
-		"sn.sequencer.operations",
-		metric.WithDescription("Number of sequencer operations"),
-	)
-	if err != nil {
-		return nil, err
-	}
 	sequencerInflightOperations, err = meter.Int64ObservableGauge(
 		"sn.sequencer.inflight.operations",
 		metric.WithDescription("Number of sequencer operations in flight"),
@@ -435,20 +454,6 @@ func RegisterMetrics(meter metric.Meter) (m *Metrics, err error) {
 		return nil, err
 	}
 
-	writerOperationDuration, err = meter.Int64ObservableCounter(
-		"sn.writer.operation.duration",
-		metric.WithDescription("Time spent in writer operation in microseconds"),
-	)
-	if err != nil {
-		return nil, err
-	}
-	writerOperations, err = meter.Int64ObservableCounter(
-		"sn.writer.operations",
-		metric.WithDescription("Number of writer operations"),
-	)
-	if err != nil {
-		return nil, err
-	}
 	writerInflightOperations, err = meter.Int64ObservableGauge(
 		"sn.writer.inflight.operations",
 		metric.WithDescription("Number of writer operations in flight"),
@@ -457,42 +462,6 @@ func RegisterMetrics(meter metric.Meter) (m *Metrics, err error) {
 		return nil, err
 	}
 
-	committerOperationDuration, err = meter.Int64ObservableCounter(
-		"sn.committer.operation.duration",
-		metric.WithDescription("Time spent in committer operation in microseconds"),
-	)
-	if err != nil {
-		return nil, err
-	}
-	committerOperations, err = meter.Int64ObservableCounter(
-		"sn.committer.operations",
-		metric.WithDescription("Number of committer operations"),
-	)
-	if err != nil {
-		return nil, err
-	}
-	committerLogs, err = meter.Int64ObservableCounter(
-		"sn.committer.logs",
-		metric.WithDescription("Number of logs committed"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	replicateClientOperationDuration, err = meter.Int64ObservableCounter(
-		"sn.replicate.client.operation.duration",
-		metric.WithDescription("Time spent in replicate client operation in microseconds"),
-	)
-	if err != nil {
-		return nil, err
-	}
-	replicateClientOperations, err = meter.Int64ObservableCounter(
-		"sn.replicate.client.operations",
-		metric.WithDescription("Number of replicate client operations"),
-	)
-	if err != nil {
-		return nil, err
-	}
 	replicateClientInflightOperations, err = meter.Int64ObservableGauge(
 		"sn.replicate.client.inflight.operations",
 		metric.WithDescription("Number of replicate client operations in flight"),
@@ -509,43 +478,6 @@ func RegisterMetrics(meter metric.Meter) (m *Metrics, err error) {
 		return nil, err
 	}
 
-	replicateLogs, err = meter.Int64ObservableCounter(
-		"sn.replicate.logs",
-		metric.WithDescription("Number of logs replicated from the log stream"),
-	)
-	if err != nil {
-		return nil, err
-	}
-	replicateBytes, err = meter.Int64ObservableCounter(
-		"sn.replicate.bytes",
-		metric.WithDescription("Bytes replicated from the log stream"),
-		metric.WithUnit("By"),
-	)
-	if err != nil {
-		return nil, err
-	}
-	replicateDuration, err = meter.Int64ObservableCounter(
-		"sn.replicate.duration",
-		metric.WithDescription("Time spent replicating from the log stream in microseconds"),
-	)
-	if err != nil {
-		return nil, err
-	}
-	replicateOperations, err = meter.Int64ObservableCounter(
-		"sn.replicate.operations",
-		metric.WithDescription("Number of replicate operations"),
-	)
-	if err != nil {
-		return nil, err
-	}
-	replicatePreparationMicroseconds, err = meter.Int64ObservableCounter(
-		"sn.replicate.preparation.us",
-		metric.WithDescription("Time spent preparing append operation"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	mu.Lock()
 	defer mu.Unlock()
 
@@ -555,50 +487,18 @@ func RegisterMetrics(meter metric.Meter) (m *Metrics, err error) {
 
 		m.metricsMap.Range(func(key, value any) bool {
 			lsm := value.(*LogStreamMetrics)
-
-			observer.ObserveInt64(appendLogs, lsm.AppendLogs.Load(), metric.WithAttributeSet(lsm.attrs))
-			observer.ObserveInt64(appendBytes, lsm.AppendBytes.Load(), metric.WithAttributeSet(lsm.attrs))
-			observer.ObserveInt64(appendDuration, lsm.AppendDuration.Load(), metric.WithAttributeSet(lsm.attrs))
-			observer.ObserveInt64(appendOperations, lsm.AppendOperations.Load(), metric.WithAttributeSet(lsm.attrs))
-			observer.ObserveInt64(appendPreparationMicroseconds, lsm.AppendPreparationMicro.Load(), metric.WithAttributeSet(lsm.attrs))
-			observer.ObserveInt64(appendBatchCommitGap, lsm.AppendBatchCommitGap.Load(), metric.WithAttributeSet(lsm.attrs))
-
-			observer.ObserveInt64(sequencerOperationDuration, lsm.SequencerOperationDuration.Load(), metric.WithAttributeSet(lsm.attrs))
-			observer.ObserveInt64(sequencerFanoutDuration, lsm.SequencerFanoutDuration.Load(), metric.WithAttributeSet(lsm.attrs))
-			observer.ObserveInt64(sequencerOperations, lsm.SequencerOperations.Load(), metric.WithAttributeSet(lsm.attrs))
 			observer.ObserveInt64(sequencerInflightOperations, lsm.SequencerInflightOperations.Load(), metric.WithAttributeSet(lsm.attrs))
-
-			observer.ObserveInt64(writerOperationDuration, lsm.WriterOperationDuration.Load(), metric.WithAttributeSet(lsm.attrs))
-			observer.ObserveInt64(writerOperations, lsm.WriterOperations.Load(), metric.WithAttributeSet(lsm.attrs))
 			observer.ObserveInt64(writerInflightOperations, lsm.WriterInflightOperations.Load(), metric.WithAttributeSet(lsm.attrs))
-
-			observer.ObserveInt64(committerOperationDuration, lsm.CommitterOperationDuration.Load(), metric.WithAttributeSet(lsm.attrs))
-			observer.ObserveInt64(committerOperations, lsm.CommitterOperations.Load(), metric.WithAttributeSet(lsm.attrs))
-			observer.ObserveInt64(committerLogs, lsm.CommitterLogs.Load(), metric.WithAttributeSet(lsm.attrs))
-
-			observer.ObserveInt64(replicateClientOperationDuration, lsm.ReplicateClientOperationDuration.Load(), metric.WithAttributeSet(lsm.attrs))
-			observer.ObserveInt64(replicateClientOperations, lsm.ReplicateClientOperations.Load(), metric.WithAttributeSet(lsm.attrs))
 			observer.ObserveInt64(replicateClientInflightOperations, lsm.ReplicateClientInflightOperations.Load(), metric.WithAttributeSet(lsm.attrs))
-
 			observer.ObserveInt64(replicateServerOperations, lsm.ReplicateServerOperations.Load(), metric.WithAttributeSet(lsm.attrs))
-
-			observer.ObserveInt64(replicateLogs, lsm.ReplicateLogs.Load(), metric.WithAttributeSet(lsm.attrs))
-			observer.ObserveInt64(replicateBytes, lsm.ReplicateBytes.Load(), metric.WithAttributeSet(lsm.attrs))
-			observer.ObserveInt64(replicateDuration, lsm.ReplicateDuration.Load(), metric.WithAttributeSet(lsm.attrs))
-			observer.ObserveInt64(replicateOperations, lsm.ReplicateOperations.Load(), metric.WithAttributeSet(lsm.attrs))
-			observer.ObserveInt64(replicatePreparationMicroseconds, lsm.ReplicatePreparationMicro.Load(), metric.WithAttributeSet(lsm.attrs))
-
 			return true
 		})
 
 		return nil
-	}, appendLogs, appendBytes, appendDuration, appendOperations, appendPreparationMicroseconds, appendBatchCommitGap,
-		sequencerOperationDuration, sequencerFanoutDuration, sequencerOperations, sequencerInflightOperations,
-		writerOperationDuration, writerOperations, writerInflightOperations,
-		committerOperationDuration, committerOperations, committerLogs,
-		replicateClientOperationDuration, replicateClientOperations, replicateClientInflightOperations,
+	}, sequencerInflightOperations,
+		writerInflightOperations,
+		replicateClientInflightOperations,
 		replicateServerOperations,
-		replicateLogs, replicateBytes, replicateDuration, replicateOperations, replicatePreparationMicroseconds,
 	)
 	if err != nil {
 		return nil, err
@@ -626,11 +526,19 @@ func RegisterLogStreamMetrics(m *Metrics, tpid types.TopicID, lsid types.LogStre
 		semconv.RPCSystemGRPC,
 	}
 	lsm, loaded := m.metricsMap.LoadOrStore(lsid, &LogStreamMetrics{
-		attrs:                          attrs,
-		LogRPCServerDuration:           NewInt64HistogramRecorder(m.logRPCServerDuration, kvs...),
-		LogRPCServerLogEntrySize:       NewInt64HistogramRecorder(m.logRPCServerLogEntrySize, kvs...),
-		LogRPCServerBatchSize:          NewInt64HistogramRecorder(m.logRPCServerBatchSize, kvs...),
-		LogRPCServerLogEntriesPerBatch: NewInt64HistogramRecorder(m.logRPCServerLogEntriesPerBatch, kvs...),
+		attrs:                            attrs,
+		LogRPCServerLogEntrySize:         m.logRPCServerLogEntrySize.GetHistogram(lsid, metric.WithAttributes(kvs...)),
+		LogRPCServerBatchSize:            m.logRPCServerBatchSize.GetHistogram(lsid, metric.WithAttributes(kvs...)),
+		LogRPCServerLogEntriesPerBatch:   m.logRPCServerLogEntriesPerBatch.GetHistogram(lsid, metric.WithAttributes(kvs...)),
+		AppendPreparationDuration:        m.appendPreparationDuration.GetHistogram(lsid, metric.WithAttributeSet(attrs)),
+		SequencerOperationDuration:       m.sequencerOperationDuration.GetHistogram(lsid, metric.WithAttributeSet(attrs)),
+		SequencerFanoutDuration:          m.sequencerFanoutDuration.GetHistogram(lsid, metric.WithAttributeSet(attrs)),
+		WriterOperationDuration:          m.writerOperationDuration.GetHistogram(lsid, metric.WithAttributeSet(attrs)),
+		CommitterOperationDuration:       m.committerOperationDuration.GetHistogram(lsid, metric.WithAttributeSet(attrs)),
+		CommitterLogs:                    m.committerLogs.GetHistogram(lsid, metric.WithAttributeSet(attrs)),
+		ReplicateClientOperationDuration: m.replicateClientOperationDuration.GetHistogram(lsid, metric.WithAttributeSet(attrs)),
+		ReplicateDuration:                m.replicateDuration.GetHistogram(lsid, metric.WithAttributeSet(attrs)),
+		ReplicateFanoutDuration:          m.replicateFanoutDuration.GetHistogram(lsid, metric.WithAttributeSet(attrs)),
 	})
 	if loaded {
 		return nil, fmt.Errorf("storagenode: already registered %v", lsid)
