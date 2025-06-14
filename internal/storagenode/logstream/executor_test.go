@@ -85,7 +85,10 @@ func TestExecutor_Closed(t *testing.T) {
 	err := lse.AppendAsync(context.Background(), TestNewBatchData(t, 1, 0), appendTask)
 	assert.ErrorIs(t, err, verrors.ErrClosed)
 
-	err = lse.Replicate(context.Background(), types.LLSN(1), TestNewBatchData(t, 1, 0))
+	rst := &ReplicationTask{}
+	rst.Req.BeginLLSN = types.LLSN(1)
+	rst.Req.Data = TestNewBatchData(t, 1, 0)
+	err = lse.Replicate(context.Background(), rst)
 	assert.ErrorIs(t, err, verrors.ErrClosed)
 
 	_, _, err = lse.Seal(context.Background(), types.MinGLSN)
@@ -185,7 +188,10 @@ func TestExecutor_Sealing(t *testing.T) {
 				assert.Equal(t, varlogpb.LogStreamStatusSealing, st)
 				assert.Equal(t, executorStateSealing, lse.esm.load())
 
-				err = lse.Replicate(context.Background(), types.LLSN(1), TestNewBatchData(t, 1, 0))
+				rst := &ReplicationTask{}
+				rst.Req.BeginLLSN = types.LLSN(1)
+				rst.Req.Data = TestNewBatchData(t, 1, 0)
+				err = lse.Replicate(context.Background(), rst)
 				assert.ErrorIs(t, err, verrors.ErrSealed)
 			},
 		},
@@ -291,7 +297,10 @@ func TestExecutor_Sealed(t *testing.T) {
 	err = lse.AppendAsync(context.Background(), TestNewBatchData(t, 1, 0), appendTask)
 	assert.ErrorIs(t, err, verrors.ErrSealed)
 
-	err = lse.Replicate(context.Background(), types.LLSN(1), TestNewBatchData(t, 1, 0))
+	rst := &ReplicationTask{}
+	rst.Req.BeginLLSN = types.LLSN(1)
+	rst.Req.Data = TestNewBatchData(t, 1, 0)
+	err = lse.Replicate(context.Background(), rst)
 	assert.ErrorIs(t, err, verrors.ErrSealed)
 }
 
@@ -639,7 +648,10 @@ func TestExecutor_Replicate(t *testing.T) {
 
 			// primary
 			if tc.isErr {
-				err := lse.Replicate(context.Background(), types.LLSN(1), [][]byte{nil})
+				rst := &ReplicationTask{}
+				rst.Req.BeginLLSN = types.LLSN(1)
+				rst.Req.Data = [][]byte{nil}
+				err := lse.Replicate(context.Background(), rst)
 				assert.Error(t, err)
 				return
 			}
@@ -654,7 +666,10 @@ func TestExecutor_Replicate(t *testing.T) {
 			llsn := types.MinLLSN
 			for _, batchLen := range lengthClasses {
 				dataList := TestNewBatchData(t, batchLen, 0)
-				err := lse.Replicate(context.Background(), llsn, dataList)
+				rst := &ReplicationTask{}
+				rst.Req.BeginLLSN = llsn
+				rst.Req.Data = dataList
+				err := lse.Replicate(context.Background(), rst)
 				assert.NoError(t, err)
 				llsn += types.LLSN(len(dataList))
 			}
@@ -913,7 +928,10 @@ func TestExecutor_ReplicateSeal(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for llsn := lastLLSN + 1; llsn < types.MaxLLSN; llsn++ {
-			err := lse.Replicate(context.Background(), llsn, [][]byte{nil})
+			rst := &ReplicationTask{}
+			rst.Req.BeginLLSN = llsn
+			rst.Req.Data = [][]byte{nil}
+			err := lse.Replicate(context.Background(), rst)
 			if err != nil {
 				break
 			}
@@ -973,7 +991,10 @@ func TestExecutor_ReplicateSeal(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for llsn := lastLLSN + 1; llsn < types.MaxLLSN; llsn++ {
-			err := lse.Replicate(context.Background(), llsn, [][]byte{nil})
+			rst := &ReplicationTask{}
+			rst.Req.BeginLLSN = llsn
+			rst.Req.Data = [][]byte{nil}
+			err := lse.Replicate(context.Background(), rst)
 			if err != nil {
 				break
 			}
