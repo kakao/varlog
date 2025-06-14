@@ -861,7 +861,7 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 	const (
 		replicationFactor = 1
 		numStorageNodes   = replicationFactor
-		tick              = time.Second
+		tick              = 100 * time.Millisecond
 		reportInterval    = tick
 	)
 
@@ -896,13 +896,13 @@ func TestAdmin_GetStorageNode(t *testing.T) {
 
 	clus.RestartVMS(t)
 
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		snm, err := clus.GetVMSClient(t).GetStorageNode(context.Background(), snid)
-		require.NoError(t, err)
-		require.Equal(t, len(old.LogStreamReplicas), len(snm.LogStreamReplicas))
+		assert.NoError(collect, err)
+		assert.Len(collect, snm.LogStreamReplicas, len(old.LogStreamReplicas))
 		for i := range snm.LogStreamReplicas {
-			require.Equal(t, old.LogStreamReplicas[i].Path, snm.LogStreamReplicas[i].Path)
+			assert.Equal(collect, old.LogStreamReplicas[i].Path, snm.LogStreamReplicas[i].Path)
 		}
-		return snm.LastHeartbeatTime.After(old.LastHeartbeatTime)
-	}, 2*reportInterval, tick)
+		assert.True(collect, snm.LastHeartbeatTime.After(old.LastHeartbeatTime))
+	}, 10*reportInterval, tick)
 }
