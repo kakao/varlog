@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.27.0](https://github.com/kakao/varlog/compare/v0.26.0...v0.27.0) (2025-06-15)
+
+
+### Features
+
+* **rpc:** add gRPC keepalive parameters for client and server ([0bc4a69](https://github.com/kakao/varlog/commit/0bc4a69f9b8b5bf28660bb3abb3a88e68799f5a4))
+* **storage:** use latest Pebble SST format (FormatVirtualSSTables) ([e8386fb](https://github.com/kakao/varlog/commit/e8386fb9a04cbd1b524cdf03d7c0b65ab5a32f4a))
+
+
+### Bug Fixes
+
+* **metarepos,reportcommitter:** close report stream on send error ([4614618](https://github.com/kakao/varlog/commit/4614618278c49297f7b566819e875c34937e3d07))
+* **storagenode:** prevent negative WaitGroup counter panic in append logic ([095c626](https://github.com/kakao/varlog/commit/095c6265e3fa0e105074f1afd3bbdcefd0851af3))
+
+
+### Performance Improvements
+
+* **logstream:** avoid heap escape of commitResult in Executor.Commit ([e8ff7f6](https://github.com/kakao/varlog/commit/e8ff7f6d02e65f06c9aae31e09406e0daa0cf0dc))
+* **metarepos:** remove unnecessary creation of StorageNodeUncommitReport ([ea80298](https://github.com/kakao/varlog/commit/ea80298120342d2907454f9c0d7d8309f31ab6fb))
+* **storagenode:** replace inline error with predefined constant ([1920540](https://github.com/kakao/varlog/commit/192054030b7a9d20afdf01cc229ae9d3f216d765))
+* **storagenode:** reuse buffer for ReplicateRequest unmarshaling ([c555720](https://github.com/kakao/varlog/commit/c555720741fad722bd73cec4b2778e5c6a7ef578))
+* **storagenode:** reuse CommitResults to reduce allocations ([58bc8a9](https://github.com/kakao/varlog/commit/58bc8a99344d6a3a75d83ab69f1be68a18662a3c))
+
 ## [0.26.0](https://github.com/kakao/varlog/compare/v0.25.0...v0.26.0) (2025-04-15)
 
 
