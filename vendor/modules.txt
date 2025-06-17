@@ -42,7 +42,7 @@ github.com/cockroachdb/fifo
 # github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b
 ## explicit; go 1.16
 github.com/cockroachdb/logtags
-# github.com/cockroachdb/pebble/v2 v2.0.3
+# github.com/cockroachdb/pebble/v2 v2.0.5
 ## explicit; go 1.22
 github.com/cockroachdb/pebble/v2
 github.com/cockroachdb/pebble/v2/batchrepr
