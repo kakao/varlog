@@ -56,7 +56,13 @@ func (c *metadataRepositoryManagementClient) AddPeer(ctx context.Context, cluste
 	}
 
 	req := &mrpb.AddPeerRequest{
-		PeerInfo: mrpb.PeerInfo{
+		// For backward compatibility, we allow the request to contain Peer and ClusterID/NodeID/Url.
+		//
+		// TODO: Remove this backward compatibility code in the future.
+		ClusterID: clusterID,
+		NodeID:    nodeID,
+		Url:       url,
+		Peer: mrpb.PeerInfo{
 			ClusterID: clusterID,
 			NodeID:    nodeID,
 			URL:       url,

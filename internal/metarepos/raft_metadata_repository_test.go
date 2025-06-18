@@ -3147,7 +3147,7 @@ func TestMetadataRepository_AddPeer(t *testing.T) {
 			name: "InvalidNodeID",
 			testf: func(t *testing.T, _ *RaftMetadataRepository, client mrpb.ManagementClient) {
 				_, err := client.AddPeer(context.Background(), &mrpb.AddPeerRequest{
-					PeerInfo: mrpb.PeerInfo{
+					Peer: mrpb.PeerInfo{
 						ClusterID: clusterID,
 						NodeID:    types.InvalidNodeID,
 						URL:       "http://127.0.0.1:11000",
@@ -3161,7 +3161,7 @@ func TestMetadataRepository_AddPeer(t *testing.T) {
 			name: "AlreadyExists",
 			testf: func(t *testing.T, server *RaftMetadataRepository, client mrpb.ManagementClient) {
 				_, err := client.AddPeer(context.Background(), &mrpb.AddPeerRequest{
-					PeerInfo: mrpb.PeerInfo{
+					Peer: mrpb.PeerInfo{
 						ClusterID: clusterID,
 						NodeID:    server.nodeID,
 						URL:       server.raftNode.url,
