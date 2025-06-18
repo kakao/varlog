@@ -33,7 +33,19 @@ message PeerInfo {
 
 // AddPeerRequest is a request message for the AddPeer RPC.
 message AddPeerRequest {
-  PeerInfo peer = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  int32 cluster_id = 1 [
+    deprecated = true,
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.ClusterID",
+    (gogoproto.customname) = "ClusterID"
+  ];
+  uint64 node_id = 2 [
+    deprecated = true,
+    (gogoproto.casttype) = "github.com/kakao/varlog/pkg/types.NodeID",
+    (gogoproto.customname) = "NodeID"
+  ];
+  string url = 3 [deprecated = true];
+
+  PeerInfo peer = 4 [(gogoproto.nullable) = false];
 }
 
 // RemovePeerRequest is a request message for RemovePeer RPC.
