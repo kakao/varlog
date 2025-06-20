@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.28.0](https://github.com/kakao/varlog/compare/v0.27.0...v0.28.0) (2025-06-20)
+
+
+### Features
+
+* **stats:** add OpenTelemetry histogram wrappers with caching ([b5388f4](https://github.com/kakao/varlog/commit/b5388f4071152197bb0f747e136210aecc379aab))
+* **storage,telemetry:** add OpenTelemetry batch commit duration metrics for store ([d375e8a](https://github.com/kakao/varlog/commit/d375e8af514e6274edd7a0380c7d9604dd38f33f))
+* **storage:** add enable_telemetry option to control metrics recording ([cd46cf4](https://github.com/kakao/varlog/commit/cd46cf42b0798fc8d9578f2d34946f021afd7035))
+* **storage:** add MetricRecorder interface and batch commit stats recording ([3844349](https://github.com/kakao/varlog/commit/3844349419ee162fff64f54890d3485f4834ebfa))
+* **storage:** add wal_bytes_per_sync and sst_bytes_per_sync to store settings ([29de0ce](https://github.com/kakao/varlog/commit/29de0ced3845b42f01adee0b8ecc2f0f52805b9a))
+* **storage:** always separate data and commit stores ([7fb6380](https://github.com/kakao/varlog/commit/7fb63809ddb4c91dda0ceca5b44750ce054e3494))
+* **storagenode:** enable batching of writes in primary/backup writer ([13204a9](https://github.com/kakao/varlog/commit/13204a907c188a6816f77861683f08cbe833c1d5))
+* **storagenode:** migrate metrics to OpenTelemetry histogram wrappers ([979eda6](https://github.com/kakao/varlog/commit/979eda688c3e3d339a79a26bdf987f61b81a6602))
+* **varlogsn:** add unified store config flags to supersede legacy per-option flags ([03ac580](https://github.com/kakao/varlog/commit/03ac580c66639ed47840802e52012ef14d9dae42))
+
+
+### Bug Fixes
+
+* **metarepos:** restore AddPeerRequest backward compatibility with legacy fields ([29bde78](https://github.com/kakao/varlog/commit/29bde7897685011581ec1003d33d31755f40b24b))
+* **storagenode:** use correct flags for commit store WAL and sync options ([10c9441](https://github.com/kakao/varlog/commit/10c9441278b94cd05dcaa55b3fa5310aed80c9d2))
+
+
+### Performance Improvements
+
+* **storagenode:** move write batch logic from sequencer to writer ([8f013ee](https://github.com/kakao/varlog/commit/8f013ee06ae78ae5e85fee5977a1c47a4df3a082))
+* **storagenode:** optimize backup replication with ReplicationTask ([95052b7](https://github.com/kakao/varlog/commit/95052b7115098445b851f301a3a990c571255c70))
+* **storagenode:** process all pending tasks per iteration in replicator loop ([eef7f62](https://github.com/kakao/varlog/commit/eef7f6293eac63b46134ea73e5d987f7049026c0))
+
 ## [0.27.0](https://github.com/kakao/varlog/compare/v0.26.0...v0.27.0) (2025-06-15)
 
 
