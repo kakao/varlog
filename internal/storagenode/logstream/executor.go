@@ -162,24 +162,38 @@ func NewExecutor(opts ...ExecutorOption) (lse *Executor, err error) {
 	return lse, err
 }
 
-// Replicate sends the replication task `rt` to the backup writer and enqueues
-// a commit wait task into the committer. Ownership of the argument `rt` is
-// transferred, so callers should neither modify nor release it after this
-// method succeeds. However, callers must release the replication task if this
-// method returns an error.
-func (lse *Executor) Replicate(ctx context.Context, rt *ReplicationTask) error {
+// Replicate sends the provided replication task (rt) to the backup writer for
+// processing, then enqueues a corresponding commit wait task into the
+// committer. After calling this method, the caller must not modify or release
+// rt, regardless of success or failure, as ownership is transferred to this
+// method.
+func (lse *Executor) Replicate(ctx context.Context, rt *ReplicationTask) (err error) {
 	lse.inflight.Add(1)
 	defer lse.inflight.Add(-1)
 
+	// Indicates whether this method is still responsible for releasing rt. Set
+	// to false once ownership is transferred to the backupWriter (e.g., after
+	// successful send to lse.bw).
+	ownsRT := true
+	defer func() {
+		if err != nil && ownsRT {
+			rt.Release()
+		}
+	}()
+
 	switch lse.esm.load() {
 	case executorStateSealing, executorStateSealed, executorStateLearning:
-		return verrors.ErrSealed
+		err = verrors.ErrSealed
 	case executorStateClosed:
-		return verrors.ErrClosed
+		err = verrors.ErrClosed
+	}
+	if err != nil {
+		return err
 	}
 
 	if lse.isPrimary() {
-		return errors.New("log stream: not backup")
+		err = errors.New("log stream: not backup")
+		return err
 	}
 
 	var startTime, prepEndTime time.Time
@@ -194,13 +208,16 @@ func (lse *Executor) Replicate(ctx context.Context, rt *ReplicationTask) error {
 
 	startTime = time.Now()
 
-	if err := lse.bw.send(ctx, rt); err != nil {
+	err = lse.bw.send(ctx, rt)
+	if err != nil {
 		lse.logger.Error("could not send backup batch write task", zap.Error(err))
 		return err
 	}
+	ownsRT = false
 
 	cwt := newCommitWaitTask(nil, batchSize)
-	if err := lse.cm.sendCommitWaitTask(ctx, cwt, false /*ignoreSealing*/); err != nil {
+	err = lse.cm.sendCommitWaitTask(ctx, cwt, false /*ignoreSealing*/)
+	if err != nil {
 		lse.logger.Error("could not send commit wait task list", zap.Error(err))
 		cwt.release()
 		return err
