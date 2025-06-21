@@ -150,7 +150,6 @@ func (rs *replicationServer) replicate(ctx context.Context, requestC <-chan *log
 
 			err = lse.Replicate(ctx, rt)
 			if err != nil {
-				rt.Release()
 				return
 			}
 		}
