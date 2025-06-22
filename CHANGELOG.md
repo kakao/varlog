@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.28.1](https://github.com/kakao/varlog/compare/v0.28.0...v0.28.1) (2025-06-22)
+
+
+### Bug Fixes
+
+* **storagenode:** fix data race in ReplicationTask release ([1c0ed6c](https://github.com/kakao/varlog/commit/1c0ed6cace1964aed899d7c2fa414129a3dc924e))
+
 ## [0.28.0](https://github.com/kakao/varlog/compare/v0.27.0...v0.28.0) (2025-06-20)
 
 
