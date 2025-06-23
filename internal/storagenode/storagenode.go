@@ -57,7 +57,6 @@ type StorageNode struct {
 	server       *grpc.Server
 	healthServer *health.Server
 	closed       bool
-	closedC      chan struct{}
 
 	mux cmux.CMux
 
@@ -113,7 +112,6 @@ func NewStorageNode(opts ...Option) (*StorageNode, error) {
 		executors:    executorsmap.New(hintNumExecutors),
 		server:       rpc.NewServer(grpcServerOpts...),
 		healthServer: health.NewServer(),
-		closedC:      make(chan struct{}),
 		snPaths:      snPaths,
 		pprofServer:  pprof.New(cfg.pprofOpts...),
 		metrics:      metrics,
@@ -220,7 +218,6 @@ func (sn *StorageNode) Close() (err error) {
 		return nil
 	}
 	sn.closed = true
-	close(sn.closedC)
 
 	sn.mux.Close()
 	sn.pprofServer.Close(context.Background())
