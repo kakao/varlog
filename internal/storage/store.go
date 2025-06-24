@@ -126,11 +126,8 @@ func newStore(path string, opts ...StoreOption) (*store, error) {
 	return s, nil
 }
 
-func (s *store) close() (err error) {
-	if !s.readOnly {
-		err = s.db.Flush()
-	}
-	return errors.Join(err, s.db.Close())
+func (s *store) close() error {
+	return s.db.Close()
 }
 
 type telemetryConfig struct {
