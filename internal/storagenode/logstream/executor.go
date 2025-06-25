@@ -624,32 +624,43 @@ func (lse *Executor) Metrics() *telemetry.LogStreamMetrics {
 }
 
 func (lse *Executor) Close() (err error) {
+	var logFields []zap.Field
+	stopWatch := func(key string, f func()) {
+		startTime := time.Now()
+		defer func() {
+			logFields = append(logFields, zap.Duration(key, time.Since(startTime)))
+		}()
+		f()
+	}
+
 	lse.esm.store(executorStateClosed)
-	lse.syncRunner.Stop()
-	lse.rcs.close()
+	stopWatch("closeSyncRunner", lse.syncRunner.Stop)
+	stopWatch("closeReplicateClients", lse.rcs.close)
 	if lse.cm != nil {
-		lse.cm.stop()
+		stopWatch("stopCommitter", lse.cm.stop)
 	}
 	if lse.wr != nil {
-		lse.wr.stop()
+		stopWatch("stopWriter", lse.wr.stop)
 	}
 	if lse.sq != nil {
-		lse.sq.stop()
+		stopWatch("stopSequencer", lse.sq.stop)
 	}
 	if lse.bw != nil {
-		lse.bw.stop()
+		stopWatch("stopBackupWriter", lse.bw.stop)
 	}
 	if lse.stg != nil {
-		err = lse.stg.Close()
+		stopWatch("closeStorage", func() {
+			err = lse.stg.Close()
+		})
 	}
-	lse.decider.destroy()
-	lse.waitForDrainage()
+	stopWatch("destroyDecider", lse.decider.destroy)
+	stopWatch("drainInflightRPCs", lse.waitForDrainage)
 	lsrmd := lse.metadataDescriptor(lse.esm.load())
-	lse.logger.Info("closed",
+	lse.logger.Info("closed log stream executor", append(logFields,
 		zap.String("local_lwm", lsrmd.LocalLowWatermark.String()),
 		zap.String("local_hwm", lsrmd.LocalHighWatermark.String()),
 		zap.Uint64("global_hwm", uint64(lsrmd.GlobalHighWatermark)),
-	)
+	)...)
 	return err
 }
 
