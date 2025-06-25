@@ -52,11 +52,17 @@ type StorageNode struct {
 
 	executors *executorsmap.ExecutorsMap
 
+	// mu provides exclusive access to StorageNode fields during its lifecycle.
+	// It ensures thread-safe initialization, finalization, and access to
+	// members such as lis, closed, and wgAppenders.
 	mu           *xsync.RBMutex
 	lis          net.Listener
 	server       *grpc.Server
 	healthServer *health.Server
 	closed       bool
+	// wgAppenders tracks asynchronous append operations, allowing cleanup of
+	// operations canceled by clients but still being processed by the server.
+	wgAppenders sync.WaitGroup
 
 	mux cmux.CMux
 
@@ -72,8 +78,6 @@ type StorageNode struct {
 	limits struct {
 		logStreamReplicasCount atomic.Int32
 	}
-
-	wgAppenders sync.WaitGroup
 }
 
 func NewStorageNode(opts ...Option) (*StorageNode, error) {
@@ -154,6 +158,9 @@ func (sn *StorageNode) loadLogStreamReplicas(dataDirs []volume.DataDir) error {
 
 func (sn *StorageNode) Serve() error {
 	sn.mu.Lock()
+	if sn.closed {
+		return snerrors.ErrClosed
+	}
 	if sn.lis != nil {
 		sn.mu.Unlock()
 		return errors.New("storage node: already serving")
@@ -218,17 +225,31 @@ func (sn *StorageNode) Close() (err error) {
 		return nil
 	}
 	sn.closed = true
+	sn.mu.Unlock()
 
 	sn.mux.Close()
+	sn.logger.Debug("stopped network connection muxer")
+
 	sn.pprofServer.Close(context.Background())
+	sn.logger.Debug("stopped pprof server")
+
 	sn.healthServer.Shutdown()
+	sn.logger.Debug("stopped gRPC health check server")
+
+	sn.server.Stop()
+	sn.logger.Debug("stopped gRPC server")
+
 	sn.executors.Range(func(_ types.LogStreamID, _ types.TopicID, lse *logstream.Executor) bool {
 		err = multierr.Append(err, lse.Close())
 		return true
 	})
-	sn.server.Stop() // TODO: sn.server.GracefulStop() -> need not to use mutex
+	sn.logger.Debug("closed all log stream executors")
+
+	sn.mu.Lock()
 	sn.wgAppenders.Wait()
-	sn.logger.Info("closed")
+	sn.logger.Debug("cleaned up all pending apppend operations")
+
+	sn.logger.Info("closed storage node")
 	return err
 }
 
