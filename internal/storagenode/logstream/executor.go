@@ -625,6 +625,7 @@ func (lse *Executor) Metrics() *telemetry.LogStreamMetrics {
 
 func (lse *Executor) Close() (err error) {
 	lse.esm.store(executorStateClosed)
+	lse.syncRunner.Stop()
 	lse.rcs.close()
 	if lse.cm != nil {
 		lse.cm.stop()
