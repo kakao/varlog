@@ -153,7 +153,7 @@ func (lse *Executor) Sync(ctx context.Context, dstReplica varlogpb.LogStreamRepl
 	// make tracker
 	st := newSyncTracker(first, last)
 	lse.sts[dstReplica.StorageNodeID] = st
-	_, _ = lse.syncRunner.Run(func(ctx context.Context) {
+	if _, err := lse.syncRunner.Run(func(ctx context.Context) {
 		snid := sc.dstReplica.StorageNodeID
 		defer func() {
 			lse.muAdmin.Lock()
@@ -161,7 +161,10 @@ func (lse *Executor) Sync(ctx context.Context, dstReplica varlogpb.LogStreamRepl
 			lse.muAdmin.Unlock()
 		}()
 		lse.syncLoop(ctx, sc, st)
-	})
+	}); err != nil {
+		delete(lse.sts, dstReplica.StorageNodeID)
+		return nil, err
+	}
 	ss := st.toSyncStatus()
 	ss.State = snpb.SyncStateStart
 	return ss, nil
