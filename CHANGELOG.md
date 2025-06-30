@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.28.2](https://github.com/kakao/varlog/compare/v0.28.1...v0.28.2) (2025-06-30)
+
+
+### Bug Fixes
+
+* **storagenode:** minimize mutex scope and improve shutdown clarity ([735037e](https://github.com/kakao/varlog/commit/735037e76b23c57b22ae17cdfc7e457c26b8e1fa))
+* **storagenode:** stop syncRunner when log stream executor closes ([e141053](https://github.com/kakao/varlog/commit/e141053621717bb20963c653b6a93b1184894c26))
+
 ## [0.28.1](https://github.com/kakao/varlog/compare/v0.28.0...v0.28.1) (2025-06-22)
 
 
