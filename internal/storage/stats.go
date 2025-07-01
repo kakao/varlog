@@ -3,7 +3,7 @@ package storage
 import (
 	"context"
 
-	"github.com/cockroachdb/pebble/v2"
+	"github.com/cockroachdb/pebble"
 )
 
 // BatchCommitStats wraps [pebble.BatchCommitStats].

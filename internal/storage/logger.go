@@ -1,7 +1,7 @@
 package storage
 
 import (
-	"github.com/cockroachdb/pebble/v2"
+	"github.com/cockroachdb/pebble"
 	"go.uber.org/zap"
 )
 
