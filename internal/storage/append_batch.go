@@ -4,7 +4,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/cockroachdb/pebble/v2"
+	"github.com/cockroachdb/pebble"
 
 	"github.com/kakao/varlog/pkg/types"
 )

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/pebble/v2"
-	"github.com/cockroachdb/pebble/v2/bloom"
+	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/bloom"
 	"go.uber.org/zap"
 )
 
@@ -61,7 +61,6 @@ func newStore(path string, opts ...StoreOption) (*store, error) {
 		ErrorIfExists:               false,
 		FlushDelayDeleteRange:       s.trimDelay,
 		TargetByteDeletionRate:      s.trimRateByte,
-		FormatMajorVersion:          pebble.FormatVirtualSSTables,
 	}
 	pebbleOpts.Levels[0].TargetFileSize = cfg.l0TargetFileSize
 	for i := range pebbleOpts.Levels {
