@@ -70,6 +70,7 @@ func (v *logImpl) subscribe(ctx context.Context, topicID types.TopicID, begin, e
 	dis := &dispatcher{
 		onNextFunc: onNext,
 		queue:      dispatchQueue,
+		observer:   subscribeOpts.observer,
 		logger:     v.logger,
 	}
 	if err = subscribeRunner.RunC(mctx, tsm.transmit); err != nil {
@@ -125,6 +126,9 @@ type transmitResult struct {
 	logStreamID   types.LogStreamID
 	storageNodeID types.StorageNodeID
 	result        client.SubscribeResult
+
+	stats       SubscribeStats
+	enqueueTime time.Time
 }
 
 func (t transmitResult) Priority() uint64 {
@@ -140,7 +144,9 @@ func (tq *transmitQueue) Push(r transmitResult) {
 	tq.mu.Lock()
 	defer tq.mu.Unlock()
 
+	r.enqueueTime = time.Now()
 	heap.Push(tq.pq, r)
+	r.stats.TransmitEnqueueDuration = time.Since(r.enqueueTime)
 }
 
 func (tq *transmitQueue) Pop() (transmitResult, bool) {
@@ -153,7 +159,9 @@ func (tq *transmitQueue) Pop() (transmitResult, bool) {
 		}, false
 	}
 
-	return heap.Pop(tq.pq).(transmitResult), true
+	r := heap.Pop(tq.pq).(transmitResult)
+	r.stats.TransmitQueueWait = time.Since(r.enqueueTime) - r.stats.TransmitEnqueueDuration
+	return r, true
 }
 
 func (tq *transmitQueue) Front() (transmitResult, bool) {
@@ -467,6 +475,7 @@ func (q *dispatchQueue) pushBack(item transmitResult) {
 		q.logger.Panic("not pushable")
 	}
 	advance := item.result.Error == nil
+	item.enqueueTime = time.Now()
 	// NOTE: the sendC is not blocking since its size is enough to receive messages.
 	q.sendC() <- item
 	if advance {
@@ -493,10 +502,11 @@ func (q *dispatchQueue) recvC() <-chan transmitResult {
 type dispatcher struct {
 	onNextFunc OnNext
 	queue      *dispatchQueue
+	observer   SubscribeObserver
 	logger     *zap.Logger
 }
 
-func (p *dispatcher) dispatch(_ context.Context) {
+func (p *dispatcher) dispatch(ctx context.Context) {
 	sentErr := false
 	for item := range p.queue.recvC() {
 		if sentErr {
@@ -506,8 +516,15 @@ func (p *dispatcher) dispatch(_ context.Context) {
 				zap.Error(item.result.Error),
 			)
 		}
+		now := time.Now()
 		p.onNextFunc(item.result.LogEntry, item.result.Error)
+		item.stats.ProcessDuration = time.Since(now)
+		item.stats.DispatchQueueWait = now.Sub(item.enqueueTime)
 		sentErr = sentErr || item.result.Error != nil
+
+		if p.observer != nil {
+			p.observer.Observe(ctx, item.stats)
+		}
 	}
 	if !sentErr {
 		p.onNextFunc(varlogpb.LogEntry{}, io.EOF)

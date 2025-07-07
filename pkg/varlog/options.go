@@ -246,7 +246,8 @@ func defaultSubscribeOptions() subscribeOptions {
 }
 
 type subscribeOptions struct {
-	timeout time.Duration
+	timeout  time.Duration
+	observer SubscribeObserver
 }
 
 type SubscribeOption interface {
@@ -268,5 +269,15 @@ func newSubscribeOption(f func(*subscribeOptions)) *subscribeOption {
 func WithSubscribeTimeout(timeout time.Duration) SubscribeOption {
 	return newSubscribeOption(func(opts *subscribeOptions) {
 		opts.timeout = timeout
+	})
+}
+
+// WithSubscribeObserver sets the observer for a subscription.
+//
+// The provided observer will be called for each log entry to report internal
+// statistics, which can be used for monitoring and diagnostics.
+func WithSubscribeObserver(observer SubscribeObserver) SubscribeOption {
+	return newSubscribeOption(func(opts *subscribeOptions) {
+		opts.observer = observer
 	})
 }
