@@ -501,7 +501,11 @@ func (p *dispatcher) dispatch(_ context.Context) {
 	sentErr := false
 	for res := range p.sleq.recvC() {
 		if sentErr {
-			p.logger.Panic("multiple errors in dispatcher", zap.Any("res", res), zap.Error(res.Error))
+			p.logger.Panic("multiple errors in dispatcher",
+				zap.Uint64("glsn", uint64(res.GLSN)),
+				zap.Uint64("llsn", uint64(res.LLSN)),
+				zap.Error(res.Error),
+			)
 		}
 		p.onNextFunc(res.LogEntry, res.Error)
 		sentErr = sentErr || res.Error != nil
