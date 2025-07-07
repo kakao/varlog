@@ -45,7 +45,7 @@ func (v *logImpl) subscribe(ctx context.Context, topicID types.TopicID, begin, e
 		subscribeRunner.Stop()
 	}
 
-	sleq := newSubscribedLogEntiresQueue(begin, end, closer, v.logger)
+	dispatchQueue := newDispatchQueue(begin, end, v.logger)
 
 	tlogger := v.logger.Named("transmitter")
 	// The maximum length of transmitQ is end - begin in the worst case.
@@ -57,7 +57,7 @@ func (v *logImpl) subscribe(ctx context.Context, topicID types.TopicID, begin, e
 		subscribers:       make(map[types.LogStreamID]*subscriber),
 		replicasRetriever: v.replicasRetriever,
 		logCLManager:      v.logCLManager,
-		sleq:              sleq,
+		dispatchQueue:     dispatchQueue,
 		wanted:            begin,
 		end:               end,
 		transmitQ:         &transmitQueue{pq: newPriorityQueue(approxTransmitQSize)},
@@ -69,7 +69,7 @@ func (v *logImpl) subscribe(ctx context.Context, topicID types.TopicID, begin, e
 
 	dis := &dispatcher{
 		onNextFunc: onNext,
-		sleq:       sleq,
+		queue:      dispatchQueue,
 		logger:     v.logger,
 	}
 	if err = subscribeRunner.RunC(mctx, tsm.transmit); err != nil {
@@ -273,7 +273,7 @@ type transmitter struct {
 	topicID           types.TopicID
 	subscribers       map[types.LogStreamID]*subscriber
 	replicasRetriever ReplicasRetriever
-	sleq              *subscribedLogEntriesQueue
+	dispatchQueue     *dispatchQueue
 	wanted            types.GLSN
 	end               types.GLSN
 
@@ -290,7 +290,7 @@ type transmitter struct {
 
 func (p *transmitter) transmit(ctx context.Context) {
 	defer func() {
-		p.sleq.close()
+		p.dispatchQueue.close()
 		p.runner.Stop()
 	}()
 
@@ -305,7 +305,7 @@ func (p *transmitter) transmit(ctx context.Context) {
 			res := client.InvalidSubscribeResult
 			res.Error = ctx.Err()
 			p.logger.Debug("transmit error result", zap.Reflect("res", res))
-			p.sleq.pushBack(res)
+			p.dispatchQueue.pushBack(res)
 			return
 		case <-p.transmitCV:
 			if repeat := p.transmitLoop(ctx); !repeat {
@@ -402,10 +402,10 @@ func (p *transmitter) handleResult(r transmitResult) error {
 	if r.result.GLSN == types.InvalidGLSN {
 		err = p.handleError(r)
 		if errors.Is(err, verrors.ErrTrimmed) {
-			p.sleq.pushBack(r.result)
+			p.dispatchQueue.pushBack(r.result)
 		}
 	} else if p.wanted == r.result.GLSN {
-		p.sleq.pushBack(r.result)
+		p.dispatchQueue.pushBack(r.result)
 		p.wanted++
 		p.timer.Reset(p.timeout)
 	}
@@ -443,26 +443,26 @@ func (p *transmitter) transmitLoop(ctx context.Context) bool {
 	return true
 }
 
-type subscribedLogEntriesQueue struct {
+// dispatchQueue buffers SubscribeResult items in order before invoking the
+// user callback. It ensures results are delivered in sequence, starting from
+// the GLSN specified by wanted.
+type dispatchQueue struct {
 	c      chan client.SubscribeResult
 	wanted types.GLSN
-	end    types.GLSN
-	closer SubscribeCloser
 	logger *zap.Logger
 }
 
-func newSubscribedLogEntiresQueue(begin, end types.GLSN, closer SubscribeCloser, logger *zap.Logger) *subscribedLogEntriesQueue {
-	q := &subscribedLogEntriesQueue{
+func newDispatchQueue(begin, end types.GLSN, logger *zap.Logger) *dispatchQueue {
+	q := &dispatchQueue{
+		// BUG: If end-begin is too large, it can panic because of too large channel size.
 		c:      make(chan client.SubscribeResult, end-begin),
 		wanted: begin,
-		end:    end,
-		closer: closer,
-		logger: logger.Named("subscribed_log_entries_queue"),
+		logger: logger.Named("dispatch_queue"),
 	}
 	return q
 }
 
-func (q *subscribedLogEntriesQueue) pushBack(result client.SubscribeResult) {
+func (q *dispatchQueue) pushBack(result client.SubscribeResult) {
 	if !q.pushable(result) {
 		q.logger.Panic("not pushable")
 	}
@@ -474,32 +474,31 @@ func (q *subscribedLogEntriesQueue) pushBack(result client.SubscribeResult) {
 	}
 }
 
-func (q *subscribedLogEntriesQueue) pushable(result client.SubscribeResult) bool {
+func (q *dispatchQueue) pushable(result client.SubscribeResult) bool {
 	return result.GLSN == q.wanted || result.Error != nil
 }
 
-func (q *subscribedLogEntriesQueue) close() {
+func (q *dispatchQueue) close() {
 	close(q.c)
-	// q.closer()
 }
 
-func (q *subscribedLogEntriesQueue) sendC() chan<- client.SubscribeResult {
+func (q *dispatchQueue) sendC() chan<- client.SubscribeResult {
 	return q.c
 }
 
-func (q *subscribedLogEntriesQueue) recvC() <-chan client.SubscribeResult {
+func (q *dispatchQueue) recvC() <-chan client.SubscribeResult {
 	return q.c
 }
 
 type dispatcher struct {
 	onNextFunc OnNext
-	sleq       *subscribedLogEntriesQueue
+	queue      *dispatchQueue
 	logger     *zap.Logger
 }
 
 func (p *dispatcher) dispatch(_ context.Context) {
 	sentErr := false
-	for res := range p.sleq.recvC() {
+	for res := range p.queue.recvC() {
 		if sentErr {
 			p.logger.Panic("multiple errors in dispatcher",
 				zap.Uint64("glsn", uint64(res.GLSN)),
