@@ -302,10 +302,10 @@ func (p *transmitter) transmit(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			res := client.InvalidSubscribeResult
-			res.Error = ctx.Err()
-			p.logger.Debug("transmit error result", zap.Reflect("res", res))
-			p.dispatchQueue.pushBack(res)
+			var item transmitResult
+			item.result = client.InvalidSubscribeResult
+			item.result.Error = ctx.Err()
+			p.dispatchQueue.pushBack(item)
 			return
 		case <-p.transmitCV:
 			if repeat := p.transmitLoop(ctx); !repeat {
@@ -402,10 +402,10 @@ func (p *transmitter) handleResult(r transmitResult) error {
 	if r.result.GLSN == types.InvalidGLSN {
 		err = p.handleError(r)
 		if errors.Is(err, verrors.ErrTrimmed) {
-			p.dispatchQueue.pushBack(r.result)
+			p.dispatchQueue.pushBack(r)
 		}
 	} else if p.wanted == r.result.GLSN {
-		p.dispatchQueue.pushBack(r.result)
+		p.dispatchQueue.pushBack(r)
 		p.wanted++
 		p.timer.Reset(p.timeout)
 	}
@@ -443,11 +443,11 @@ func (p *transmitter) transmitLoop(ctx context.Context) bool {
 	return true
 }
 
-// dispatchQueue buffers SubscribeResult items in order before invoking the
-// user callback. It ensures results are delivered in sequence, starting from
-// the GLSN specified by wanted.
+// dispatchQueue buffers transmitResult items in order before invoking the user
+// callback. It ensures results are delivered in sequence, starting from the
+// GLSN specified by wanted.
 type dispatchQueue struct {
-	c      chan client.SubscribeResult
+	c      chan transmitResult
 	wanted types.GLSN
 	logger *zap.Logger
 }
@@ -455,38 +455,38 @@ type dispatchQueue struct {
 func newDispatchQueue(begin, end types.GLSN, logger *zap.Logger) *dispatchQueue {
 	q := &dispatchQueue{
 		// BUG: If end-begin is too large, it can panic because of too large channel size.
-		c:      make(chan client.SubscribeResult, end-begin),
+		c:      make(chan transmitResult, end-begin),
 		wanted: begin,
 		logger: logger.Named("dispatch_queue"),
 	}
 	return q
 }
 
-func (q *dispatchQueue) pushBack(result client.SubscribeResult) {
-	if !q.pushable(result) {
+func (q *dispatchQueue) pushBack(item transmitResult) {
+	if !q.pushable(item) {
 		q.logger.Panic("not pushable")
 	}
-	advance := result.Error == nil
+	advance := item.result.Error == nil
 	// NOTE: the sendC is not blocking since its size is enough to receive messages.
-	q.sendC() <- result
+	q.sendC() <- item
 	if advance {
 		q.wanted++
 	}
 }
 
-func (q *dispatchQueue) pushable(result client.SubscribeResult) bool {
-	return result.GLSN == q.wanted || result.Error != nil
+func (q *dispatchQueue) pushable(item transmitResult) bool {
+	return item.result.GLSN == q.wanted || item.result.Error != nil
 }
 
 func (q *dispatchQueue) close() {
 	close(q.c)
 }
 
-func (q *dispatchQueue) sendC() chan<- client.SubscribeResult {
+func (q *dispatchQueue) sendC() chan<- transmitResult {
 	return q.c
 }
 
-func (q *dispatchQueue) recvC() <-chan client.SubscribeResult {
+func (q *dispatchQueue) recvC() <-chan transmitResult {
 	return q.c
 }
 
@@ -498,16 +498,16 @@ type dispatcher struct {
 
 func (p *dispatcher) dispatch(_ context.Context) {
 	sentErr := false
-	for res := range p.queue.recvC() {
+	for item := range p.queue.recvC() {
 		if sentErr {
 			p.logger.Panic("multiple errors in dispatcher",
-				zap.Uint64("glsn", uint64(res.GLSN)),
-				zap.Uint64("llsn", uint64(res.LLSN)),
-				zap.Error(res.Error),
+				zap.Uint64("glsn", uint64(item.result.GLSN)),
+				zap.Uint64("llsn", uint64(item.result.LLSN)),
+				zap.Error(item.result.Error),
 			)
 		}
-		p.onNextFunc(res.LogEntry, res.Error)
-		sentErr = sentErr || res.Error != nil
+		p.onNextFunc(item.result.LogEntry, item.result.Error)
+		sentErr = sentErr || item.result.Error != nil
 	}
 	if !sentErr {
 		p.onNextFunc(varlogpb.LogEntry{}, io.EOF)
