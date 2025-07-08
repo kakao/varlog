@@ -8,16 +8,16 @@ import (
 // SubscribeStats contains statistics for a single log entry processed by a
 // subscription. It is passed to the SubscribeObserver for each log entry.
 type SubscribeStats struct {
-	// TransmitEnqueueDuration is the time it takes to enqueue a single log
-	// entry into the internal transmit queue. A long duration may indicate
+	// AggregationEnqueueDuration is the time it takes to enqueue a single log
+	// entry into the internal aggregation buffer. A long duration may indicate
 	// high load or lock contention within the client.
-	TransmitEnqueueDuration time.Duration
+	AggregationEnqueueDuration time.Duration
 
-	// TransmitQueueWait is the time a single log entry spends waiting in the
-	// transmit queue. A high value can indicate that the internal transmitter
-	// goroutine is not being scheduled frequently enough, possibly due to high
-	// CPU load or scheduler latency.
-	TransmitQueueWait time.Duration
+	// AggregationBufferWait is the time a single log entry spends waiting in
+	// the aggregation buffer. A high value can indicate that the internal
+	// aggregator goroutine is not being scheduled frequently enough, possibly
+	// due to high CPU load or scheduler latency.
+	AggregationBufferWait time.Duration
 
 	// DispatchQueueWait is the time a single log entry spends waiting in the
 	// dispatch queue before being passed to the user's callback.
