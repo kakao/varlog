@@ -10,24 +10,24 @@ import (
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
-func BenchmarkTransmitQueue(b *testing.B) {
+func BenchmarkAggregationBuffer(b *testing.B) {
 	sizes := []int{1 << 7, 1 << 10, 1 << 13}
 	tcs := []struct {
-		generate func(int) *transmitQueue
+		generate func(int) *aggregationBuffer
 		name     string
 	}{
 		{
 			name: "NoAlloc",
-			generate: func(int) *transmitQueue {
-				return &transmitQueue{
+			generate: func(int) *aggregationBuffer {
+				return &aggregationBuffer{
 					pq: &PriorityQueue{},
 				}
 			},
 		},
 		{
 			name: "PreAlloc",
-			generate: func(size int) *transmitQueue {
-				return &transmitQueue{
+			generate: func(size int) *aggregationBuffer {
+				return &aggregationBuffer{
 					pq: newPriorityQueue(size / 2),
 				}
 			},
@@ -42,7 +42,7 @@ func BenchmarkTransmitQueue(b *testing.B) {
 				for range b.N {
 					tq := tc.generate(size)
 					for range size {
-						tr := transmitResult{
+						tr := aggregationItem{
 							result: client.SubscribeResult{
 								LogEntry: varlogpb.LogEntry{
 									LogEntryMeta: varlogpb.LogEntryMeta{
