@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.29.0](https://github.com/kakao/varlog/compare/v0.28.2...v0.29.0) (2025-07-27)
+
+
+### Features
+
+* **varlog:** add observer to subscribe API for metrics ([7b59d83](https://github.com/kakao/varlog/commit/7b59d835ae7b84d25cb81f45940107958aa57d98))
+
+
+### Performance Improvements
+
+* **client,subscribe:** reduce heap allocations in the dispatcher loop ([a6384b1](https://github.com/kakao/varlog/commit/a6384b1bd330f0971ad6e7683c3f681c3b3758b6))
+
+
+### Reverts
+
+* **storage:** revert Pebble to v1 and its SST format ([ec7f76a](https://github.com/kakao/varlog/commit/ec7f76aa6fd72ef38a9c37d6138e3512cf39b8bd))
+
 ## [0.28.2](https://github.com/kakao/varlog/compare/v0.28.1...v0.28.2) (2025-06-30)
 
 
