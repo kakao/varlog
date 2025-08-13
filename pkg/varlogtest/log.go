@@ -2,10 +2,10 @@ package varlogtest
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"sync"
-
-	"github.com/pkg/errors"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
@@ -99,7 +99,7 @@ func (c *testLog) appendTo(topicID types.TopicID, logStreamID types.LogStreamID,
 	}
 
 	if logStreamDesc.Status.Sealed() {
-		res.Err = errors.Wrap(verrors.ErrSealed, "could not append")
+		res.Err = fmt.Errorf("could not append: %w", verrors.ErrSealed)
 		return res
 	}
 
@@ -233,7 +233,7 @@ func (c *testLog) SubscribeTo(ctx context.Context, topicID types.TopicID, logStr
 	}
 
 	if err := c.lock(); err != nil {
-		return newErrSubscriber(errors.WithStack(verrors.ErrClosed))
+		return newErrSubscriber(verrors.ErrClosed)
 	}
 	defer c.unlock()
 

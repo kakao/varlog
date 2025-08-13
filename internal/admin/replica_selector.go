@@ -4,6 +4,7 @@ package admin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -11,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
 
 	"github.com/kakao/varlog/internal/admin/mrmanager"
@@ -37,11 +37,11 @@ const (
 
 func NewReplicaSelector(selector string, cmview mrmanager.ClusterMetadataView, repfactor int) (ReplicaSelector, error) {
 	if repfactor < 1 {
-		return nil, errors.Wrap(verrors.ErrInvalid, "replica selector: negative replication factor")
+		return nil, fmt.Errorf("replica selector: negative replication factor: %w", verrors.ErrInvalid)
 	}
 
 	if cmview == nil {
-		return nil, errors.Wrap(verrors.ErrInvalid, "replica selector: invalid cluster metadata view")
+		return nil, fmt.Errorf("replica selector: invalid cluster metadata view: %w", verrors.ErrInvalid)
 	}
 
 	switch strings.ToLower(selector) {
@@ -78,7 +78,7 @@ func (s *randomReplicaSelector) Name() string {
 func (s *randomReplicaSelector) Select(ctx context.Context) ([]*varlogpb.ReplicaDescriptor, error) {
 	md, err := s.cmview.ClusterMetadata(ctx)
 	if err != nil {
-		return nil, errors.WithMessage(err, "replica selector")
+		return nil, fmt.Errorf("replica selector: %w", err)
 	}
 
 	if len(md.StorageNodes) < s.repfactor {
@@ -137,7 +137,7 @@ func (s *lfuSelector) Name() string {
 func (s *lfuSelector) Select(ctx context.Context) ([]*varlogpb.ReplicaDescriptor, error) {
 	md, err := s.cmview.ClusterMetadata(ctx)
 	if err != nil {
-		return nil, errors.WithMessage(err, "replica selector")
+		return nil, fmt.Errorf("replica selector: %w", err)
 	}
 
 	if len(md.StorageNodes) < s.repfactor {

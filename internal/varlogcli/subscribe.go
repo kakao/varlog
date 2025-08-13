@@ -2,12 +2,11 @@ package varlogcli
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log"
 	"time"
-
-	"github.com/pkg/errors"
-	"go.uber.org/multierr"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"
@@ -52,7 +51,7 @@ func subscribe(vlog varlog.Log, topicID types.TopicID, begin, end types.GLSN) er
 	defer cancel()
 	closer, err := vlog.Subscribe(ctx, topicID, begin, end, onNext)
 	if err != nil {
-		return errors.WithMessage(err, "could not subscribe")
+		return fmt.Errorf("could not subscribe: %w", err)
 	}
 	defer closer()
 	select {
@@ -63,7 +62,7 @@ func subscribe(vlog varlog.Log, topicID types.TopicID, begin, end types.GLSN) er
 	if err == nil || errors.Is(err, io.EOF) {
 		return nil
 	}
-	return errors.WithMessage(err, "could not subscribe")
+	return fmt.Errorf("could not subscribe: %w", err)
 }
 
 func SubscribeTo(mrAddrs []string, clusterID types.ClusterID, topicID types.TopicID, logStreamID types.LogStreamID) (err error) {
@@ -72,12 +71,12 @@ func SubscribeTo(mrAddrs []string, clusterID types.ClusterID, topicID types.Topi
 		return err
 	}
 	defer func() {
-		err = multierr.Append(err, vlog.Close())
+		err = errors.Join(err, vlog.Close())
 	}()
 
 	subscriber := vlog.SubscribeTo(context.Background(), topicID, logStreamID, types.MinLLSN, types.MaxLLSN)
 	defer func() {
-		err = multierr.Append(err, subscriber.Close())
+		err = errors.Join(err, subscriber.Close())
 	}()
 
 	var logEntry varlogpb.LogEntry
@@ -90,5 +89,8 @@ func SubscribeTo(mrAddrs []string, clusterID types.ClusterID, topicID types.Topi
 	if err != nil && errors.Is(err, io.EOF) {
 		err = nil
 	}
-	return errors.WithMessage(err, "subscribe error")
+	if err != nil {
+		err = fmt.Errorf("subscribe error: %w", err)
+	}
+	return err
 }

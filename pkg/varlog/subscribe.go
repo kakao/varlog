@@ -9,7 +9,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/storagenode/client"
@@ -590,14 +589,14 @@ func (v *logImpl) subscribeTo(ctx context.Context, topicID types.TopicID, logStr
 		var cerr error
 		logCL, cerr = v.logCLManager.GetOrConnect(ctx, storageNodeID, storageNodeAddr)
 		if cerr != nil {
-			err = multierr.Append(err, cerr)
+			err = errors.Join(err, cerr)
 			// _ = logCL.Close()
 			continue
 		}
 
 		resultC, cerr = logCL.SubscribeTo(ctx, topicID, logStreamID, begin, end)
 		if cerr != nil {
-			err = multierr.Append(err, cerr)
+			err = errors.Join(err, cerr)
 			// _ = logCL.Close()
 			continue
 		}

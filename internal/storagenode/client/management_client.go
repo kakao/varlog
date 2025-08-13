@@ -4,10 +4,10 @@ package client
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/rpc"
@@ -46,7 +46,7 @@ func NewManagementClient(ctx context.Context, clusterID types.ClusterID, address
 		ClusterID: clusterID,
 	})
 	if err != nil {
-		return nil, multierr.Append(err, rpcConn.Close())
+		return nil, errors.Join(err, rpcConn.Close())
 	}
 	storageNodeID := rsp.GetStorageNodeMetadata().StorageNodeID
 
@@ -77,10 +77,11 @@ func (c *ManagementClient) GetMetadata(ctx context.Context) (*snpb.StorageNodeMe
 	rsp, err := c.rpcClient.GetMetadata(ctx, &snpb.GetMetadataRequest{
 		ClusterID: c.cid,
 	})
-	return rsp.GetStorageNodeMetadata(), errors.WithMessagef(
-		verrors.FromStatusError(err),
-		"storage node (%v): get metadata", c.target,
-	)
+	if err != nil {
+		err = fmt.Errorf("storage node (%v): get metadata: %w", c.target, verrors.FromStatusError(err))
+		return nil, err
+	}
+	return rsp.GetStorageNodeMetadata(), nil
 }
 
 func (c *ManagementClient) AddLogStreamReplica(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, snpath string) (snpb.LogStreamReplicaMetadataDescriptor, error) {
@@ -102,13 +103,15 @@ func (c *ManagementClient) AddLogStreamReplica(ctx context.Context, tpid types.T
 }
 
 func (c *ManagementClient) RemoveLogStream(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID) error {
-	_, err := c.rpcClient.RemoveLogStream(ctx, &snpb.RemoveLogStreamRequest{
+	if _, err := c.rpcClient.RemoveLogStream(ctx, &snpb.RemoveLogStreamRequest{
 		ClusterID:     c.cid,
 		StorageNodeID: c.target.StorageNodeID,
 		TopicID:       tpid,
 		LogStreamID:   lsid,
-	})
-	return errors.Wrap(verrors.FromStatusError(err), "snmcl")
+	}); err != nil {
+		return fmt.Errorf("snmcl: %w", verrors.FromStatusError(err))
+	}
+	return nil
 }
 
 func (c *ManagementClient) Seal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, lastCommittedGLSN types.GLSN) (varlogpb.LogStreamStatus, types.GLSN, error) {
@@ -119,7 +122,10 @@ func (c *ManagementClient) Seal(ctx context.Context, tpid types.TopicID, lsid ty
 		LogStreamID:       lsid,
 		LastCommittedGLSN: lastCommittedGLSN,
 	})
-	return rsp.GetStatus(), rsp.GetLastCommittedGLSN(), errors.Wrap(verrors.FromStatusError(err), "snmcl")
+	if err != nil {
+		return rsp.GetStatus(), rsp.GetLastCommittedGLSN(), fmt.Errorf("snmcl: %w", verrors.FromStatusError(err))
+	}
+	return rsp.GetStatus(), rsp.GetLastCommittedGLSN(), nil
 }
 
 func (c *ManagementClient) Unseal(ctx context.Context, tpid types.TopicID, lsid types.LogStreamID, replicas []varlogpb.LogStreamReplica) error {
@@ -131,7 +137,10 @@ func (c *ManagementClient) Unseal(ctx context.Context, tpid types.TopicID, lsid 
 		LogStreamID:   lsid,
 		Replicas:      replicas,
 	})
-	return errors.Wrap(verrors.FromStatusError(err), "snmcl")
+	if err != nil {
+		return fmt.Errorf("snmcl: %w", verrors.FromStatusError(err))
+	}
+	return nil
 }
 
 func (c *ManagementClient) Sync(ctx context.Context, tpid types.TopicID, logStreamID types.LogStreamID, backupStorageNodeID types.StorageNodeID, backupAddress string, lastGLSN types.GLSN) (*snpb.SyncStatus, error) {
@@ -145,7 +154,10 @@ func (c *ManagementClient) Sync(ctx context.Context, tpid types.TopicID, logStre
 			Address:       backupAddress,
 		},
 	})
-	return rsp.GetStatus(), errors.Wrap(verrors.FromStatusError(err), "snmcl")
+	if err != nil {
+		return nil, fmt.Errorf("snmcl: %w", verrors.FromStatusError(err))
+	}
+	return rsp.GetStatus(), nil
 }
 
 func (c *ManagementClient) Trim(ctx context.Context, topicID types.TopicID, lastGLSN types.GLSN) (map[types.LogStreamID]error, error) {
@@ -162,7 +174,7 @@ func (c *ManagementClient) Trim(ctx context.Context, topicID types.TopicID, last
 		}
 		ret[lsid] = err
 	}
-	return ret, errors.WithStack(verrors.FromStatusError(err))
+	return ret, verrors.FromStatusError(err)
 }
 
 // Close closes connection to the storage node.

@@ -1,14 +1,12 @@
 package ports
 
 import (
-	stderror "errors"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
-
-	"github.com/pkg/errors"
 )
 
 const (
@@ -18,7 +16,7 @@ const (
 )
 
 var (
-	errNop  = stderror.New("nop")
+	errNop  = errors.New("nop")
 	tempDir = os.TempDir()
 )
 
@@ -45,20 +43,20 @@ func ReserveWeakly(begin int) (*Lease, error) {
 		return nil, errors.New("invalid port range")
 	}
 	if begin%ReservationSize != 0 {
-		return nil, errors.Errorf("begin should be multiple of %d", ReservationSize)
+		return nil, fmt.Errorf("begin should be multiple of %d", ReservationSize)
 	}
 
 	name := filepath.Join(tempDir, fmt.Sprintf("varlog_ports_pool_%d", begin))
 	ua := &net.UnixAddr{Name: name}
 	lis, err := net.ListenUnix("unix", ua)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, err
 	}
 	lease := &Lease{
 		base: begin,
 		name: name,
 		release: func() error {
-			return errors.WithStack(lis.Close())
+			return lis.Close()
 		},
 	}
 	return lease, err

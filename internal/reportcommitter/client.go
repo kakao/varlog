@@ -4,8 +4,8 @@ package reportcommitter
 
 import (
 	"context"
+	"errors"
 
-	"go.uber.org/multierr"
 	"google.golang.org/grpc"
 
 	"github.com/kakao/varlog/pkg/rpc"
@@ -40,7 +40,7 @@ func NewClient(ctx context.Context, address string, grpcDialOptions ...grpc.Dial
 
 	defer func() {
 		if err != nil {
-			err = multierr.Append(err, rpcConn.Close())
+			err = errors.Join(err, rpcConn.Close())
 		}
 	}()
 

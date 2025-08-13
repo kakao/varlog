@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -9,7 +10,6 @@ import (
 	"time"
 
 	_ "go.uber.org/automaxprocs"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
@@ -52,7 +52,7 @@ func Main(opts []admin.Option, logger *zap.Logger) error {
 	g.Go(func() error {
 		select {
 		case sig := <-sigC:
-			return multierr.Append(fmt.Errorf("caught signal %s", sig), cm.Close())
+			return errors.Join(fmt.Errorf("caught signal %s", sig), cm.Close())
 		case <-quit:
 			return nil
 		}
