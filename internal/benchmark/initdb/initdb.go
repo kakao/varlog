@@ -3,8 +3,7 @@ package initdb
 import (
 	"context"
 	"database/sql"
-
-	"go.uber.org/multierr"
+	"errors"
 
 	"github.com/kakao/varlog/internal/benchmark/model/executiontrigger"
 	"github.com/kakao/varlog/internal/benchmark/model/macro/metric"
@@ -108,7 +107,7 @@ func DropTables(ctx context.Context, db *sql.DB) error {
 }
 
 func InitTables(ctx context.Context, db *sql.DB) error {
-	return multierr.Combine(
+	return errors.Join(
 		executiontrigger.InitTable(ctx, db),
 		metric.InitTable(ctx, db),
 	)
@@ -122,7 +121,7 @@ func executeStatement(ctx context.Context, db *sql.DB, statements ...string) err
 
 	for _, stmt := range statements {
 		if _, err = tx.ExecContext(ctx, stmt); err != nil {
-			return multierr.Append(err, tx.Rollback())
+			return errors.Join(err, tx.Rollback())
 		}
 	}
 	return tx.Commit()

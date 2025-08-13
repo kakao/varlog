@@ -4,8 +4,7 @@ package mrc
 
 import (
 	"context"
-
-	"github.com/pkg/errors"
+	"fmt"
 
 	"github.com/kakao/varlog/pkg/rpc"
 	"github.com/kakao/varlog/pkg/types"
@@ -48,11 +47,11 @@ func (c *metadataRepositoryManagementClient) Close() error {
 
 func (c *metadataRepositoryManagementClient) AddPeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID, url string) error {
 	if len(url) == 0 || nodeID == types.InvalidNodeID {
-		return errors.Wrap(verrors.ErrInvalid, "mrmcl")
+		return fmt.Errorf("mrmcl: %w", verrors.ErrInvalid)
 	}
 
 	if nodeID != types.NewNodeIDFromURL(url) {
-		return errors.Wrap(verrors.ErrInvalid, "mrmcl")
+		return fmt.Errorf("mrmcl: %w", verrors.ErrInvalid)
 	}
 
 	req := &mrpb.AddPeerRequest{
@@ -69,13 +68,15 @@ func (c *metadataRepositoryManagementClient) AddPeer(ctx context.Context, cluste
 		},
 	}
 
-	_, err := c.client.AddPeer(ctx, req)
-	return errors.Wrap(verrors.FromStatusError(err), "mrmcl")
+	if _, err := c.client.AddPeer(ctx, req); err != nil {
+		return fmt.Errorf("mrmcl: %w", verrors.FromStatusError(err))
+	}
+	return nil
 }
 
 func (c *metadataRepositoryManagementClient) RemovePeer(ctx context.Context, clusterID types.ClusterID, nodeID types.NodeID) error {
 	if nodeID == types.InvalidNodeID {
-		return errors.Wrap(verrors.ErrInvalid, "mrmcl")
+		return fmt.Errorf("mrmcl: %w", verrors.ErrInvalid)
 	}
 
 	req := &mrpb.RemovePeerRequest{
@@ -83,8 +84,10 @@ func (c *metadataRepositoryManagementClient) RemovePeer(ctx context.Context, clu
 		NodeID:    nodeID,
 	}
 
-	_, err := c.client.RemovePeer(ctx, req)
-	return errors.Wrap(verrors.FromStatusError(err), "mrmcl")
+	if _, err := c.client.RemovePeer(ctx, req); err != nil {
+		return fmt.Errorf("mrmcl: %w", verrors.FromStatusError(err))
+	}
+	return nil
 }
 
 func (c *metadataRepositoryManagementClient) GetClusterInfo(ctx context.Context, clusterID types.ClusterID) (*mrpb.GetClusterInfoResponse, error) {
@@ -93,5 +96,8 @@ func (c *metadataRepositoryManagementClient) GetClusterInfo(ctx context.Context,
 	}
 
 	rsp, err := c.client.GetClusterInfo(ctx, req)
-	return rsp, errors.Wrap(verrors.FromStatusError(err), "mrmcl")
+	if err != nil {
+		return nil, fmt.Errorf("mrmcl: %w", verrors.FromStatusError(err))
+	}
+	return rsp, nil
 }

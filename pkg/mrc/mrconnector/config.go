@@ -1,9 +1,9 @@
 package mrconnector
 
 import (
+	"fmt"
 	"time"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
@@ -54,13 +54,13 @@ func newConfig(opts []Option) (config, error) {
 
 func (c *config) validate() error {
 	if c.initCount < 1 {
-		return errors.Wrap(verrors.ErrInvalid, "mrconnector: non positive init count")
+		return fmt.Errorf("mrconnector: non positive init count: %w", verrors.ErrInvalid)
 	}
 	if len(c.seed) < 1 {
-		return errors.Wrap(verrors.ErrInvalid, "mrconnector: no seed")
+		return fmt.Errorf("mrconnector: no seed: %w", verrors.ErrInvalid)
 	}
 	if c.logger == nil {
-		return errors.Wrap(verrors.ErrInvalid, "mrconnector: no logger")
+		return fmt.Errorf("mrconnector: no logger: %w", verrors.ErrInvalid)
 	}
 	return nil
 }

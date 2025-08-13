@@ -5,8 +5,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/pkg/errors"
-
 	"github.com/kakao/varlog/internal/stopchannel"
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -154,7 +152,7 @@ func (dc *decidableCondition) waitC(ctx context.Context, glsn types.GLSN) error 
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-dc.sc.StopC():
-			return errors.WithStack(verrors.ErrClosed)
+			return verrors.ErrClosed
 		default:
 		}
 		if dc.decidable(glsn) {

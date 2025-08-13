@@ -6,7 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -80,7 +79,7 @@ func (r *Runner) RunC(ctx context.Context, f func(context.Context)) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if r.state != Running {
-		return errors.Errorf("runner-%s: %s", r.name, r.state.String())
+		return fmt.Errorf("runner-%s: %s", r.name, r.state.String())
 	}
 
 	r.wg.Add(1)

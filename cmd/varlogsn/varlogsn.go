@@ -11,7 +11,6 @@ import (
 
 	"github.com/urfave/cli/v2"
 	_ "go.uber.org/automaxprocs"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
@@ -177,7 +176,7 @@ func start(c *cli.Context) error {
 	g.Go(func() error {
 		select {
 		case sig := <-sigC:
-			return multierr.Append(fmt.Errorf("caught signal %s", sig), sn.Close())
+			return errors.Join(fmt.Errorf("caught signal %s", sig), sn.Close())
 		case <-quit:
 			return nil
 		}

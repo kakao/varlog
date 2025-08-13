@@ -2,12 +2,11 @@ package mrconnector
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
-
-	"go.uber.org/multierr"
 
 	"github.com/kakao/varlog/pkg/mrc"
 	"github.com/kakao/varlog/pkg/types"
@@ -27,7 +26,9 @@ type mrProxy struct {
 }
 
 var _ mrc.MetadataRepositoryClient = (*mrProxy)(nil)
+
 var _ mrc.MetadataRepositoryManagementClient = (*mrProxy)(nil)
+
 var _ fmt.Stringer = (*mrProxy)(nil)
 
 func newMRProxy(connector *connectorImpl, nodeID types.NodeID, cl mrc.MetadataRepositoryClient, mcl mrc.MetadataRepositoryManagementClient) *mrProxy {
@@ -49,7 +50,7 @@ func (m *mrProxy) Close() error {
 	for m.inflight.Load() > 0 {
 		m.cond.Wait()
 	}
-	return multierr.Append(m.cl.Close(), m.mcl.Close())
+	return errors.Join(m.cl.Close(), m.mcl.Close())
 }
 
 func (m *mrProxy) RegisterStorageNode(ctx context.Context, descriptor *varlogpb.StorageNodeDescriptor) error {

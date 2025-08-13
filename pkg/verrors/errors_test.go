@@ -1,11 +1,11 @@
 package verrors
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/gogo/status"
-	"github.com/pkg/errors"
 	. "github.com/smartystreets/goconvey/convey"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc/codes"
@@ -18,8 +18,8 @@ func TestStatusError(t *testing.T) {
 		So(errorRegistry, ShouldContainKey, registeredSentinelErr.Error())
 
 		err1 := fmt.Errorf("outermost: %w", fmt.Errorf("outer: %w", sentinelErr))
-		err2 := errors.Wrap(errors.Wrap(sentinelErr, "outer"), "outermost")
-		err3 := errors.Wrap(fmt.Errorf("outer: %w", sentinelErr), "outermost")
+		err2 := fmt.Errorf("outermost: %w", fmt.Errorf("outer: %w", sentinelErr))
+		err3 := fmt.Errorf("outermost: %w", fmt.Errorf("outer: %w", sentinelErr))
 		errs := []error{err1, err2, err3}
 
 		Convey("When the error is converted by uinsg ToStatusError", func() {
@@ -58,8 +58,8 @@ func TestStatusError(t *testing.T) {
 		So(errorRegistry, ShouldContainKey, sentinelErr.Error())
 
 		err1 := fmt.Errorf("outermost: %w", fmt.Errorf("outer: %w", sentinelErr))
-		err2 := errors.Wrap(errors.Wrap(sentinelErr, "outer"), "outermost")
-		err3 := errors.Wrap(fmt.Errorf("outer: %w", sentinelErr), "outermost")
+		err2 := fmt.Errorf("outermost: %w", fmt.Errorf("outer: %w", sentinelErr))
+		err3 := fmt.Errorf("outermost: %w", fmt.Errorf("outer: %w", sentinelErr))
 		errs := []error{err1, err2, err3}
 
 		Convey("When the error is converted by uinsg ToStatusError", func() {

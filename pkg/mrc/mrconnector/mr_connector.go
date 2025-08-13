@@ -2,14 +2,14 @@ package mrconnector
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
 
-	"github.com/pkg/errors"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
 
@@ -69,7 +69,7 @@ func New(ctx context.Context, opts ...Option) (Connector, error) {
 
 	c.cancel, err = c.runner.Run(c.updateLoop)
 	if err != nil {
-		return nil, errors.Wrap(err, "mrconnector")
+		return nil, fmt.Errorf("mrconnector: %w", err)
 	}
 
 	return c, nil
@@ -219,13 +219,13 @@ func (c *connectorImpl) connect(ctx context.Context) (*mrProxy, error) {
 			// connect to endpoint
 			cl, mcl, cerr := c.connectToMR(ctx, endpoint)
 			if cerr != nil {
-				err = multierr.Append(err, cerr)
+				err = errors.Join(err, cerr)
 				return true
 			}
 
 			// check the MR whether it is okay or not
 			if _, cerr = c.getClusterInfo(ctx, mcl); cerr != nil {
-				err = multierr.Combine(cerr, cl.Close(), mcl.Close())
+				err = errors.Join(cerr, cl.Close(), mcl.Close())
 				return true
 			}
 
@@ -338,7 +338,7 @@ func (c *connectorImpl) getClusterInfoFromSeed(ctx context.Context) (*mrpb.Clust
 
 			defer func() {
 				mu.Lock()
-				err = multierr.Append(err, cerr)
+				err = errors.Join(err, cerr)
 				if cerr == nil {
 					ok = true
 					if latestInfo == nil || info.NewerThan(latestInfo) {
@@ -354,7 +354,7 @@ func (c *connectorImpl) getClusterInfoFromSeed(ctx context.Context) (*mrpb.Clust
 			}
 
 			info, cerr = c.getClusterInfo(ctx, mcl)
-			cerr = multierr.Combine(cerr, cl.Close(), mcl.Close())
+			cerr = errors.Join(cerr, cl.Close(), mcl.Close())
 		}(idx)
 	}
 	wg.Wait()
