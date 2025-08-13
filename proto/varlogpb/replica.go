@@ -1,7 +1,7 @@
 package varlogpb
 
 import (
-	"github.com/pkg/errors"
+	"fmt"
 
 	"github.com/kakao/varlog/pkg/util/container/set"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -32,7 +32,7 @@ func EqualReplicas(xs []LogStreamReplica, ys []LogStreamReplica) bool {
 // replica, and all replicas have the same LogStreamID. They also have different StorageNodeIDs.
 func ValidReplicas(replicas []LogStreamReplica) error {
 	if len(replicas) < 1 {
-		return errors.Wrap(verrors.ErrInvalid, "no replica")
+		return fmt.Errorf("no replica: %w", verrors.ErrInvalid)
 	}
 
 	lsidSet := set.New(len(replicas))
@@ -42,10 +42,10 @@ func ValidReplicas(replicas []LogStreamReplica) error {
 		snidSet.Add(replica.StorageNodeID)
 	}
 	if lsidSet.Size() != 1 {
-		return errors.Wrap(verrors.ErrInvalid, "LogStreamID mismatch")
+		return fmt.Errorf("LogStreamID mismatch: %w", verrors.ErrInvalid)
 	}
 	if snidSet.Size() != len(replicas) {
-		return errors.Wrap(verrors.ErrInvalid, "StorageNodeID duplicated")
+		return fmt.Errorf("StorageNodeID duplicated: %w", verrors.ErrInvalid)
 	}
 	return nil
 }

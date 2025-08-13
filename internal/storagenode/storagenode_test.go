@@ -2,6 +2,7 @@ package storagenode
 
 import (
 	"context"
+	"errors"
 	"io"
 	"io/fs"
 	"math/rand"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 	"golang.org/x/exp/maps"
@@ -3007,7 +3007,7 @@ func TestStorageNode_Trim(t *testing.T) {
 				trimRes := TestTrim(t, cid, snid, tpid, 5, sn.advertise)
 				require.Len(t, trimRes, 2)
 				errs := maps.Values(trimRes)
-				require.NoError(t, multierr.Combine(errs...))
+				require.NoError(t, errors.Join(errs...))
 
 				c, closer := TestNewLogIOClient(t, snid, sn.advertise)
 				defer closer()
@@ -3149,7 +3149,7 @@ func TestStorageNode_Trim(t *testing.T) {
 				res := TestTrim(t, cid, snid, tpid, types.GLSN(10), sn.advertise)
 				require.Len(t, res, 2)
 				errs := maps.Values(res)
-				require.NoError(t, multierr.Combine(errs...))
+				require.NoError(t, errors.Join(errs...))
 			},
 			postf: func(t *testing.T, sn *StorageNode) {
 				addr := sn.advertise

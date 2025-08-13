@@ -4,11 +4,11 @@ package snwatcher
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/pkg/types"
@@ -134,7 +134,7 @@ func (snw *StorageNodeWatcher) checkHeartbeat(ctx context.Context) error {
 		}(i)
 	}
 	wg.Wait()
-	return multierr.Combine(errs...)
+	return errors.Join(errs...)
 }
 
 func (snw *StorageNodeWatcher) hbFail(snid types.StorageNodeID) {
@@ -217,5 +217,5 @@ func (snw *StorageNodeWatcher) report(ctx context.Context) error {
 		}(i)
 	}
 	wg.Wait()
-	return multierr.Combine(errs...)
+	return errors.Join(errs...)
 }

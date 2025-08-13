@@ -2,10 +2,10 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
-	"go.uber.org/multierr"
 	"google.golang.org/grpc"
 )
 
@@ -92,7 +92,7 @@ func (m *Manager[T]) Close() (err error) {
 	m.closed = true
 
 	for id := range m.conns {
-		err = multierr.Append(err, m.conns[id].rpcConn.Close())
+		err = errors.Join(err, m.conns[id].rpcConn.Close())
 	}
 	m.conns = map[T]*connection[T]{}
 	return err
