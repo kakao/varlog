@@ -2,11 +2,10 @@ package varlogpb
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
-
-	"github.com/pkg/errors"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
@@ -281,7 +280,7 @@ func (m *MetadataDescriptor) HaveStorageNode(id types.StorageNodeID) (*StorageNo
 	if snd := m.GetStorageNode(id); snd != nil {
 		return snd, nil
 	}
-	return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
+	return nil, fmt.Errorf("storage node: %w", verrors.ErrNotExist)
 }
 
 func (m *MetadataDescriptor) MustHaveStorageNode(id types.StorageNodeID) (*StorageNodeDescriptor, error) {
@@ -362,7 +361,7 @@ func (m *MetadataDescriptor) HaveLogStream(id types.LogStreamID) (*LogStreamDesc
 	if lsd := m.GetLogStream(id); lsd != nil {
 		return lsd, nil
 	}
-	return nil, errors.Wrap(verrors.ErrNotExist, "log stream")
+	return nil, fmt.Errorf("log stream: %w", verrors.ErrNotExist)
 }
 
 func (m *MetadataDescriptor) MustHaveLogStream(id types.LogStreamID) (*LogStreamDescriptor, error) {
@@ -376,7 +375,7 @@ func (m *MetadataDescriptor) NotHaveLogStream(id types.LogStreamID) error {
 	if lsd := m.GetLogStream(id); lsd == nil {
 		return nil
 	}
-	return errors.Wrap(verrors.ErrExist, "log stream")
+	return fmt.Errorf("log stream: %w", verrors.ErrExist)
 }
 
 func (m *MetadataDescriptor) MustNotHaveLogStream(id types.LogStreamID) error {
@@ -498,7 +497,7 @@ func (m *MetadataDescriptor) HaveTopic(id types.TopicID) (*TopicDescriptor, erro
 	if tnd := m.GetTopic(id); tnd != nil {
 		return tnd, nil
 	}
-	return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
+	return nil, fmt.Errorf("storage node: %w", verrors.ErrNotExist)
 }
 
 func (m *MetadataDescriptor) MustHaveTopic(id types.TopicID) (*TopicDescriptor, error) {

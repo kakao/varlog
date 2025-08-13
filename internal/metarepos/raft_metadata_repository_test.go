@@ -2,6 +2,7 @@ package metarepos
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -9,13 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"go.uber.org/goleak"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -144,7 +143,7 @@ func (clus *metadataRepoCluster) Start() error {
 	clus.logger.Info("cluster start")
 	for i := range clus.nodes {
 		if err := clus.start(i); err != nil {
-			return errors.WithStack(err)
+			return err
 		}
 	}
 	clus.logger.Info("cluster complete")
@@ -165,10 +164,10 @@ func (clus *metadataRepoCluster) restart(idx int) error {
 	}
 
 	if err := clus.stop(idx); err != nil {
-		return errors.WithStack(err)
+		return err
 	}
 	if err := clus.createMetadataRepo(idx, false); err != nil {
-		return errors.WithStack(err)
+		return err
 	}
 	return clus.start(idx)
 }
@@ -233,10 +232,10 @@ func (clus *metadataRepoCluster) getMetadataFromSnapshot(idx int) *varlogpb.Meta
 func (clus *metadataRepoCluster) Close() error {
 	var err error
 	for i := range clus.peers {
-		err = multierr.Append(err, clus.close(i))
+		err = errors.Join(err, clus.close(i))
 	}
-	err = multierr.Append(err, os.RemoveAll(vtesting.TestRaftDir()))
-	err = multierr.Append(err, clus.portLease.Release())
+	err = errors.Join(err, os.RemoveAll(vtesting.TestRaftDir()))
+	err = errors.Join(err, clus.portLease.Release())
 	return err
 }
 

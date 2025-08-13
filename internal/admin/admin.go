@@ -2,6 +2,8 @@ package admin
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"math/rand"
 	"net"
 	"slices"
@@ -11,8 +13,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/status"
-	"github.com/pkg/errors"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
@@ -136,7 +136,7 @@ func (adm *Admin) prepareServing() error {
 	}
 	lis, err := net.Listen("tcp", adm.listenAddress)
 	if err != nil {
-		return errors.WithStack(err)
+		return fmt.Errorf("admin: %w", err)
 	}
 	adm.lis = lis
 	addrs, _ := netutil.GetListenerAddrs(lis.Addr())
@@ -167,7 +167,7 @@ func (adm *Admin) Close() (err error) {
 
 	// SN Watcher
 	err = adm.snw.Stop()
-	err = multierr.Combine(err, adm.snmgr.Close(), adm.mrmgr.Close())
+	err = errors.Join(err, adm.snmgr.Close(), adm.mrmgr.Close())
 	adm.server.Stop()
 	return err
 }
@@ -460,7 +460,7 @@ func (adm *Admin) unregisterTopic(ctx context.Context, tpid types.TopicID) error
 	// TODO: Should it returns an error when removing the topic that has already been deleted or does not exist?
 	status := topicdesc.GetStatus()
 	if status.Deleted() {
-		return errors.Errorf("invalid topic status: %s", status)
+		return fmt.Errorf("unregister topic: invalid topic status: %s", status)
 	}
 
 	// TODO: Can we remove the topic that has active log streams?
@@ -565,7 +565,7 @@ func (adm *Admin) describeTopicInternal(ctx context.Context, tpid types.TopicID)
 
 	tdPtr := md.GetTopic(tpid)
 	if tdPtr == nil {
-		err = errors.Wrapf(verrors.ErrNotExist, "no such topic (topicID=%d)", tpid)
+		err = fmt.Errorf("no such topic (topicID=%d): %w", tpid, verrors.ErrNotExist)
 		return
 	}
 	td = *proto.Clone(tdPtr).(*varlogpb.TopicDescriptor)
@@ -844,7 +844,7 @@ func (adm *Admin) unregisterLogStream(ctx context.Context, tpid types.TopicID, l
 	// TODO (jun): Check whether status.Deleted means unregistered.
 	// If so, is status.Deleted okay or not?
 	if status.Running() || status.Deleted() {
-		return errors.Errorf("invalid log stream status: %s", status)
+		return fmt.Errorf("unregister log stream: invalid log stream status: %s", status)
 	}
 
 	// TODO (jun): test if the log stream has no logs
@@ -1044,7 +1044,7 @@ func (adm *Admin) mrInfos(ctx context.Context) (*mrpb.ClusterInfo, error) {
 func (adm *Admin) addMetadataRepositoryNode(ctx context.Context, raftURL, rpcAddr string) (*varlogpb.MetadataRepositoryNode, error) {
 	nid := types.NewNodeIDFromURL(raftURL)
 	if nid == types.InvalidNodeID {
-		return nil, errors.Wrap(verrors.ErrInvalid, "raft address")
+		return nil, fmt.Errorf("raft address: %w", verrors.ErrInvalid)
 	}
 
 	if err := adm.mrmgr.AddPeer(ctx, nid, raftURL, rpcAddr); err != nil {
@@ -1066,7 +1066,7 @@ func (adm *Admin) addMetadataRepositoryNode(ctx context.Context, raftURL, rpcAdd
 func (adm *Admin) addMRPeer(ctx context.Context, raftURL, rpcAddr string) (types.NodeID, error) {
 	nodeID := types.NewNodeIDFromURL(raftURL)
 	if nodeID == types.InvalidNodeID {
-		return nodeID, errors.Wrap(verrors.ErrInvalid, "raft address")
+		return nodeID, fmt.Errorf("raft address: %w", verrors.ErrInvalid)
 	}
 
 	err := adm.mrmgr.AddPeer(ctx, nodeID, raftURL, rpcAddr)
@@ -1081,7 +1081,7 @@ func (adm *Admin) addMRPeer(ctx context.Context, raftURL, rpcAddr string) (types
 
 func (adm *Admin) deleteMetadataRepositoryNode(ctx context.Context, nid types.NodeID) error {
 	if nid == types.InvalidNodeID {
-		return errors.Wrap(verrors.ErrInvalid, "raft address")
+		return fmt.Errorf("raft address: %w", verrors.ErrInvalid)
 	}
 
 	if err := adm.mrmgr.RemovePeer(ctx, nid); err != nil {
@@ -1097,7 +1097,7 @@ func (adm *Admin) deleteMetadataRepositoryNode(ctx context.Context, nid types.No
 func (adm *Admin) removeMRPeer(ctx context.Context, raftURL string) error {
 	nodeID := types.NewNodeIDFromURL(raftURL)
 	if nodeID == types.InvalidNodeID {
-		return errors.Wrap(verrors.ErrInvalid, "raft address")
+		return fmt.Errorf("raft address: %w", verrors.ErrInvalid)
 	}
 
 	err := adm.mrmgr.RemovePeer(ctx, nodeID)

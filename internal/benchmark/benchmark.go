@@ -2,6 +2,7 @@ package benchmark
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -9,8 +10,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"go.uber.org/multierr"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -130,7 +129,7 @@ func (bm *Benchmark) Run() error {
 func (bm *Benchmark) Close() error {
 	var err error
 	for _, loader := range bm.loaders {
-		err = multierr.Append(err, loader.Close())
+		err = errors.Join(err, loader.Close())
 	}
 	return err
 }

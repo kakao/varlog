@@ -3,11 +3,11 @@ package varlogcli
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"time"
 
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kakao/varlog/pkg/types"
@@ -32,6 +32,7 @@ func Append(mrAddrs []string, clusterID types.ClusterID, topicID types.TopicID, 
 
 	return appendInternal(mrAddrs, clusterID, batchSize, f)
 }
+
 func AppendTo(mrAddrs []string, clusterID types.ClusterID, topicID types.TopicID, logStreamID types.LogStreamID, batchSize int) error {
 	f := func(vlog varlog.Log, batch [][]byte) error {
 		ctx, cancel := context.WithTimeout(context.Background(), appendTimeout)
@@ -75,7 +76,7 @@ func appendInternal(mrAddrs []string, clusterID types.ClusterID, batchSize int, 
 				}
 
 				if err := f(vlog, batch); err != nil {
-					return errors.WithMessage(err, "could not append")
+					return fmt.Errorf("could not append: %w", err)
 				}
 				total += len(batch)
 				batch = batch[0:0]
@@ -85,7 +86,7 @@ func appendInternal(mrAddrs []string, clusterID types.ClusterID, batchSize int, 
 		}
 		if len(batch) > 0 {
 			if err := f(vlog, batch); err != nil {
-				return errors.WithMessage(err, "could not append")
+				return fmt.Errorf("could not append: %w", err)
 			}
 			total += len(batch)
 		}
@@ -118,7 +119,7 @@ func scanLoop(ctx context.Context, vlog varlog.Log, ch chan<- []byte) error {
 			return ctx.Err()
 		}
 		if err := scanner.Err(); err != nil {
-			return errors.WithMessage(err, "could not scan")
+			return fmt.Errorf("could not scan: %w", err)
 		}
 	}
 	return scanner.Err()

@@ -1,10 +1,9 @@
 package executorsmap
 
 import (
+	"fmt"
 	"sort"
 	"sync"
-
-	"github.com/pkg/errors"
 
 	"github.com/kakao/varlog/internal/storagenode/logstream"
 	"github.com/kakao/varlog/pkg/types"
@@ -59,7 +58,7 @@ func (m *ExecutorsMap) Store(tpid types.TopicID, lsid types.LogStreamID, extor *
 			m.hash[id] = slot
 		} else {
 			// Overwriting the executor is not allowed.
-			err = errors.Errorf("try to overwrite executor: %d", lsid)
+			err = fmt.Errorf("try to overwrite executor: %d", lsid)
 		}
 		m.mu.Unlock()
 		return err

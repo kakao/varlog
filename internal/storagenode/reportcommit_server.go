@@ -1,10 +1,10 @@
 package storagenode
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/storagenode/logstream"
@@ -60,7 +60,7 @@ func (rcs reportCommitServer) GetReport(stream snpb.LogStreamReporter_GetReportS
 
 func (rcs reportCommitServer) CommitBatch(stream snpb.LogStreamReporter_CommitBatchServer) (err error) {
 	defer func() {
-		err = multierr.Append(err, stream.SendAndClose(&snpb.CommitBatchResponse{}))
+		err = errors.Join(err, stream.SendAndClose(&snpb.CommitBatchResponse{}))
 		rcs.sn.logger.Info("report commit server: closed commit stream", zap.Error(err))
 	}()
 

@@ -1,11 +1,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
 
-	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 
 	"github.com/kakao/varlog/internal/buildinfo"
@@ -80,7 +80,7 @@ func newSubscribe() *cli.Command {
 
 func commandAction(c *cli.Context) error {
 	if c.NArg() > 0 {
-		return errors.Errorf("unexpected args: %v", c.Args().Slice())
+		return fmt.Errorf("unexpected args: %v", c.Args().Slice())
 	}
 
 	var (
@@ -117,7 +117,7 @@ func commandAction(c *cli.Context) error {
 		}
 		return varlogcli.Subscribe(mrAddrs, clusterID, topicID)
 	}
-	return errors.Errorf("unexpected command: %s", c.Command.Name)
+	return fmt.Errorf("unexpected command: %s", c.Command.Name)
 }
 
 func commonFlags() []cli.Flag {

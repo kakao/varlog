@@ -5,10 +5,10 @@ package varlog
 import (
 	"context"
 	stderrors "errors"
+	"fmt"
 
 	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/gogo/status"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 
 	"github.com/kakao/varlog/pkg/rpc"
@@ -205,7 +205,7 @@ func (c *admin) GetStorageNode(ctx context.Context, snid types.StorageNodeID, op
 		case codes.Unavailable:
 			err = verrors.ErrUnavailable
 		}
-		return nil, errors.WithMessage(err, "admin: get storage node")
+		return nil, fmt.Errorf("admin: get storage node: %w", err)
 	}
 	return rsp.StorageNode, nil
 }
@@ -224,7 +224,7 @@ func (c *admin) ListStorageNodes(ctx context.Context, opts ...AdminCallOption) (
 		case codes.Unavailable:
 			err = verrors.ErrUnavailable
 		}
-		return nil, errors.WithMessage(err, "admin: list storage nodes")
+		return nil, fmt.Errorf("admin: list storage nodes: %w", err)
 	}
 
 	if len(rsp.StorageNodes) > 0 {
@@ -280,7 +280,7 @@ func (c *admin) GetTopic(ctx context.Context, tpid types.TopicID, opts ...AdminC
 		if st := status.Convert(err); st.Code() == codes.NotFound {
 			err = verrors.ErrNotExist
 		}
-		return nil, errors.WithMessage(err, "admin: get topic")
+		return nil, fmt.Errorf("admin: get topic: %w", err)
 	}
 	return rsp.GetTopic(), nil
 }
@@ -292,7 +292,7 @@ func (c *admin) ListTopics(ctx context.Context, opts ...AdminCallOption) ([]varl
 
 	rsp, err := c.rpcClient.ListTopics(ctx, &admpb.ListTopicsRequest{})
 	if err != nil {
-		return nil, errors.WithMessage(err, "admin: list topics")
+		return nil, fmt.Errorf("admin: list topics: %w", err)
 	}
 
 	if len(rsp.Topics) > 0 {
@@ -335,7 +335,7 @@ func (c *admin) GetLogStream(ctx context.Context, tpid types.TopicID, lsid types
 		if st := status.Convert(err); st.Code() == codes.NotFound {
 			err = verrors.ErrNotExist
 		}
-		return nil, errors.WithMessage(err, "admin: get log stream")
+		return nil, fmt.Errorf("admin: get log stream: %w", err)
 	}
 	return rsp.GetLogStream(), nil
 }
@@ -349,7 +349,7 @@ func (c *admin) ListLogStreams(ctx context.Context, tpid types.TopicID, opts ...
 		TopicID: tpid,
 	})
 	if err != nil {
-		return nil, errors.WithMessage(err, "admin: list log streams")
+		return nil, fmt.Errorf("admin: list log streams: %w", err)
 	}
 
 	if len(rsp.LogStreams) > 0 {
@@ -505,7 +505,7 @@ func (c *admin) ListMetadataRepositoryNodes(ctx context.Context, opts ...AdminCa
 
 	rsp, err := c.rpcClient.ListMetadataRepositoryNodes(ctx, &admpb.ListMetadataRepositoryNodesRequest{})
 	if err != nil {
-		return nil, errors.WithMessage(err, "admin: list metadata repositories")
+		return nil, fmt.Errorf("admin: list metadata repositories: %w", err)
 	}
 
 	if len(rsp.Nodes) > 0 {

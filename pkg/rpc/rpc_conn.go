@@ -2,11 +2,11 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
@@ -49,7 +49,7 @@ type Conn struct {
 func NewConn(ctx context.Context, address string, opts ...grpc.DialOption) (*Conn, error) {
 	conn, err := grpc.NewClient(address, slices.Concat(defaultDialOption, opts)...)
 	if err != nil {
-		return nil, errors.Wrapf(err, "rpc: %s", address)
+		return nil, fmt.Errorf("rpc: %s: %w", address, err)
 	}
 	return &Conn{Conn: conn}, nil
 }
@@ -61,7 +61,10 @@ func NewConn(ctx context.Context, address string, opts ...grpc.DialOption) (*Con
 func (c *Conn) Close() (err error) {
 	c.once.Do(func() {
 		if c.Conn != nil {
-			err = errors.Wrap(c.Conn.Close(), "rpc")
+			err = c.Conn.Close()
+			if err != nil {
+				err = fmt.Errorf("rpc: %w", err)
+			}
 		}
 	})
 	return err

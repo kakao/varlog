@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pkg/errors"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -67,12 +66,12 @@ func (c *Client) initClient() error {
 
 	config, err := clientcmd.RESTConfigFromKubeConfig(configBytes)
 	if err != nil {
-		return errors.WithMessage(err, "k8s: rest config")
+		return fmt.Errorf("k8s: rest config: %w", err)
 	}
 
 	client, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		return errors.WithMessage(err, "k8s: creating client")
+		return fmt.Errorf("k8s: creating client: %w", err)
 	}
 
 	c.Clientset = client
@@ -87,7 +86,7 @@ func (c *Client) Nodes(ctx context.Context, labelSelector map[string]string) ([]
 		meta.ListOptions{LabelSelector: labels.Set(labelSelector).String()},
 	)
 	if err != nil {
-		return nil, errors.WithMessage(err, "k8s: list nodes")
+		return nil, fmt.Errorf("k8s: list nodes: %w", err)
 	}
 	return nodes.Items, nil
 }
@@ -100,7 +99,7 @@ func (c *Client) Pods(ctx context.Context, namespace string, labelSelector map[s
 		meta.ListOptions{LabelSelector: labels.Set(labelSelector).String()},
 	)
 	if err != nil {
-		return nil, errors.WithMessage(err, "k8s: list pods")
+		return nil, fmt.Errorf("k8s: list pods: %w", err)
 	}
 
 	ret := pods.Items
@@ -140,7 +139,10 @@ func (c *Client) PodReady(pod core.Pod) bool {
 // given namespace.
 func (c *Client) Service(ctx context.Context, namespace, name string) (*core.Service, error) {
 	service, err := c.CoreV1().Services(namespace).Get(ctx, name, meta.GetOptions{})
-	return service, errors.WithMessage(err, "k8s: get service")
+	if err != nil {
+		return nil, fmt.Errorf("k8s: get service: %w", err)
+	}
+	return service, nil
 }
 
 // UpdateDeploymentReplicas updates replicas of the deployment in the
@@ -151,7 +153,7 @@ func (c *Client) UpdateDeploymentReplicas(ctx context.Context, namespace, deploy
 	deployment := c.AppsV1().Deployments(namespace)
 	scale, err := deployment.GetScale(ctx, deploymentName, meta.GetOptions{})
 	if err != nil {
-		return errors.WithMessage(err, "k8s: get deployment scale")
+		return fmt.Errorf("k8s: get deployment scale: %w", err)
 	}
 
 	if scale.Spec.Replicas == replicas {
@@ -159,8 +161,10 @@ func (c *Client) UpdateDeploymentReplicas(ctx context.Context, namespace, deploy
 	}
 
 	scale.Spec.Replicas = replicas
-	_, err = deployment.UpdateScale(ctx, deploymentName, scale, meta.UpdateOptions{})
-	return errors.WithMessage(err, "k8s: update deployment scale")
+	if _, err := deployment.UpdateScale(ctx, deploymentName, scale, meta.UpdateOptions{}); err != nil {
+		return fmt.Errorf("k8s: update deployment scale: %w", err)
+	}
+	return nil
 }
 
 // UpdateStatefulSetReplicas updates the number of replicas of the statefulSet
@@ -172,7 +176,7 @@ func (c *Client) UpdateStatefulSetReplicas(ctx context.Context, namespace, state
 
 	scale, err := statefulSets.GetScale(ctx, statefulSetName, meta.GetOptions{})
 	if err != nil {
-		return errors.WithMessage(err, "k8s: get statefulset scale")
+		return fmt.Errorf("k8s: get statefulset scale: %w", err)
 	}
 
 	if scale.Spec.Replicas == replicas {
@@ -180,8 +184,10 @@ func (c *Client) UpdateStatefulSetReplicas(ctx context.Context, namespace, state
 	}
 
 	scale.Spec.Replicas = replicas
-	_, err = statefulSets.UpdateScale(ctx, statefulSetName, scale, meta.UpdateOptions{})
-	return errors.WithMessage(err, "k8s: update statefulset scale")
+	if _, err := statefulSets.UpdateScale(ctx, statefulSetName, scale, meta.UpdateOptions{}); err != nil {
+		return fmt.Errorf("k8s: update statefulset scale: %w", err)
+	}
+	return nil
 }
 
 // AddNodeLabel adds or replaces a node label to the Kubernetes node.
@@ -189,8 +195,10 @@ func (c *Client) AddNodeLabel(ctx context.Context, nodeName, label, value string
 	patch := []PatchStringValue{
 		NewLabelPatchStringValue(PatchOpAdd, label, value),
 	}
-	err := c.applyNodePatch(ctx, nodeName, patch)
-	return errors.WithMessage(err, "k8s: add node labels")
+	if err := c.applyNodePatch(ctx, nodeName, patch); err != nil {
+		return fmt.Errorf("k8s: add node labels: %w", err)
+	}
+	return nil
 }
 
 // ReplaceNodeLabel replaces a node label of the Kubernetes node.
@@ -200,8 +208,10 @@ func (c *Client) ReplaceNodeLabel(ctx context.Context, nodeName, label, value st
 	patch := []PatchStringValue{
 		NewLabelPatchStringValue(PatchOpReplace, label, value),
 	}
-	err := c.applyNodePatch(ctx, nodeName, patch)
-	return errors.WithMessage(err, "k8s: replace node labels")
+	if err := c.applyNodePatch(ctx, nodeName, patch); err != nil {
+		return fmt.Errorf("k8s: replace node labels: %w", err)
+	}
+	return nil
 }
 
 // RemoveNodeLabel removes a node label from the Kubernetes node.
@@ -209,15 +219,19 @@ func (c *Client) RemoveNodeLabel(ctx context.Context, nodeName, label string) er
 	patch := []PatchStringValue{
 		NewLabelPatchStringValue(PatchOpRemove, label, ""),
 	}
-	err := c.applyNodePatch(ctx, nodeName, patch)
-	return errors.WithMessage(err, "k8s: remove node labels")
+	if err := c.applyNodePatch(ctx, nodeName, patch); err != nil {
+		return fmt.Errorf("k8s: remove node labels: %w", err)
+	}
+	return nil
 }
 
 func (c *Client) applyNodePatch(ctx context.Context, nodeName string, patch any) error {
 	data, err := json.Marshal(patch)
 	if err != nil {
-		return errors.WithMessage(err, "k8s: node patch")
+		return fmt.Errorf("k8s: node patch: %w", err)
 	}
-	_, err = c.CoreV1().Nodes().Patch(ctx, nodeName, k8stypes.JSONPatchType, data, meta.PatchOptions{})
-	return errors.WithMessage(err, "k8s: node patch")
+	if _, err := c.CoreV1().Nodes().Patch(ctx, nodeName, k8stypes.JSONPatchType, data, meta.PatchOptions{}); err != nil {
+		return fmt.Errorf("k8s: node patch: %w", err)
+	}
+	return nil
 }
