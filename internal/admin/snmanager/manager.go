@@ -4,9 +4,10 @@ package snmanager
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
@@ -149,10 +150,13 @@ func (sm *snManager) GetMetadata(ctx context.Context, snid types.StorageNodeID) 
 			_ = sm.refresh(ctx)
 			err = admerrors.ErrNoSuchStorageNode
 		}
-		return nil, errors.WithMessagef(err, "snmanager")
+		return nil, fmt.Errorf("snmanager: %w", err)
 	}
 	snmd, err := mc.GetMetadata(ctx)
-	return snmd, errors.WithMessagef(err, "snmanager")
+	if err != nil {
+		return nil, fmt.Errorf("snmanager: %w", err)
+	}
+	return snmd, nil
 }
 
 func (sm *snManager) AddStorageNode(ctx context.Context, snid types.StorageNodeID, addr string) {
@@ -182,7 +186,7 @@ func (sm *snManager) addLogStreamReplica(ctx context.Context, snid types.Storage
 	mc, err := sm.clients.Get(snid)
 	if err != nil {
 		sm.refresh(ctx) //nolint:errcheck,revive // TODO: Handle an error returned.
-		return snpb.LogStreamReplicaMetadataDescriptor{}, errors.Wrap(verrors.ErrNotExist, "storage node")
+		return snpb.LogStreamReplicaMetadataDescriptor{}, fmt.Errorf("storage node: %w", verrors.ErrNotExist)
 	}
 	return mc.AddLogStreamReplica(ctx, tpid, lsid, path)
 }
@@ -210,7 +214,7 @@ func (sm *snManager) RemoveLogStreamReplica(ctx context.Context, snid types.Stor
 	mc, err := sm.clients.Get(snid)
 	if err != nil {
 		sm.refresh(ctx) //nolint:errcheck,revive // TODO: Handle an error returned.
-		return errors.Wrap(verrors.ErrNotExist, "storage node")
+		return fmt.Errorf("storage node: %w", verrors.ErrNotExist)
 	}
 	return mc.RemoveLogStream(ctx, tpid, lsid)
 }
@@ -239,7 +243,7 @@ func (sm *snManager) Seal(ctx context.Context, tpid types.TopicID, lsid types.Lo
 					zap.Int32("lsid", int32(lsid)),
 				)
 				sm.refresh(gctx) //nolint:errcheck,revive // TODO: Handle an error returned.
-				return errors.Wrap(verrors.ErrNotExist, "storage node")
+				return fmt.Errorf("storage node: %w", verrors.ErrNotExist)
 			}
 			status, highWatermark, errSeal := cli.Seal(gctx, tpid, lsid, lastCommittedGLSN)
 			if errSeal != nil {
@@ -304,18 +308,18 @@ func (sm *snManager) Sync(ctx context.Context, tpid types.TopicID, lsid types.Lo
 
 	if !storageNodeIDs.Contains(srcID) || !storageNodeIDs.Contains(dstID) {
 		sm.refresh(ctx) //nolint:errcheck,revive // TODO:: Handle an error returned.
-		return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
+		return nil, fmt.Errorf("storage node: %w", verrors.ErrNotExist)
 	}
 
 	srcCli, err := sm.clients.Get(srcID)
 	if err != nil {
 		sm.refresh(ctx) //nolint:errcheck,revive // TODO:: Handle an error returned.
-		return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
+		return nil, fmt.Errorf("storage node: %w", verrors.ErrNotExist)
 	}
 	dstCli, err := sm.clients.Get(dstID)
 	if err != nil {
 		sm.refresh(ctx) //nolint:errcheck,revive // TODO:: Handle an error returned.
-		return nil, errors.Wrap(verrors.ErrNotExist, "storage node")
+		return nil, fmt.Errorf("storage node: %w", verrors.ErrNotExist)
 	}
 
 	// TODO: check cluster meta if snids exist
@@ -353,7 +357,7 @@ func (sm *snManager) Unseal(ctx context.Context, tpid types.TopicID, lsid types.
 		cli, err := sm.clients.Get(storageNodeID)
 		if err != nil {
 			sm.refresh(ctx) //nolint:errcheck,revive // TODO:: Handle an error returned.
-			return errors.Wrap(verrors.ErrNotExist, "storage node")
+			return fmt.Errorf("storage node: %w", verrors.ErrNotExist)
 		}
 		if err := cli.Unseal(ctx, tpid, lsid, replicas); err != nil {
 			return err
@@ -369,7 +373,7 @@ func (sm *snManager) Trim(ctx context.Context, tpid types.TopicID, lastGLSN type
 	}
 	td := clusmeta.GetTopic(tpid)
 	if td == nil {
-		return nil, errors.Errorf("trim: no such topic %d", tpid)
+		return nil, fmt.Errorf("trim: no such topic %d", tpid)
 	}
 
 	clients := make(map[types.StorageNodeID]client.StorageNodeManagementClient)

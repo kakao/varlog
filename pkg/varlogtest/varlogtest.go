@@ -1,12 +1,11 @@
 package varlogtest
 
 import (
+	"errors"
 	"math/rand"
 	"sort"
 	"sync"
 	"time"
-
-	"github.com/pkg/errors"
 
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/varlog"

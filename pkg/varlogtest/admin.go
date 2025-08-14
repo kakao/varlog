@@ -3,6 +3,7 @@ package varlogtest
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/status"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 
 	"github.com/kakao/varlog/internal/storagenode/volume"
@@ -233,7 +233,7 @@ func (c *testAdmin) listLogStreamsInternal(tpid types.TopicID) (td varlogpb.Topi
 	for i, lsid := range td.LogStreams {
 		lsd, ok := c.vt.logStreams[lsid]
 		if !ok {
-			panic(errors.Errorf("inconsistency: no logstream %d in topic %d", lsid, tpid))
+			panic(fmt.Errorf("inconsistency: no logstream %d in topic %d", lsid, tpid))
 		}
 		lsds[i] = *proto.Clone(&lsd).(*varlogpb.LogStreamDescriptor)
 	}

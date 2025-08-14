@@ -2,11 +2,11 @@ package storagenode
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
 
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/kakao/varlog/internal/storagenode/logstream"
@@ -29,7 +29,7 @@ func (rs *replicationServer) Replicate(stream snpb.Replicator_ReplicateServer) e
 	}()
 	errC := rs.replicate(ctx, rs.recv(ctx, stream, wg), wg)
 	err := <-errC
-	err = multierr.Append(err, stream.SendAndClose(&snpb.ReplicateResponse{}))
+	err = errors.Join(err, stream.SendAndClose(&snpb.ReplicateResponse{}))
 	rs.logger.Error("closed replication stream", zap.Error(err))
 	return err
 }
@@ -79,7 +79,7 @@ func (rs *replicationServer) SyncReplicateStream(stream snpb.Replicator_SyncRepl
 			break
 		}
 	}
-	return multierr.Append(err, stream.SendAndClose(&snpb.SyncReplicateResponse{}))
+	return errors.Join(err, stream.SendAndClose(&snpb.SyncReplicateResponse{}))
 }
 
 func (rs *replicationServer) recv(ctx context.Context, stream snpb.Replicator_ReplicateServer, wg *sync.WaitGroup) <-chan *logstream.ReplicationTask {

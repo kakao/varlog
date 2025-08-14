@@ -8,8 +8,6 @@ import (
 	"strings"
 	"sync"
 
-	"go.uber.org/multierr"
-
 	"github.com/kakao/varlog/pkg/types"
 	"github.com/kakao/varlog/pkg/verrors"
 	"github.com/kakao/varlog/proto/snpb"
@@ -33,7 +31,7 @@ RETRY:
 				var ok bool
 				if lsid, ok = v.lsSelector.Select(tpid); !ok {
 					err := fmt.Errorf("append: no usable log stream in topic %d", tpid)
-					result.Err = multierr.Append(result.Err, err)
+					result.Err = errors.Join(result.Err, err)
 					continue RETRY
 				}
 			} else {
@@ -41,7 +39,7 @@ RETRY:
 					lsidx = 0
 					if lsids = v.lsSelector.GetAll(tpid); len(lsids) == 0 {
 						err := fmt.Errorf("append: no usable log stream in topic %d", tpid)
-						result.Err = multierr.Append(result.Err, err)
+						result.Err = errors.Join(result.Err, err)
 						continue RETRY
 					}
 
@@ -57,7 +55,7 @@ RETRY:
 
 				if lsidx == len(lsids) {
 					err := fmt.Errorf("append: no allowed log stream in topic %d", tpid)
-					result.Err = multierr.Append(result.Err, err)
+					result.Err = errors.Join(result.Err, err)
 
 					continue RETRY
 				}

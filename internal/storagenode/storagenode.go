@@ -16,7 +16,6 @@ import (
 	"github.com/puzpuzpuz/xsync/v2"
 	"github.com/soheilhy/cmux"
 	"go.opentelemetry.io/otel"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/singleflight"
@@ -240,7 +239,7 @@ func (sn *StorageNode) Close() (err error) {
 	sn.logger.Debug("stopped gRPC server")
 
 	sn.executors.Range(func(_ types.LogStreamID, _ types.TopicID, lse *logstream.Executor) bool {
-		err = multierr.Append(err, lse.Close())
+		err = errors.Join(err, lse.Close())
 		return true
 	})
 	sn.logger.Debug("closed all log stream executors")
