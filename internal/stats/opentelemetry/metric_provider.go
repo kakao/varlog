@@ -3,7 +3,6 @@ package opentelemetry
 import (
 	"context"
 	"errors"
-	"os"
 	"slices"
 	"time"
 
@@ -106,20 +105,7 @@ func initHostInstrumentation(mp metric.MeterProvider) error {
 }
 
 func initRuntimeInstrumentation(mp metric.MeterProvider, opts []runtime.Option) error {
-	const deprecatedRuntimeFeature = "OTEL_GO_X_DEPRECATED_RUNTIME_METRICS"
-	old := os.Getenv(deprecatedRuntimeFeature)
-	defer func() {
-		_ = os.Setenv(deprecatedRuntimeFeature, old)
-	}()
-
 	opts = slices.Concat(opts, []runtime.Option{runtime.WithMeterProvider(mp)})
-
-	_ = os.Setenv(deprecatedRuntimeFeature, "false")
-	if err := runtime.Start(slices.Clone(opts)...); err != nil {
-		return err
-	}
-
-	_ = os.Setenv(deprecatedRuntimeFeature, "true")
 	return runtime.Start(slices.Clone(opts)...)
 }
 
