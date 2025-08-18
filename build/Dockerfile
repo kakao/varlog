@@ -41,7 +41,7 @@ USER varlog
 ENV PATH=/varlog/bin:$PATH
 
 
-FROM python:3.13-alpine AS base-noncgo
+FROM python:3.13.7-alpine AS base-noncgo
 RUN addgroup -S -g 1000 varlog \
     && adduser -H -S -D -h /varlog -G varlog -u 999 -s /bin/sh varlog \
     && mkdir /varlog \
