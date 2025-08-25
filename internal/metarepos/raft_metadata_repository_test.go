@@ -2,7 +2,6 @@ package metarepos
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -44,11 +43,9 @@ type testMetadataRepoCluster struct {
 
 var testSnapCount uint64
 
-func newTestMetadataRepoCluster(n, nrRep int, increseUncommit bool) *testMetadataRepoCluster {
+func newTestMetadataRepoCluster(t *testing.T, n, nrRep int, increseUncommit bool) *testMetadataRepoCluster {
 	portLease, err := ports.ReserveWeaklyWithRetry(10000)
-	if err != nil {
-		panic(err)
-	}
+	require.NoError(t, err)
 
 	peers := make([]string, n)
 	nodes := make([]*RaftMetadataRepository, n)
@@ -69,27 +66,29 @@ func newTestMetadataRepoCluster(n, nrRep int, increseUncommit bool) *testMetadat
 	}
 
 	for i := range clus.peers {
-		clus.clear(i)
-		So(clus.createMetadataRepo(i, false), ShouldBeNil)
+		clus.clear(t, i)
+		clus.createMetadataRepo(t, i, false)
 	}
 
 	return clus
 }
 
-func (clus *testMetadataRepoCluster) clear(idx int) {
-	if idx < 0 || idx >= len(clus.nodes) {
-		return
-	}
+func (clus *testMetadataRepoCluster) clear(t *testing.T, idx int) {
+	require.GreaterOrEqual(t, idx, 0)
+	require.Less(t, idx, len(clus.nodes))
+
 	nodeID := types.NewNodeIDFromURL(clus.peers[idx])
-	os.RemoveAll(fmt.Sprintf("%s/wal/%d", vtesting.TestRaftDir(), nodeID))  //nolint:errcheck,revive // TODO:: Handle an error returned.
-	os.RemoveAll(fmt.Sprintf("%s/snap/%d", vtesting.TestRaftDir(), nodeID)) //nolint:errcheck,revive // TODO:: Handle an error returned.
-	os.RemoveAll(fmt.Sprintf("%s/sml/%d", vtesting.TestRaftDir(), nodeID))  //nolint:errcheck,revive // TODO:: Handle an error returned.
+	err := os.RemoveAll(fmt.Sprintf("%s/wal/%d", vtesting.TestRaftDir(), nodeID))
+	require.NoError(t, err)
+	err = os.RemoveAll(fmt.Sprintf("%s/snap/%d", vtesting.TestRaftDir(), nodeID))
+	require.NoError(t, err)
+	err = os.RemoveAll(fmt.Sprintf("%s/sml/%d", vtesting.TestRaftDir(), nodeID))
+	require.NoError(t, err)
 }
 
-func (clus *testMetadataRepoCluster) createMetadataRepo(idx int, join bool) error {
-	if idx < 0 || idx >= len(clus.nodes) {
-		return errors.New("out of range")
-	}
+func (clus *testMetadataRepoCluster) createMetadataRepo(t *testing.T, idx int, join bool) {
+	require.GreaterOrEqual(t, idx, 0)
+	require.Less(t, idx, len(clus.nodes))
 
 	peers := make([]string, len(clus.peers))
 	copy(peers, clus.peers)
@@ -116,83 +115,66 @@ func (clus *testMetadataRepoCluster) createMetadataRepo(idx int, join bool) erro
 	}
 
 	clus.nodes[idx] = NewRaftMetadataRepository(opts...)
-	return nil
 }
 
-func (clus *testMetadataRepoCluster) appendMetadataRepo() error {
+func (clus *testMetadataRepoCluster) appendMetadataRepo(t *testing.T) {
 	idx := len(clus.nodes)
 	clus.peers = append(clus.peers, fmt.Sprintf("http://127.0.0.1:%d", clus.portLease.Base()+idx))
 	clus.nodes = append(clus.nodes, nil)
-
-	clus.clear(idx)
-
-	return clus.createMetadataRepo(idx, true)
+	clus.clear(t, idx)
+	clus.createMetadataRepo(t, idx, true)
 }
 
-func (clus *testMetadataRepoCluster) start(idx int) error {
-	if idx < 0 || idx >= len(clus.nodes) {
-		return errors.New("out of range")
-	}
+func (clus *testMetadataRepoCluster) start(t *testing.T, idx int) {
+	require.GreaterOrEqual(t, idx, 0)
+	require.Less(t, idx, len(clus.nodes))
 
 	clus.nodes[idx].Run()
-
-	return nil
 }
 
-func (clus *testMetadataRepoCluster) Start() error {
+func (clus *testMetadataRepoCluster) Start(t *testing.T) {
 	clus.logger.Info("cluster start")
 	for i := range clus.nodes {
-		if err := clus.start(i); err != nil {
-			return err
-		}
+		clus.start(t, i)
 	}
 	clus.logger.Info("cluster complete")
-	return nil
 }
 
-func (clus *testMetadataRepoCluster) stop(idx int) error {
-	if idx < 0 || idx >= len(clus.nodes) {
-		return errors.New("out or range")
-	}
+func (clus *testMetadataRepoCluster) stop(t *testing.T, idx int) {
+	require.GreaterOrEqual(t, idx, 0)
+	require.Less(t, idx, len(clus.nodes))
 
-	return clus.nodes[idx].Close()
+	err := clus.nodes[idx].Close()
+	require.NoError(t, err)
 }
 
-func (clus *testMetadataRepoCluster) restart(idx int) error {
-	if idx < 0 || idx >= len(clus.nodes) {
-		return errors.New("out of range")
-	}
+func (clus *testMetadataRepoCluster) restart(t *testing.T, idx int) {
+	require.GreaterOrEqual(t, idx, 0)
+	require.Less(t, idx, len(clus.nodes))
 
-	if err := clus.stop(idx); err != nil {
-		return err
-	}
-	if err := clus.createMetadataRepo(idx, false); err != nil {
-		return err
-	}
-	return clus.start(idx)
+	clus.stop(t, idx)
+	clus.createMetadataRepo(t, idx, false)
+	clus.start(t, idx)
 }
 
-func (clus *testMetadataRepoCluster) close(idx int) error {
-	if idx < 0 || idx >= len(clus.nodes) {
-		return errors.New("out or range")
-	}
+func (clus *testMetadataRepoCluster) close(t *testing.T, idx int) {
+	require.GreaterOrEqual(t, idx, 0)
+	require.Less(t, idx, len(clus.nodes))
 
-	err := clus.stop(idx)
-	clus.clear(idx)
+	clus.stop(t, idx)
+	clus.clear(t, idx)
 	clus.logger.Info("cluster node stop", zap.Int("idx", idx))
-	return err
 }
 
-func (clus *testMetadataRepoCluster) getSnapshot(idx int) *raftpb.Snapshot {
-	if idx < 0 || idx >= len(clus.nodes) {
-		return nil
-	}
+func (clus *testMetadataRepoCluster) getSnapshot(t *testing.T, idx int) *raftpb.Snapshot {
+	require.GreaterOrEqual(t, idx, 0)
+	require.Less(t, idx, len(clus.nodes))
 
 	return clus.nodes[idx].raftNode.loadSnapshot()
 }
 
-func (clus *testMetadataRepoCluster) getMembersFromSnapshot(idx int) map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor {
-	snapshot := clus.getSnapshot(idx)
+func (clus *testMetadataRepoCluster) getMembersFromSnapshot(t *testing.T, idx int) map[types.NodeID]*mrpb.MetadataRepositoryDescriptor_PeerDescriptor {
+	snapshot := clus.getSnapshot(t, idx)
 	if snapshot == nil {
 		return nil
 	}
@@ -213,8 +195,8 @@ func (clus *testMetadataRepoCluster) getMembersFromSnapshot(idx int) map[types.N
 	return members
 }
 
-func (clus *testMetadataRepoCluster) getMetadataFromSnapshot(idx int) *varlogpb.MetadataDescriptor {
-	snapshot := clus.getSnapshot(idx)
+func (clus *testMetadataRepoCluster) getMetadataFromSnapshot(t *testing.T, idx int) *varlogpb.MetadataDescriptor {
+	snapshot := clus.getSnapshot(t, idx)
 	if snapshot == nil {
 		return nil
 	}
@@ -229,14 +211,14 @@ func (clus *testMetadataRepoCluster) getMetadataFromSnapshot(idx int) *varlogpb.
 }
 
 // Close closes all cluster nodes.
-func (clus *testMetadataRepoCluster) Close() error {
-	var err error
+func (clus *testMetadataRepoCluster) Close(t *testing.T) {
 	for i := range clus.peers {
-		err = errors.Join(err, clus.close(i))
+		clus.close(t, i)
 	}
-	err = errors.Join(err, os.RemoveAll(vtesting.TestRaftDir()))
-	err = errors.Join(err, clus.portLease.Release())
-	return err
+	err := os.RemoveAll(vtesting.TestRaftDir())
+	require.NoError(t, err)
+	err = clus.portLease.Release()
+	require.NoError(t, err)
 }
 
 func (clus *testMetadataRepoCluster) healthCheck(idx int) bool {
@@ -286,29 +268,26 @@ func (clus *testMetadataRepoCluster) leader() int {
 	return leader
 }
 
-func (clus *testMetadataRepoCluster) leaderFail() bool {
+func (clus *testMetadataRepoCluster) leaderFail(t *testing.T) bool {
 	leader := clus.leader()
 	if leader < 0 {
 		return false
 	}
 
-	clus.stop(leader) //nolint:errcheck,revive // TODO:: Handle an error returned.
+	clus.stop(t, leader)
 	return true
 }
 
 func (clus *testMetadataRepoCluster) closeNoErrors(t *testing.T) {
 	clus.logger.Info("cluster stop")
-	if err := clus.Close(); err != nil {
-		t.Log(err)
-	}
+	clus.Close(t)
 	clus.logger.Info("cluster stop complete")
 }
 
-func (clus *testMetadataRepoCluster) initDummyStorageNode(nrSN, nrTopic int) error {
+func (clus *testMetadataRepoCluster) initDummyStorageNode(t *testing.T, nrSN, nrTopic int) {
 	for i := 0; i < nrTopic; i++ {
-		if err := clus.nodes[0].RegisterTopic(context.TODO(), types.TopicID(i%nrTopic)); err != nil {
-			return err
-		}
+		err := clus.nodes[0].RegisterTopic(context.TODO(), types.TopicID(i%nrTopic))
+		require.NoError(t, err)
 	}
 
 	for i := 0; i < nrSN; i++ {
@@ -323,9 +302,8 @@ func (clus *testMetadataRepoCluster) initDummyStorageNode(nrSN, nrTopic int) err
 		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 		defer cancel()
 
-		if err := clus.nodes[0].RegisterStorageNode(rctx, sn); err != nil {
-			return err
-		}
+		err := clus.nodes[0].RegisterStorageNode(rctx, sn)
+		require.NoError(t, err)
 
 		lsID := types.LogStreamID(snID)
 		ls := makeLogStream(types.TopicID(i%nrTopic), lsID, []types.StorageNodeID{snID})
@@ -333,12 +311,9 @@ func (clus *testMetadataRepoCluster) initDummyStorageNode(nrSN, nrTopic int) err
 		rctx, cancel = context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 		defer cancel()
 
-		if err := clus.nodes[0].RegisterLogStream(rctx, ls); err != nil {
-			return err
-		}
+		err = clus.nodes[0].RegisterLogStream(rctx, ls)
+		require.NoError(t, err)
 	}
-
-	return nil
 }
 
 func (clus *testMetadataRepoCluster) getSNIDs() []types.StorageNodeID {
@@ -395,7 +370,7 @@ func makeLogStream(topicID types.TopicID, lsID types.LogStreamID, snIDs []types.
 func TestMRApplyReport(t *testing.T) {
 	Convey("Report Should not be applied if not register LogStream", t, func(ctx C) {
 		rep := 2
-		clus := newTestMetadataRepoCluster(1, rep, false)
+		clus := newTestMetadataRepoCluster(t, 1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -488,7 +463,7 @@ func TestMRApplyReport(t *testing.T) {
 func TestMRApplyInvalidReport(t *testing.T) {
 	Convey("Given LogStream", t, func(ctx C) {
 		rep := 2
-		clus := newTestMetadataRepoCluster(1, rep, false)
+		clus := newTestMetadataRepoCluster(t, 1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -544,7 +519,7 @@ func TestMRApplyInvalidReport(t *testing.T) {
 func TestMRIgnoreDirtyReport(t *testing.T) {
 	Convey("Given LogStream", t, func(ctx C) {
 		rep := 2
-		clus := newTestMetadataRepoCluster(1, rep, false)
+		clus := newTestMetadataRepoCluster(t, 1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -600,7 +575,7 @@ func TestMRIgnoreDirtyReport(t *testing.T) {
 
 func TestMRCalculateCommit(t *testing.T) {
 	Convey("Calculate commit", t, func(ctx C) {
-		clus := newTestMetadataRepoCluster(1, 2, false)
+		clus := newTestMetadataRepoCluster(t, 1, 2, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -671,7 +646,7 @@ func TestMRGlobalCommit(t *testing.T) {
 	Convey("Calculate commit", t, func(ctx C) {
 		topicID := types.TopicID(1)
 		rep := 2
-		clus := newTestMetadataRepoCluster(1, rep, false)
+		clus := newTestMetadataRepoCluster(t, 1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -709,7 +684,7 @@ func TestMRGlobalCommit(t *testing.T) {
 			So(err, ShouldBeNil)
 		}
 
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -795,7 +770,7 @@ func TestMRGlobalCommitConsistency(t *testing.T) {
 		nrLS := 5
 		topicID := types.TopicID(1)
 
-		clus := newTestMetadataRepoCluster(nrNodes, rep, false)
+		clus := newTestMetadataRepoCluster(t, nrNodes, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -834,7 +809,7 @@ func TestMRGlobalCommitConsistency(t *testing.T) {
 			}
 		}
 
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -870,11 +845,11 @@ func TestMRGlobalCommitConsistency(t *testing.T) {
 
 func TestMRSimpleReportNCommit(t *testing.T) {
 	Convey("UncommitReport should be committed", t, func(ctx C) {
-		clus := newTestMetadataRepoCluster(1, 1, false)
+		clus := newTestMetadataRepoCluster(t, 1, 1, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -922,7 +897,7 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 
 func TestMRRequestMap(t *testing.T) {
 	Convey("requestMap should have request when wait ack", t, func(ctx C) {
-		clus := newTestMetadataRepoCluster(1, 1, false)
+		clus := newTestMetadataRepoCluster(t, 1, 1, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -959,7 +934,7 @@ func TestMRRequestMap(t *testing.T) {
 	})
 
 	Convey("requestMap should ignore request that have different nodeIndex", t, func(ctx C) {
-		clus := newTestMetadataRepoCluster(1, 1, false)
+		clus := newTestMetadataRepoCluster(t, 1, 1, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -1003,7 +978,7 @@ func TestMRRequestMap(t *testing.T) {
 	})
 
 	Convey("requestMap should delete request when context timeout", t, func(ctx C) {
-		clus := newTestMetadataRepoCluster(1, 1, false)
+		clus := newTestMetadataRepoCluster(t, 1, 1, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -1027,11 +1002,11 @@ func TestMRRequestMap(t *testing.T) {
 	})
 
 	Convey("requestMap should delete after ack", t, func(ctx C) {
-		clus := newTestMetadataRepoCluster(1, 1, false)
+		clus := newTestMetadataRepoCluster(t, 1, 1, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(50, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1061,7 +1036,7 @@ func TestMRGetLastCommitted(t *testing.T) {
 	Convey("getLastCommitted", t, func(ctx C) {
 		rep := 2
 		topicID := types.TopicID(1)
-		clus := newTestMetadataRepoCluster(1, rep, false)
+		clus := newTestMetadataRepoCluster(t, 1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -1099,7 +1074,7 @@ func TestMRGetLastCommitted(t *testing.T) {
 			So(err, ShouldBeNil)
 		}
 
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1216,7 +1191,7 @@ func TestMRSeal(t *testing.T) {
 		rep := 2
 		topicID := types.TopicID(1)
 
-		clus := newTestMetadataRepoCluster(1, rep, false)
+		clus := newTestMetadataRepoCluster(t, 1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -1254,7 +1229,7 @@ func TestMRSeal(t *testing.T) {
 			So(err, ShouldBeNil)
 		}
 
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1304,7 +1279,7 @@ func TestMRUnseal(t *testing.T) {
 		rep := 2
 		topicID := types.TopicID(1)
 
-		clus := newTestMetadataRepoCluster(1, rep, false)
+		clus := newTestMetadataRepoCluster(t, 1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -1342,7 +1317,7 @@ func TestMRUnseal(t *testing.T) {
 			So(err, ShouldBeNil)
 		}
 
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1437,12 +1412,12 @@ func TestMRUpdateLogStream(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
 		rep := 2
 		nrStorageNode := rep + 1
-		clus := newTestMetadataRepoCluster(1, rep, false)
+		clus := newTestMetadataRepoCluster(t, 1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
 
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1514,12 +1489,12 @@ func TestMRUpdateLogStreamExclusive(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
 		rep := 2
 		nrStorageNode := rep + 2
-		clus := newTestMetadataRepoCluster(1, rep, false)
+		clus := newTestMetadataRepoCluster(t, 1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
 
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1573,12 +1548,12 @@ func TestMRUpdateLogStreamUnsafe(t *testing.T) {
 	Convey("Given MR cluster", t, func(ctx C) {
 		rep := 2
 		nrStorageNode := rep + 2
-		clus := newTestMetadataRepoCluster(1, rep, false)
+		clus := newTestMetadataRepoCluster(t, 1, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
 
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1647,11 +1622,11 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 		nrRep := 1
 		nrNode := 3
 
-		clus := newTestMetadataRepoCluster(nrNode, nrRep, true)
+		clus := newTestMetadataRepoCluster(t, nrNode, nrRep, true)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1693,7 +1668,7 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 		Convey("When node fail", func(ctx C) {
 			leader := clus.leader()
 
-			So(clus.leaderFail(), ShouldBeTrue)
+			So(clus.leaderFail(t), ShouldBeTrue)
 
 			Convey("Then MR Cluster should elect", func(ctx C) {
 				So(testutil.CompareWaitN(50, func() bool {
@@ -1715,12 +1690,12 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 		nrRep := 1
 		nrNode := 3
 
-		clus := newTestMetadataRepoCluster(nrNode, nrRep, false)
+		clus := newTestMetadataRepoCluster(t, nrNode, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
 
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1757,8 +1732,8 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 		Convey("When new node join", func(ctx C) {
 			newNode := nrNode
 			nrNode += 1
-			So(clus.appendMetadataRepo(), ShouldBeNil)
-			So(clus.start(newNode), ShouldBeNil)
+			clus.appendMetadataRepo(t)
+			clus.start(t, newNode)
 
 			info, err := clus.nodes[0].GetClusterInfo(context.Background(), types.ClusterID(0))
 			So(err, ShouldBeNil)
@@ -1809,8 +1784,8 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 		Convey("When new nodes started but not yet joined", func(ctx C) {
 			newNode := nrNode
 			nrNode += 1
-			So(clus.appendMetadataRepo(), ShouldBeNil)
-			So(clus.start(newNode), ShouldBeNil)
+			clus.appendMetadataRepo(t)
+			clus.start(t, newNode)
 
 			time.Sleep(10 * time.Second)
 
@@ -1872,11 +1847,11 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 		nrRep := 1
 		nrNode := 3
 
-		clus := newTestMetadataRepoCluster(nrNode, nrRep, false)
+		clus := newTestMetadataRepoCluster(t, nrNode, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1893,7 +1868,7 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 				return len(cinfo.Members) == nrNode
 			}), ShouldBeTrue)
 
-			clus.stop(leaveNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			clus.stop(t, leaveNode)
 
 			info, err := clus.nodes[checkNode].GetClusterInfo(context.Background(), types.ClusterID(0))
 			So(err, ShouldBeNil)
@@ -1923,7 +1898,7 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 				return len(cinfo.Members) == nrNode
 			}), ShouldBeTrue)
 
-			clus.stop(leaveNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			clus.stop(t, leaveNode)
 
 			info, err := clus.nodes[checkNode].GetClusterInfo(context.Background(), types.ClusterID(0))
 			So(err, ShouldBeNil)
@@ -1951,11 +1926,11 @@ func TestMRFailoverRestart(t *testing.T) {
 		nrRep := 1
 		nrNode := 5
 
-		clus := newTestMetadataRepoCluster(nrNode, nrRep, false)
+		clus := newTestMetadataRepoCluster(t, nrNode, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -1967,16 +1942,16 @@ func TestMRFailoverRestart(t *testing.T) {
 			restartNode := (leader + 1) % nrNode
 
 			So(testutil.CompareWaitN(50, func() bool {
-				peers := clus.getMembersFromSnapshot(restartNode)
+				peers := clus.getMembersFromSnapshot(t, restartNode)
 				return len(peers) > 0
 			}), ShouldBeTrue)
 
-			clus.restart(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			clus.restart(t, restartNode)
 
 			newNode := nrNode
 			nrNode += 1
-			So(clus.appendMetadataRepo(), ShouldBeNil)
-			So(clus.start(newNode), ShouldBeNil)
+			clus.appendMetadataRepo(t)
+			clus.start(t, newNode)
 
 			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
@@ -2006,12 +1981,12 @@ func TestMRFailoverRestart(t *testing.T) {
 			leaveNode := (leader + 2) % nrNode
 
 			So(testutil.CompareWaitN(100, func() bool {
-				peers := clus.getMembersFromSnapshot(restartNode)
+				peers := clus.getMembersFromSnapshot(t, restartNode)
 				return len(peers) > 0
 			}), ShouldBeTrue)
 
-			clus.stop(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
-			clus.stop(leaveNode)   //nolint:errcheck,revive // TODO:: Handle an error returned.
+			clus.stop(t, restartNode)
+			clus.stop(t, leaveNode)
 
 			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
@@ -2022,7 +1997,7 @@ func TestMRFailoverRestart(t *testing.T) {
 
 			nrNode -= 1
 
-			clus.restart(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			clus.restart(t, restartNode)
 
 			Convey("Then GetMembership should return 4 peers", func(ctx C) {
 				So(testutil.CompareWaitN(100, func() bool {
@@ -2048,8 +2023,8 @@ func TestMRLoadSnapshot(t *testing.T) {
 		nrRep := 1
 		nrNode := 3
 
-		clus := newTestMetadataRepoCluster(nrNode, nrRep, false)
-		So(clus.Start(), ShouldBeNil)
+		clus := newTestMetadataRepoCluster(t, nrNode, nrRep, false)
+		clus.Start(t)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -2079,7 +2054,7 @@ func TestMRLoadSnapshot(t *testing.T) {
 		}
 
 		So(testutil.CompareWaitN(50, func() bool {
-			metadata := clus.getMetadataFromSnapshot(restartNode)
+			metadata := clus.getMetadataFromSnapshot(t, restartNode)
 			if metadata == nil {
 				return false
 			}
@@ -2094,7 +2069,7 @@ func TestMRLoadSnapshot(t *testing.T) {
 		}), ShouldBeTrue)
 
 		Convey("When follower restart", func(ctx C) {
-			So(clus.restart(restartNode), ShouldBeNil)
+			clus.restart(t, restartNode)
 			Convey("Then GetMembership should recover metadata", func(ctx C) {
 				So(testutil.CompareWaitN(100, func() bool {
 					if !clus.healthCheck(restartNode) {
@@ -2125,8 +2100,8 @@ func TestMRRemoteSnapshot(t *testing.T) {
 		nrRep := 1
 		nrNode := 3
 
-		clus := newTestMetadataRepoCluster(nrNode, nrRep, false)
-		So(clus.Start(), ShouldBeNil)
+		clus := newTestMetadataRepoCluster(t, nrNode, nrRep, false)
+		clus.Start(t)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -2155,15 +2130,15 @@ func TestMRRemoteSnapshot(t *testing.T) {
 		}
 
 		So(testutil.CompareWaitN(500, func() bool {
-			peers := clus.getMembersFromSnapshot(leader)
+			peers := clus.getMembersFromSnapshot(t, leader)
 			return len(peers) == nrNode
 		}), ShouldBeTrue)
 
 		Convey("When new node join", func(ctx C) {
 			newNode := nrNode
 			nrNode += 1
-			So(clus.appendMetadataRepo(), ShouldBeNil)
-			So(clus.start(newNode), ShouldBeNil)
+			clus.appendMetadataRepo(t)
+			clus.start(t, newNode)
 
 			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
@@ -2203,11 +2178,11 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 		testSnapCount = 10
 		defer func() { testSnapCount = 0 }()
 
-		clus := newTestMetadataRepoCluster(nrNode, nrRep, false)
+		clus := newTestMetadataRepoCluster(t, nrNode, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -2220,12 +2195,12 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 			leaveNode := (leader + 2) % nrNode
 
 			So(testutil.CompareWaitN(500, func() bool {
-				peers := clus.getMembersFromSnapshot(restartNode)
+				peers := clus.getMembersFromSnapshot(t, restartNode)
 				return len(peers) == nrNode
 			}), ShouldBeTrue)
 
-			clus.stop(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
-			clus.stop(leaveNode)   //nolint:errcheck,revive // TODO:: Handle an error returned.
+			clus.stop(t, restartNode)
+			clus.stop(t, leaveNode)
 
 			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
@@ -2236,7 +2211,7 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 
 			nrNode -= 1
 
-			clus.restart(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			clus.restart(t, restartNode)
 
 			Convey("Then GetMembership should return 4 peers", func(ctx C) {
 				So(testutil.CompareWaitN(100, func() bool {
@@ -2262,11 +2237,11 @@ func TestMRFailoverRestartWithOutdatedSnapshot(t *testing.T) {
 		testSnapCount = 10
 		defer func() { testSnapCount = 0 }()
 
-		clus := newTestMetadataRepoCluster(nrNode, nrRep, false)
+		clus := newTestMetadataRepoCluster(t, nrNode, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -2278,20 +2253,20 @@ func TestMRFailoverRestartWithOutdatedSnapshot(t *testing.T) {
 			restartNode := (leader + 1) % nrNode
 
 			So(testutil.CompareWaitN(500, func() bool {
-				peers := clus.getMembersFromSnapshot(restartNode)
+				peers := clus.getMembersFromSnapshot(t, restartNode)
 				return len(peers) == nrNode
 			}), ShouldBeTrue)
 
-			clus.stop(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			clus.stop(t, restartNode)
 
 			appliedIdx := clus.nodes[restartNode].raftNode.appliedIndex
 
 			So(testutil.CompareWaitN(500, func() bool {
-				snapshot := clus.getSnapshot(leader)
+				snapshot := clus.getSnapshot(t, leader)
 				return snapshot.Metadata.Index > appliedIdx+testSnapCount+1
 			}), ShouldBeTrue)
 
-			clus.restart(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			clus.restart(t, restartNode)
 
 			Convey("Then node which is restarted should serve", func(ctx C) {
 				So(testutil.CompareWaitN(100, func() bool {
@@ -2313,11 +2288,11 @@ func TestMRFailoverRestartAlreadyLeavedNode(t *testing.T) {
 		testSnapCount = 10
 		defer func() { testSnapCount = 0 }()
 
-		clus := newTestMetadataRepoCluster(nrNode, nrRep, false)
+		clus := newTestMetadataRepoCluster(t, nrNode, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -2329,11 +2304,11 @@ func TestMRFailoverRestartAlreadyLeavedNode(t *testing.T) {
 			restartNode := (leader + 1) % nrNode
 
 			So(testutil.CompareWaitN(500, func() bool {
-				peers := clus.getMembersFromSnapshot(restartNode)
+				peers := clus.getMembersFromSnapshot(t, restartNode)
 				return len(peers) == nrNode
 			}), ShouldBeTrue)
 
-			clus.stop(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			clus.stop(t, restartNode)
 
 			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 			defer cancel()
@@ -2345,11 +2320,11 @@ func TestMRFailoverRestartAlreadyLeavedNode(t *testing.T) {
 			nrNode -= 1
 
 			So(testutil.CompareWaitN(500, func() bool {
-				peers := clus.getMembersFromSnapshot(leader)
+				peers := clus.getMembersFromSnapshot(t, leader)
 				return len(peers) == nrNode
 			}), ShouldBeTrue)
 
-			clus.restart(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			clus.restart(t, restartNode)
 
 			Convey("Then the node should not serve", func(ctx C) {
 				time.Sleep(10 * time.Second)
@@ -2367,12 +2342,12 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 		nrLogStream := 2
 		testSnapCount = 10
 
-		clus := newTestMetadataRepoCluster(nrNode, nrRep, false)
+		clus := newTestMetadataRepoCluster(t, nrNode, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 			testSnapCount = 0
 		})
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -2426,11 +2401,11 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 
 		Convey("When follower restart with snapshot", func(ctx C) {
 			So(testutil.CompareWaitN(500, func() bool {
-				peers := clus.getMembersFromSnapshot(restartNode)
+				peers := clus.getMembersFromSnapshot(t, restartNode)
 				return len(peers) == nrNode
 			}), ShouldBeTrue)
 
-			clus.restart(restartNode) //nolint:errcheck,revive // TODO:: Handle an error returned.
+			clus.restart(t, restartNode)
 
 			So(testutil.CompareWaitN(50, func() bool {
 				if !clus.healthCheck(restartNode) {
@@ -2452,7 +2427,7 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 
 func TestMRProposeTimeout(t *testing.T) {
 	Convey("Given MR which is not running", t, func(ctx C) {
-		clus := newTestMetadataRepoCluster(1, 1, false)
+		clus := newTestMetadataRepoCluster(t, 1, 1, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -2478,8 +2453,8 @@ func TestMRProposeTimeout(t *testing.T) {
 
 func TestMRProposeRetry(t *testing.T) {
 	Convey("Given MR", t, func(ctx C) {
-		clus := newTestMetadataRepoCluster(3, 1, false)
-		So(clus.Start(), ShouldBeNil)
+		clus := newTestMetadataRepoCluster(t, 3, 1, false)
+		clus.Start(t)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -2516,17 +2491,17 @@ func TestMRScaleOutJoin(t *testing.T) {
 		nrRep := 1
 		nrNode := 1
 
-		clus := newTestMetadataRepoCluster(nrNode, nrRep, false)
+		clus := newTestMetadataRepoCluster(t, nrNode, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
 
 		So(testutil.CompareWaitN(1000, func() bool {
-			peers := clus.getMembersFromSnapshot(0)
+			peers := clus.getMembersFromSnapshot(t, 0)
 			return len(peers) == nrNode
 		}), ShouldBeTrue)
 
@@ -2540,8 +2515,8 @@ func TestMRScaleOutJoin(t *testing.T) {
 				prevAppliedIndex := info.AppliedIndex
 
 				newNode := nrNode
-				So(clus.appendMetadataRepo(), ShouldBeNil)
-				So(clus.start(newNode), ShouldBeNil)
+				clus.appendMetadataRepo(t)
+				clus.start(t, newNode)
 
 				rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
 				defer cancel()
@@ -2589,12 +2564,12 @@ func TestMRUnregisterTopic(t *testing.T) {
 		nrLS := 5
 		topicID := types.TopicID(1)
 
-		clus := newTestMetadataRepoCluster(nrNodes, rep, false)
+		clus := newTestMetadataRepoCluster(t, nrNodes, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
 
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -2643,14 +2618,14 @@ func TestMRUnregisterTopic(t *testing.T) {
 		nrLS := 1000
 		topicID := types.TopicID(1)
 
-		clus := newTestMetadataRepoCluster(nrNodes, rep, false)
+		clus := newTestMetadataRepoCluster(t, nrNodes, rep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
 
 		mr := clus.nodes[0]
 
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -2705,12 +2680,12 @@ func TestMetadataRepository_MaxTopicsCount(t *testing.T) {
 	const increaseUncommit = false
 
 	Convey("MaxTopicsCount", t, func(C) {
-		clus := newTestMetadataRepoCluster(numNodes, repFactor, increaseUncommit)
+		clus := newTestMetadataRepoCluster(t, numNodes, repFactor, increaseUncommit)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
 
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -2756,12 +2731,12 @@ func TestMetadataRepository_MaxLogStreamsCountPerTopic(t *testing.T) {
 	)
 
 	Convey("MaxLogStreamsCountPerTopic", t, func(C) {
-		clus := newTestMetadataRepoCluster(numNodes, repFactor, increaseUncommit)
+		clus := newTestMetadataRepoCluster(t, numNodes, repFactor, increaseUncommit)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
 
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -2803,7 +2778,7 @@ func TestMRTopicLastHighWatermark(t *testing.T) {
 		nrTopics := 3
 		nrLS := 2
 		rep := 2
-		clus := newTestMetadataRepoCluster(1, rep, false)
+		clus := newTestMetadataRepoCluster(t, 1, rep, false)
 		mr := clus.nodes[0]
 
 		snIDs := make([]types.StorageNodeID, rep)
@@ -2841,7 +2816,7 @@ func TestMRTopicLastHighWatermark(t *testing.T) {
 		}
 
 		Convey("getLastCommitted should return last committed Version", func(ctx C) {
-			So(clus.Start(), ShouldBeNil)
+			clus.Start(t)
 			Reset(func() {
 				clus.closeNoErrors(t)
 			})
@@ -2922,7 +2897,7 @@ func TestMRTopicLastHighWatermark(t *testing.T) {
 				topicLogStreamID[topicID] = lsIds
 			}
 
-			So(clus.Start(), ShouldBeNil)
+			clus.Start(t)
 			Reset(func() {
 				clus.closeNoErrors(t)
 			})
@@ -2994,8 +2969,8 @@ func TestMRTopicCatchup(t *testing.T) {
 		nrLSPerTopic := 2
 		nrSN := nrTopic * nrLSPerTopic
 
-		clus := newTestMetadataRepoCluster(nrNode, nrRep, false)
-		clus.Start() //nolint:errcheck,revive // TODO:: Handle an error returned.
+		clus := newTestMetadataRepoCluster(t, nrNode, nrRep, false)
+		clus.Start(t)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
@@ -3007,8 +2982,7 @@ func TestMRTopicCatchup(t *testing.T) {
 		So(leader, ShouldBeGreaterThan, -1)
 
 		// register SN & LS
-		err := clus.initDummyStorageNode(nrSN, nrTopic)
-		So(err, ShouldBeNil)
+		clus.initDummyStorageNode(t, nrSN, nrTopic)
 
 		So(testutil.CompareWaitN(50, func() bool {
 			return len(clus.getSNIDs()) == nrSN
@@ -3038,12 +3012,12 @@ func TestMRCatchupUnsealedLogstream(t *testing.T) {
 		nrRep := 1
 		nrTopic := 1
 		nrSN := 2
-		clus := newTestMetadataRepoCluster(1, nrRep, false)
+		clus := newTestMetadataRepoCluster(t, 1, nrRep, false)
 		Reset(func() {
 			clus.closeNoErrors(t)
 		})
 
-		So(clus.Start(), ShouldBeNil)
+		clus.Start(t)
 		So(testutil.CompareWaitN(10, func() bool {
 			return clus.healthCheckAll()
 		}), ShouldBeTrue)
@@ -3051,10 +3025,9 @@ func TestMRCatchupUnsealedLogstream(t *testing.T) {
 		mr := clus.nodes[0]
 
 		// register SN & LS
-		err := clus.initDummyStorageNode(nrSN, nrTopic)
-		So(err, ShouldBeNil)
+		clus.initDummyStorageNode(t, nrSN, nrTopic)
 
-		err = mr.RegisterTopic(context.TODO(), types.TopicID(1))
+		err := mr.RegisterTopic(context.TODO(), types.TopicID(1))
 		So(err, ShouldBeNil)
 
 		So(testutil.CompareWaitN(50, func() bool {
