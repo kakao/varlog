@@ -2,12 +2,13 @@ package ee
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"math/rand"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -198,7 +199,7 @@ func (action *Action) append(ctx context.Context, quitClients <-chan struct{}) e
 		varlog.WithOpenTimeout(10*time.Second),
 	)
 	if err != nil {
-		return errors.WithMessage(err, "Action: open client")
+		return fmt.Errorf("Action: open client: %w", err)
 	}
 	defer func() {
 		_ = vcli.Close()
@@ -209,15 +210,15 @@ func (action *Action) append(ctx context.Context, quitClients <-chan struct{}) e
 		case <-quitClients:
 			return nil
 		case <-ctx.Done():
-			return errors.WithMessage(ctx.Err(), "Action: append")
+			return fmt.Errorf("Action: append: %w", ctx.Err())
 		default:
 			tpid, err := action.getRandomTopidID()
 			if err != nil {
-				return errors.WithMessage(err, "Action: append")
+				return fmt.Errorf("Action: append: %w", err)
 			}
 			res := vcli.Append(ctx, tpid, [][]byte{[]byte("foo")}, varlog.WithRetryCount(5))
 			if res.Err != nil {
-				return errors.WithMessage(res.Err, "Action: append")
+				return fmt.Errorf("Action: append: %w", res.Err)
 			}
 			action.setAppendResult(res.Metadata[0].GLSN)
 		}

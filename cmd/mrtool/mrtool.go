@@ -7,7 +7,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 
 	"github.com/kakao/varlog/internal/flags"
@@ -32,13 +31,13 @@ func run() int {
 
 	action := func(c *cli.Context) error {
 		if c.NArg() > 0 {
-			return errors.Errorf("unexpected args: %v", c.Args().Slice())
+			return fmt.Errorf("unexpected args: %v", c.Args().Slice())
 		}
 
 		if c.Command.Name == cmdDescribe {
 			return describe(c)
 		}
-		return errors.Errorf("unknown command: %s", c.Command.Name)
+		return fmt.Errorf("unknown command: %s", c.Command.Name)
 	}
 
 	app := &cli.App{

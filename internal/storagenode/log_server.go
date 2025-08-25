@@ -10,7 +10,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
-	"go.uber.org/multierr"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -273,7 +272,7 @@ Loop:
 		return nil
 	}
 	if err != nil {
-		return status.Error(status.FromContextError(err).Code(), multierr.Append(err, sr.Err()).Error())
+		return status.Error(status.FromContextError(err).Code(), errors.Join(err, sr.Err()).Error())
 	}
 	return status.Error(status.FromContextError(sr.Err()).Code(), sr.Err().Error())
 }
@@ -324,7 +323,7 @@ Loop:
 		}
 	}
 	sr.Stop()
-	return multierr.Append(err, sr.Err())
+	return errors.Join(err, sr.Err())
 }
 
 func (ls *logServer) TrimDeprecated(ctx context.Context, req *snpb.TrimDeprecatedRequest) (*pbtypes.Empty, error) {

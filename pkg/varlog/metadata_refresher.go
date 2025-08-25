@@ -4,11 +4,11 @@ package varlog
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync/atomic"
 	"time"
 
-	"github.com/pkg/errors"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
 
@@ -49,7 +49,8 @@ func newMetadataRefresher(
 	replicasRetriever RenewableReplicasRetriever,
 	refreshInterval,
 	refreshTimeout time.Duration,
-	logger *zap.Logger) (*metadataRefresher, error) {
+	logger *zap.Logger,
+) (*metadataRefresher, error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -64,7 +65,7 @@ func newMetadataRefresher(
 		runner:            runner.New("metarefresher", logger),
 	}
 	if err := mr.refresh(ctx); err != nil {
-		return nil, errors.Wrap(err, "metarefresher")
+		return nil, fmt.Errorf("metarefresher: %w", err)
 	}
 
 	mctx, cancel := mr.runner.WithManagedCancel(context.Background())
@@ -116,7 +117,7 @@ func (mr *metadataRefresher) refresh(ctx context.Context) error {
 		// TODO (jun): check if it needs retry? am I torching mr?
 		clusmeta, err := client.GetMetadata(ctx)
 		if err != nil {
-			return nil, multierr.Append(err, client.Close())
+			return nil, errors.Join(err, client.Close())
 		}
 
 		if clusmeta.GetAppliedIndex() == mr.getAppliedIndex() {

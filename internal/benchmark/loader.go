@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/multierr"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/kakao/varlog/pkg/types"
@@ -98,7 +97,7 @@ func (loader *Loader) Run(ctx context.Context) (err error) {
 	g, ctx := errgroup.WithContext(ctx)
 
 	defer func() {
-		err = multierr.Append(err, g.Wait())
+		err = errors.Join(err, g.Wait())
 	}()
 
 	for i := 0; i < len(loader.apps); i++ {
@@ -121,10 +120,10 @@ func (loader *Loader) Run(ctx context.Context) (err error) {
 func (loader *Loader) Close() error {
 	var err error
 	for _, c := range loader.apps {
-		err = multierr.Append(err, c.Close())
+		err = errors.Join(err, c.Close())
 	}
 	for _, c := range loader.subs {
-		err = multierr.Append(err, c.Close())
+		err = errors.Join(err, c.Close())
 	}
 	return err
 }

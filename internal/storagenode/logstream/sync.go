@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -107,7 +106,7 @@ func (lse *Executor) Sync(ctx context.Context, dstReplica varlogpb.LogStreamRepl
 
 	defer func() {
 		if err != nil {
-			err = multierr.Append(err, sc.close())
+			err = errors.Join(err, sc.close())
 		}
 	}()
 
@@ -181,7 +180,7 @@ func (lse *Executor) syncLoop(_ context.Context, sc *syncClient, st *syncTracker
 	defer func() {
 		if stream != nil {
 			_, errStream := stream.CloseAndRecv()
-			err = multierr.Append(err, errStream)
+			err = errors.Join(err, errStream)
 		}
 
 		if err == nil {

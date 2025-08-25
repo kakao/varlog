@@ -5,7 +5,6 @@ package mrc
 import (
 	"context"
 
-	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -58,15 +57,17 @@ func (c *metadataRepositoryClient) Close() error {
 
 func (c *metadataRepositoryClient) RegisterStorageNode(ctx context.Context, sn *varlogpb.StorageNodeDescriptor) error {
 	if !sn.Valid() {
-		return errors.WithStack(verrors.ErrInvalid)
+		return verrors.ErrInvalid
 	}
 
 	req := &mrpb.StorageNodeRequest{
 		StorageNode: sn,
 	}
 
-	_, err := c.client.RegisterStorageNode(ctx, req)
-	return verrors.FromStatusError(errors.WithStack(err))
+	if _, err := c.client.RegisterStorageNode(ctx, req); err != nil {
+		return verrors.FromStatusError(err)
+	}
+	return nil
 }
 
 func (c *metadataRepositoryClient) UnregisterStorageNode(ctx context.Context, snID types.StorageNodeID) error {
@@ -78,8 +79,10 @@ func (c *metadataRepositoryClient) UnregisterStorageNode(ctx context.Context, sn
 		},
 	}
 
-	_, err := c.client.UnregisterStorageNode(ctx, req)
-	return verrors.FromStatusError(errors.WithStack(err))
+	if _, err := c.client.UnregisterStorageNode(ctx, req); err != nil {
+		return verrors.FromStatusError(err)
+	}
+	return nil
 }
 
 func (c *metadataRepositoryClient) RegisterTopic(ctx context.Context, topicID types.TopicID) error {
@@ -92,7 +95,7 @@ func (c *metadataRepositoryClient) RegisterTopic(ctx context.Context, topicID ty
 		if code := status.Code(err); code == codes.ResourceExhausted {
 			return err
 		}
-		return verrors.FromStatusError(errors.WithStack(err))
+		return verrors.FromStatusError(err)
 	}
 	return nil
 }
@@ -102,13 +105,15 @@ func (c *metadataRepositoryClient) UnregisterTopic(ctx context.Context, topicID 
 		TopicID: topicID,
 	}
 
-	_, err := c.client.UnregisterTopic(ctx, req)
-	return verrors.FromStatusError(errors.WithStack(err))
+	if _, err := c.client.UnregisterTopic(ctx, req); err != nil {
+		return verrors.FromStatusError(err)
+	}
+	return nil
 }
 
 func (c *metadataRepositoryClient) RegisterLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
 	if !ls.Valid() {
-		return errors.WithStack(verrors.ErrInvalid)
+		return verrors.ErrInvalid
 	}
 
 	req := &mrpb.LogStreamRequest{
@@ -119,7 +124,7 @@ func (c *metadataRepositoryClient) RegisterLogStream(ctx context.Context, ls *va
 		if code := status.Code(err); code == codes.ResourceExhausted {
 			return err
 		}
-		return verrors.FromStatusError(errors.WithStack(err))
+		return verrors.FromStatusError(err)
 	}
 	return nil
 }
@@ -130,26 +135,30 @@ func (c *metadataRepositoryClient) UnregisterLogStream(ctx context.Context, lsID
 			LogStreamID: lsID,
 		},
 	}
-	_, err := c.client.UnregisterLogStream(ctx, req)
-	return verrors.FromStatusError(errors.WithStack(err))
+	if _, err := c.client.UnregisterLogStream(ctx, req); err != nil {
+		return verrors.FromStatusError(err)
+	}
+	return nil
 }
 
 func (c *metadataRepositoryClient) UpdateLogStream(ctx context.Context, ls *varlogpb.LogStreamDescriptor) error {
 	if !ls.Valid() {
-		return errors.WithStack(verrors.ErrInvalid)
+		return verrors.ErrInvalid
 	}
 
 	req := &mrpb.LogStreamRequest{
 		LogStream: ls,
 	}
-	_, err := c.client.UpdateLogStream(ctx, req)
-	return verrors.FromStatusError(errors.WithStack(err))
+	if _, err := c.client.UpdateLogStream(ctx, req); err != nil {
+		return verrors.FromStatusError(err)
+	}
+	return nil
 }
 
 func (c *metadataRepositoryClient) GetMetadata(ctx context.Context) (*varlogpb.MetadataDescriptor, error) {
 	rsp, err := c.client.GetMetadata(ctx, &mrpb.GetMetadataRequest{})
 	if err != nil {
-		return nil, verrors.FromStatusError(errors.WithStack(err))
+		return nil, verrors.FromStatusError(err)
 	}
 	return rsp.GetMetadata(), nil
 }
@@ -157,7 +166,7 @@ func (c *metadataRepositoryClient) GetMetadata(ctx context.Context) (*varlogpb.M
 func (c *metadataRepositoryClient) Seal(ctx context.Context, lsID types.LogStreamID) (types.GLSN, error) {
 	rsp, err := c.client.Seal(ctx, &mrpb.SealRequest{LogStreamID: lsID})
 	if err != nil {
-		return types.InvalidGLSN, verrors.FromStatusError(errors.WithStack(err))
+		return types.InvalidGLSN, verrors.FromStatusError(err)
 	}
 
 	return rsp.LastCommittedGLSN, nil
@@ -166,7 +175,7 @@ func (c *metadataRepositoryClient) Seal(ctx context.Context, lsID types.LogStrea
 func (c *metadataRepositoryClient) Unseal(ctx context.Context, lsID types.LogStreamID) error {
 	_, err := c.client.Unseal(ctx, &mrpb.UnsealRequest{LogStreamID: lsID})
 	if err != nil {
-		return verrors.FromStatusError(errors.WithStack(err))
+		return verrors.FromStatusError(err)
 	}
 	return nil
 }

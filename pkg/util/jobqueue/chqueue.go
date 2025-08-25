@@ -3,8 +3,6 @@ package jobqueue
 import (
 	"context"
 
-	"github.com/pkg/errors"
-
 	"github.com/kakao/varlog/pkg/verrors"
 )
 
@@ -17,7 +15,7 @@ var _ JobQueue = (*chQueue)(nil)
 
 func NewChQueue(queueSize int) (JobQueue, error) {
 	if queueSize <= 0 {
-		return nil, errors.WithStack(verrors.ErrInvalid)
+		return nil, verrors.ErrInvalid
 	}
 	q := &chQueue{
 		queue:    make(chan interface{}, queueSize),
