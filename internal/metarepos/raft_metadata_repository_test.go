@@ -29,7 +29,10 @@ import (
 	"github.com/kakao/varlog/proto/varlogpb"
 )
 
-const rpcTimeout = 3 * time.Second
+const (
+	testRPCTimeout     = 3 * time.Second
+	testContextTimeout = 5 * time.Second
+)
 
 type testMetadataRepoCluster struct {
 	nrRep             int
@@ -62,7 +65,7 @@ func newTestMetadataRepoCluster(t *testing.T, n, nrRep int, increseUncommit bool
 		reporterClientFac: sncf,
 		logger:            zap.L(),
 		portLease:         portLease,
-		rpcTimeout:        rpcTimeout,
+		rpcTimeout:        testRPCTimeout,
 	}
 
 	for i := range clus.peers {
@@ -98,7 +101,7 @@ func (clus *testMetadataRepoCluster) createNode(t *testing.T, idx int, join bool
 		WithReplicationFactor(clus.nrRep),
 		WithRaftAddress(clus.peers[idx]),
 		WithRPCAddress(":0"),
-		WithRPCTimeout(vtesting.TimeoutAccordingToProcCnt(DefaultRPCTimeout)),
+		WithRPCTimeout(clus.rpcTimeout),
 		WithTelemetryCollectorName("nop"),
 		WithTelemetryCollectorEndpoint("localhost:55680"),
 		WithLogger(clus.logger),
@@ -293,7 +296,7 @@ func (clus *testMetadataRepoCluster) initDummyStorageNode(t *testing.T, nrSN, nr
 			},
 		}
 
-		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+		rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 		defer cancel()
 
 		err := clus.nodes[0].RegisterStorageNode(rctx, sn)
@@ -302,7 +305,7 @@ func (clus *testMetadataRepoCluster) initDummyStorageNode(t *testing.T, nrSN, nr
 		lsID := types.LogStreamID(snID)
 		ls := makeLogStream(types.TopicID(i%nrTopic), lsID, []types.StorageNodeID{snID})
 
-		rctx, cancel = context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+		rctx, cancel = context.WithTimeout(t.Context(), testContextTimeout)
 		defer cancel()
 
 		err = clus.nodes[0].RegisterLogStream(rctx, ls)
@@ -721,8 +724,6 @@ func TestMRGlobalCommit(t *testing.T) {
 					return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 				}), ShouldBeTrue)
 
-				time.Sleep(vtesting.TimeoutUnitTimesFactor(1))
-
 				So(testutil.CompareWaitN(50, func() bool {
 					hwm, _ := mr.GetLastCommitResults().LastHighWatermark(topicID, -1)
 					return hwm == types.GLSN(5)
@@ -860,7 +861,7 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 			},
 		}
 
-		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+		rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 		defer cancel()
 
 		err := clus.nodes[0].RegisterStorageNode(rctx, sn)
@@ -874,7 +875,7 @@ func TestMRSimpleReportNCommit(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
-		rctx, cancel = context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+		rctx, cancel = context.WithTimeout(t.Context(), testContextTimeout)
 		defer cancel()
 
 		err = clus.nodes[0].RegisterLogStream(rctx, ls)
@@ -912,7 +913,7 @@ func TestMRRequestMap(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(1))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 			st.Done()
 			mr.RegisterStorageNode(rctx, sn) //nolint:errcheck,revive // TODO:: Handle an error returned.
@@ -963,7 +964,7 @@ func TestMRRequestMap(t *testing.T) {
 		}()
 
 		st.Wait()
-		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(2))
+		rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 		defer cancel()
 		err := mr.RegisterStorageNode(rctx, sn)
 
@@ -984,7 +985,7 @@ func TestMRRequestMap(t *testing.T) {
 			},
 		}
 
-		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(1))
+		rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 		defer cancel()
 
 		requestNum := mr.requestNum.Load()
@@ -1136,7 +1137,7 @@ func TestMRGetLastCommitted(t *testing.T) {
 			})
 
 			Convey("getLastCommitted should return same for sealed LS", func(ctx C) {
-				rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+				rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 				defer cancel()
 				_, err := mr.Seal(rctx, lsIds[1])
 				So(err, ShouldBeNil)
@@ -1249,7 +1250,7 @@ func TestMRSeal(t *testing.T) {
 				return mr.proposeReport(report.StorageNodeID, report.UncommitReport) == nil
 			}), ShouldBeTrue)
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 			lc, err := mr.Seal(rctx, lsIDs[1])
 			So(err, ShouldBeNil)
@@ -1257,7 +1258,7 @@ func TestMRSeal(t *testing.T) {
 
 			Convey("Seal should return same last committed", func(ctx C) {
 				for i := 0; i < 10; i++ {
-					rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+					rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 					defer cancel()
 					lc2, err := mr.Seal(rctx, lsIDs[1])
 					So(err, ShouldBeNil)
@@ -1341,7 +1342,7 @@ func TestMRUnseal(t *testing.T) {
 			return hwm == types.GLSN(5)
 		}), ShouldBeTrue)
 
-		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+		rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 		defer cancel()
 		sealedHWM, err := mr.Seal(rctx, lsIDs[1])
 
@@ -1370,7 +1371,7 @@ func TestMRUnseal(t *testing.T) {
 		sealedVer := mr.getLastCommitVersion(topicID, lsIDs[1])
 
 		Convey("Unealed LS should update report", func(ctx C) {
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 			err := mr.Unseal(rctx, lsIDs[1])
 			So(err, ShouldBeNil)
@@ -1446,7 +1447,7 @@ func TestMRUpdateLogStream(t *testing.T) {
 		}), ShouldBeTrue)
 
 		Convey("When Update LogStream", func() {
-			rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(context.TODO(), testContextTimeout)
 			defer cancel()
 			_, err = mr.Seal(rctx, lsID)
 			So(err, ShouldBeNil)
@@ -1523,7 +1524,7 @@ func TestMRUpdateLogStreamExclusive(t *testing.T) {
 		}), ShouldBeTrue)
 
 		Convey("When Update LogStream with no overlapping SN", func() {
-			rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(context.TODO(), testContextTimeout)
 			defer cancel()
 			_, err = mr.Seal(rctx, lsID)
 			So(err, ShouldBeNil)
@@ -1596,7 +1597,7 @@ func TestMRUpdateLogStreamUnsafe(t *testing.T) {
 				return cr.HighWatermark != types.InvalidGLSN
 			}), ShouldBeTrue)
 
-			rctx, cancel := context.WithTimeout(context.TODO(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(context.TODO(), testContextTimeout)
 			defer cancel()
 			_, err = mr.Seal(rctx, lsID)
 			So(err, ShouldBeNil)
@@ -1635,7 +1636,7 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 				},
 			}
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 
 			err := clus.nodes[0].RegisterStorageNode(rctx, sn)
@@ -1648,7 +1649,7 @@ func TestMRFailoverLeaderElection(t *testing.T) {
 		lsID := types.MinLogStreamID
 		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
 
-		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+		rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 		defer cancel()
 
 		err = clus.nodes[0].RegisterLogStream(rctx, ls)
@@ -1704,7 +1705,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 				},
 			}
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(200))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 
 			err := clus.nodes[0].RegisterStorageNode(rctx, sn)
@@ -1717,7 +1718,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 		lsID := types.MinLogStreamID
 		ls := makeLogStream(types.TopicID(1), lsID, snIDs)
 
-		rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(200))
+		rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 		defer cancel()
 
 		err = clus.nodes[0].RegisterLogStream(rctx, ls)
@@ -1733,7 +1734,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 			So(err, ShouldBeNil)
 			appliedIdx := info.AppliedIndex
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(200))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 
 			So(clus.nodes[0].AddPeer(rctx,
@@ -1759,7 +1760,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 						},
 					}
 
-					rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(200))
+					rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 					defer cancel()
 
 					err := clus.nodes[newNode].RegisterStorageNode(rctx, sn)
@@ -1796,7 +1797,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 					So(err, ShouldBeNil)
 					appliedIdx := info.AppliedIndex
 
-					rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(200))
+					rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 					defer cancel()
 
 					So(clus.nodes[0].AddPeer(rctx,
@@ -1821,7 +1822,7 @@ func TestMRFailoverJoinNewNode(t *testing.T) {
 							},
 						}
 
-						rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(200))
+						rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 						defer cancel()
 
 						err := clus.nodes[newNode].RegisterStorageNode(rctx, sn)
@@ -1868,7 +1869,7 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 			So(err, ShouldBeNil)
 			appliedIdx := info.AppliedIndex
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 
 			So(clus.nodes[checkNode].RemovePeer(rctx,
@@ -1898,7 +1899,7 @@ func TestMRFailoverLeaveNode(t *testing.T) {
 			So(err, ShouldBeNil)
 			appliedIdx := info.AppliedIndex
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 
 			So(clus.nodes[checkNode].RemovePeer(rctx,
@@ -1947,7 +1948,7 @@ func TestMRFailoverRestart(t *testing.T) {
 			clus.appendNewNode(t)
 			clus.startNode(t, newNode)
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 
 			So(clus.nodes[leader].AddPeer(rctx,
@@ -1982,7 +1983,7 @@ func TestMRFailoverRestart(t *testing.T) {
 			clus.stopNode(t, restartNode)
 			clus.stopNode(t, leaveNode)
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 
 			So(clus.nodes[leader].RemovePeer(rctx,
@@ -2040,7 +2041,7 @@ func TestMRLoadSnapshot(t *testing.T) {
 				},
 			}
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 
 			err := clus.nodes[restartNode].RegisterStorageNode(rctx, sn)
@@ -2116,7 +2117,7 @@ func TestMRRemoteSnapshot(t *testing.T) {
 				},
 			}
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 
 			err := clus.nodes[leader].RegisterStorageNode(rctx, sn)
@@ -2134,7 +2135,7 @@ func TestMRRemoteSnapshot(t *testing.T) {
 			clus.appendNewNode(t)
 			clus.startNode(t, newNode)
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 
 			So(clus.nodes[leader].AddPeer(rctx,
@@ -2153,7 +2154,7 @@ func TestMRRemoteSnapshot(t *testing.T) {
 
 				Convey("Then replication should be operate", func(ctx C) {
 					for i := range snIDs {
-						rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(100))
+						rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 						defer cancel()
 
 						err := clus.nodes[leader].UnregisterStorageNode(rctx, snIDs[i])
@@ -2196,7 +2197,7 @@ func TestMRFailoverRestartWithSnapshot(t *testing.T) {
 			clus.stopNode(t, restartNode)
 			clus.stopNode(t, leaveNode)
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 
 			So(clus.nodes[leader].RemovePeer(rctx,
@@ -2304,7 +2305,7 @@ func TestMRFailoverRestartAlreadyLeavedNode(t *testing.T) {
 
 			clus.stopNode(t, restartNode)
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 
 			So(clus.nodes[leader].RemovePeer(rctx,
@@ -2363,7 +2364,7 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 					},
 				}
 
-				rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+				rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 				defer cancel()
 
 				err := clus.nodes[leader].RegisterStorageNode(rctx, sn)
@@ -2382,7 +2383,7 @@ func TestMRFailoverRecoverReportCollector(t *testing.T) {
 			lsID := types.MinLogStreamID + types.LogStreamID(i)
 			ls := makeLogStream(types.TopicID(1), lsID, snIDs[i%nrStorageNode])
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 
 			err := clus.nodes[0].RegisterLogStream(rctx, ls)
@@ -2435,7 +2436,7 @@ func TestMRProposeTimeout(t *testing.T) {
 				},
 			}
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 			err := mr.RegisterStorageNode(rctx, sn)
 			Convey("Then it should be timed out", func(ctx C) {
@@ -2468,7 +2469,7 @@ func TestMRProposeRetry(t *testing.T) {
 				},
 			}
 
-			rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+			rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 			defer cancel()
 			err := clus.nodes[leader].RegisterStorageNode(rctx, sn)
 
@@ -2512,7 +2513,7 @@ func TestMRScaleOutJoin(t *testing.T) {
 				clus.appendNewNode(t)
 				clus.startNode(t, newNode)
 
-				rctx, cancel := context.WithTimeout(context.Background(), vtesting.TimeoutUnitTimesFactor(50))
+				rctx, cancel := context.WithTimeout(t.Context(), testContextTimeout)
 				defer cancel()
 
 				So(clus.nodes[0].AddPeer(rctx,
