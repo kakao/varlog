@@ -61,6 +61,7 @@ func newStore(path string, opts ...StoreOption) (*store, error) {
 		ErrorIfExists:               false,
 		FlushDelayDeleteRange:       s.trimDelay,
 		TargetByteDeletionRate:      s.trimRateByte,
+		FormatMajorVersion:          pebble.FormatVirtualSSTables,
 	}
 	pebbleOpts.Levels[0].TargetFileSize = cfg.l0TargetFileSize
 	for i := range pebbleOpts.Levels {
