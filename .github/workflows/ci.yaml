@@ -72,7 +72,7 @@ jobs:
           chmod +x ${PWD}/bin/grpc-health-probe
           echo "${PWD}/bin" >> $GITHUB_PATH
       - name: Install Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install pytest
