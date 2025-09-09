@@ -158,6 +158,7 @@ func (sn *StorageNode) loadLogStreamReplicas(dataDirs []volume.DataDir) error {
 func (sn *StorageNode) Serve() error {
 	sn.mu.Lock()
 	if sn.closed {
+		sn.mu.Unlock()
 		return snerrors.ErrClosed
 	}
 	if sn.lis != nil {
