@@ -44,7 +44,9 @@ func newStore(path string, opts ...StoreOption) (*store, error) {
 	}
 	s.writeOpts = &pebble.WriteOptions{Sync: cfg.syncWAL}
 
+	logger := newLogAdaptor(s.logger)
 	pebbleOpts := &pebble.Options{
+		Logger:                      logger,
 		Cache:                       s.cache.get(),
 		DisableWAL:                  !s.wal,
 		WALBytesPerSync:             s.walBytesPerSync,
@@ -79,7 +81,7 @@ func newStore(path string, opts ...StoreOption) (*store, error) {
 	pebbleOpts.FlushSplitBytes = s.flushSplitBytes
 	pebbleOpts.EnsureDefaults()
 
-	el := pebble.MakeLoggingEventListener(newLogAdaptor(s.logger))
+	el := pebble.MakeLoggingEventListener(logger)
 	pebbleOpts.EventListener = &el
 	// Enabled events:
 	//  - BackgroundError
