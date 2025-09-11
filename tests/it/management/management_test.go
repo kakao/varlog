@@ -565,14 +565,16 @@ func TestSyncLogStreamWithAutoUnseal(t *testing.T) {
 	assert.False(t, lsd.IsReplica(oldsnid))
 
 	// Wait for synchronization of logs and unsealing new replica.
-	assert.Eventually(t, func() bool {
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		snmd, err := adm.GetStorageNode(context.Background(), newsnid)
-		assert.NoError(t, err)
+		if !assert.NoError(c, err) {
+			return
+		}
 
 		lsrmd, ok := snmd.GetLogStream(lsid)
-		assert.True(t, ok)
-		return lsrmd.LocalHighWatermark.GLSN == types.GLSN(numLogs) &&
-			lsrmd.Status == varlogpb.LogStreamStatusRunning
+		assert.True(c, ok)
+		assert.Equal(c, types.GLSN(numLogs), lsrmd.LocalHighWatermark.GLSN)
+		assert.Equal(c, varlogpb.LogStreamStatusRunning, lsrmd.Status)
 	}, 10*tick, tick)
 }
 
@@ -918,7 +920,7 @@ func TestAddTopic(t *testing.T) {
 						break
 					}
 				}
-				return
+				return err
 			})
 		}
 
@@ -950,7 +952,7 @@ func TestAddTopic(t *testing.T) {
 						break
 					}
 				}
-				return
+				return err
 			})
 
 			Convey("Then it should appendable", func(ctx C) {
