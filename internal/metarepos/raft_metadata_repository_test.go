@@ -1499,9 +1499,9 @@ func TestMRUpdateLogStream(t *testing.T) {
 				err = mr.UnregisterStorageNode(t.Context(), snIDs[0])
 				So(err, ShouldBeNil)
 
-				require.EventuallyWithT(t, func(c *assert.CollectT) {
+				require.Eventually(t, func() bool {
 					reporterClient := clus.reporterClientFac.(*DummyStorageNodeClientFactory).lookupClient(snIDs[0])
-					assert.Nil(c, reporterClient)
+					return reporterClient == nil
 				}, testDuration, testTick)
 
 				require.EventuallyWithT(t, func(c *assert.CollectT) {
