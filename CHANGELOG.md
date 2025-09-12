@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.30.0](https://github.com/kakao/varlog/compare/v0.29.0...v0.30.0) (2025-09-12)
+
+
+### Features
+
+* **storage:** set logger for pebble storage engine ([bc99a0b](https://github.com/kakao/varlog/commit/bc99a0b308d15168816fa5647fd3c795568f118a))
+* **storage:** set Pebble format to FormatVirtualSSTables ([0e6bb54](https://github.com/kakao/varlog/commit/0e6bb5479e8b67426a50945aff216713e247e778))
+
+
+### Bug Fixes
+
+* **storagenode:** fix deadlock in Serve method ([d8548c5](https://github.com/kakao/varlog/commit/d8548c570c093f8e8adb3ca73ccb6cc87dd77ba2))
+
 ## [0.29.0](https://github.com/kakao/varlog/compare/v0.28.2...v0.29.0) (2025-07-27)
 
 
