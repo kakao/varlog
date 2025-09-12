@@ -409,13 +409,13 @@ func TestStorageNode_InvalidConfig(t *testing.T) {
 
 	// bad volume: unreadable
 	badVolume = t.TempDir()
-	assert.NoError(t, os.Chmod(badVolume, 0200))
+	assert.NoError(t, os.Chmod(badVolume, 0o200))
 	_, err = NewStorageNode(
 		WithListenAddress("127.0.0.1:0"),
 		WithVolumes(badVolume),
 	)
 	assert.Error(t, err)
-	assert.NoError(t, os.Chmod(badVolume, 0700))
+	assert.NoError(t, os.Chmod(badVolume, 0o700))
 
 	// bad volume: duplicated settings
 	badVolume = t.TempDir()
@@ -2531,8 +2531,9 @@ func TestStorageNode_AppendAndSeal(t *testing.T) {
 			// wait for log entries written
 			require.EventuallyWithT(t, func(collect *assert.CollectT) {
 				reports := reportcommitter.TestGetReport(t, addr)
-				assert.Len(collect, reports, 1)
-				assert.Equal(collect, committedLength, reports[0].UncommittedLLSNLength)
+				if assert.Len(collect, reports, 1) {
+					assert.Equal(collect, committedLength, reports[0].UncommittedLLSNLength)
+				}
 			}, time.Second, 10*time.Millisecond)
 
 			require.EventuallyWithT(t, func(collect *assert.CollectT) {
@@ -2557,11 +2558,13 @@ func TestStorageNode_AppendAndSeal(t *testing.T) {
 		go func() {
 			defer wgAppend.Done()
 
-			// wait for log entries written
+			// wait for log entries committed
 			require.EventuallyWithT(t, func(collect *assert.CollectT) {
 				reports := reportcommitter.TestGetReport(t, addr)
-				assert.Len(collect, reports, 1)
-				assert.Equal(collect, committedLength, reports[0].UncommittedLLSNLength)
+				if assert.Len(collect, reports, 1) {
+					assert.Equal(collect, highWatermark, reports[0].HighWatermark)
+					assert.Equal(collect, version, reports[0].Version)
+				}
 			}, time.Second, 10*time.Millisecond)
 
 			require.EventuallyWithT(t, func(collect *assert.CollectT) {
