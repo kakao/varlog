@@ -81,29 +81,32 @@ func newStore(path string, opts ...StoreOption) (*store, error) {
 	pebbleOpts.FlushSplitBytes = s.flushSplitBytes
 	pebbleOpts.EnsureDefaults()
 
-	el := pebble.MakeLoggingEventListener(logger)
-	pebbleOpts.EventListener = &el
-	// Enabled events:
-	//  - BackgroundError
-	//  - DiskSlow
-	//  - FormatUpgrade
-	//  - WriteStallBegin
-	//  - WriteStallEnd
-	pebbleOpts.EventListener.FlushBegin = nil
-	pebbleOpts.EventListener.FlushEnd = nil
-	pebbleOpts.EventListener.ManifestCreated = nil
-	pebbleOpts.EventListener.ManifestDeleted = nil
-	pebbleOpts.EventListener.TableCreated = nil
-	pebbleOpts.EventListener.TableDeleted = nil
-	pebbleOpts.EventListener.TableIngested = nil
-	pebbleOpts.EventListener.TableStatsLoaded = nil
-	pebbleOpts.EventListener.TableValidated = nil
-	pebbleOpts.EventListener.WALCreated = nil
-	pebbleOpts.EventListener.WALDeleted = nil
-	if !s.verbose {
-		pebbleOpts.EventListener.CompactionBegin = nil
-		pebbleOpts.EventListener.CompactionEnd = nil
+	eventListener := &pebble.EventListener{
+		BackgroundError: func(err error) {
+			s.logger.Info("background error", zap.Error(err))
+		},
+		DiskSlow: func(info pebble.DiskSlowInfo) {
+			s.logger.Info(info.String())
+		},
+		FormatUpgrade: func(v pebble.FormatMajorVersion) {
+			s.logger.Info("upgraded to format version", zap.String("version", v.String()))
+		},
+		WriteStallBegin: func(info pebble.WriteStallBeginInfo) {
+			s.logger.Info("write stall beginning", zap.String("reason", info.Reason))
+		},
+		WriteStallEnd: func() {
+			s.logger.Info("write stall ending")
+		},
 	}
+	if s.verbose {
+		eventListener.CompactionBegin = func(info pebble.CompactionInfo) {
+			s.logger.Info(info.String())
+		}
+		eventListener.CompactionEnd = func(info pebble.CompactionInfo) {
+			s.logger.Info(info.String())
+		}
+	}
+	pebbleOpts.EventListener = eventListener
 
 	if s.readOnly {
 		pebbleOpts.ReadOnly = true
