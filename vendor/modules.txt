@@ -104,7 +104,7 @@ github.com/docker/go-units
 # github.com/dustin/go-humanize v1.0.0
 ## explicit
 github.com/dustin/go-humanize
-# github.com/ebitengine/purego v0.8.3
+# github.com/ebitengine/purego v0.8.4
 ## explicit; go 1.18
 github.com/ebitengine/purego
 github.com/ebitengine/purego/internal/cgo
@@ -234,7 +234,7 @@ github.com/kr/text
 github.com/lib/pq
 github.com/lib/pq/oid
 github.com/lib/pq/scram
-# github.com/lufia/plan9stats v0.0.0-20250317134145-8bc96cf8fc35
+# github.com/lufia/plan9stats v0.0.0-20250827001030-24949be3fa54
 ## explicit; go 1.21
 github.com/lufia/plan9stats
 # github.com/mailru/easyjson v0.7.7
@@ -289,8 +289,8 @@ github.com/rogpeppe/go-internal/fmtsort
 # github.com/russross/blackfriday/v2 v2.1.0
 ## explicit
 github.com/russross/blackfriday/v2
-# github.com/shirou/gopsutil/v4 v4.25.4
-## explicit; go 1.23
+# github.com/shirou/gopsutil/v4 v4.25.7
+## explicit; go 1.23.0
 github.com/shirou/gopsutil/v4/common
 github.com/shirou/gopsutil/v4/cpu
 github.com/shirou/gopsutil/v4/internal/common
@@ -381,7 +381,7 @@ go.etcd.io/etcd/server/v3/wal/walpb
 ## explicit; go 1.22.0
 go.opentelemetry.io/auto/sdk
 go.opentelemetry.io/auto/sdk/internal/telemetry
-# go.opentelemetry.io/contrib/instrumentation/host v0.61.0
+# go.opentelemetry.io/contrib/instrumentation/host v0.63.0
 ## explicit; go 1.23.0
 go.opentelemetry.io/contrib/instrumentation/host
 # go.opentelemetry.io/contrib/instrumentation/runtime v0.63.0
@@ -403,6 +403,8 @@ go.opentelemetry.io/otel/semconv/v1.26.0
 go.opentelemetry.io/otel/semconv/v1.32.0
 go.opentelemetry.io/otel/semconv/v1.37.0
 go.opentelemetry.io/otel/semconv/v1.37.0/goconv
+go.opentelemetry.io/otel/semconv/v1.37.0/processconv
+go.opentelemetry.io/otel/semconv/v1.37.0/systemconv
 # go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.38.0
 ## explicit; go 1.23.0
 go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc
