@@ -18,7 +18,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v2 v2.27.7
 	go.etcd.io/etcd/client/pkg/v3 v3.6.4
-	go.etcd.io/etcd/raft/v3 v3.5.22
+	go.etcd.io/etcd/raft/v3 v3.5.23
 	go.etcd.io/etcd/server/v3 v3.5.21
 	go.opentelemetry.io/contrib/instrumentation/host v0.61.0
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.62.0
