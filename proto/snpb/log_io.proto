@@ -36,8 +36,9 @@ message AppendRequest {
 }
 
 message AppendResult {
+  reserved = 2;
+
   varlogpb.LogEntryMeta meta = 1 [(gogoproto.nullable) = false];
-  string error = 2 [deprecated = true];
 }
 
 // AppendResponse is a response message of Append RPC.
