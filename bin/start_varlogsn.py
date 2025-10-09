@@ -174,56 +174,6 @@ def start(args: argparse.Namespace) -> None:
             if args.append_pipeline_size:
                 cmd.append(f"--append-pipeline-size={args.append_pipeline_size}")
 
-            # storage options
-            if args.storage_datadb_disable_wal:
-                cmd.append("--storage-datadb-disable-wal")
-            if args.storage_datadb_no_sync:
-                cmd.append("--storage-datadb-no-sync")
-            if args.storage_commitdb_disable_wal:
-                cmd.append("--storage-commitdb-disable-wal")
-            if args.storage_commitdb_no_sync:
-                cmd.append("--storage-commitdb-no-sync")
-            if args.storage_l0_compaction_file_threshold:
-                cmd.append(
-                    f"--storage-l0-compaction-file-threshold={args.storage_l0_compaction_file_threshold}"
-                )
-            if args.storage_l0_compaction_threshold:
-                cmd.append(
-                    f"--storage-l0-compaction-threshold={args.storage_l0_compaction_threshold}"
-                )
-            if args.storage_l0_stop_writes_threshold:
-                cmd.append(
-                    f"--storage-l0-stop-writes-threshold={args.storage_l0_stop_writes_threshold}"
-                )
-            if args.storage_l0_target_file_size:
-                cmd.append(
-                    f"--storage-l0-target-file-size={args.storage_l0_target_file_size}"
-                )
-            if args.storage_flush_split_bytes:
-                cmd.append(
-                    f"--storage-flush-split-bytes={args.storage_flush_split_bytes}"
-                )
-            if args.storage_lbase_max_bytes:
-                cmd.append(f"--storage-lbase-max-bytes={args.storage_lbase_max_bytes}")
-            if args.storage_max_open_files:
-                cmd.append(f"--storage-max-open-files={args.storage_max_open_files}")
-            if args.storage_mem_table_size:
-                cmd.append(f"--storage-mem-table-size={args.storage_mem_table_size}")
-            if args.storage_mem_table_stop_writes_threshold:
-                cmd.append(
-                    f"--storage-mem-table-stop-writes-threshold={args.storage_mem_table_stop_writes_threshold}"
-                )
-            if args.storage_max_concurrent_compaction:
-                cmd.append(
-                    f"--storage-max-concurrent-compaction={args.storage_max_concurrent_compaction}"
-                )
-            if args.storage_metrics_log_interval:
-                cmd.append(
-                    f"--storage-metrics-log-interval={args.storage_metrics_log_interval}"
-                )
-            if args.storage_verbose:
-                cmd.append("--storage-verbose")
-
             # logging options
             if args.logtostderr:
                 cmd.append("--logtostderr")
@@ -264,24 +214,6 @@ def main() -> None:
     )
     parser.add_argument("--ballast-size", type=str)
     parser.add_argument("--append-pipeline-size", type=int)
-
-    # storage options
-    parser.add_argument("--storage-datadb-disable-wal", action="store_true")
-    parser.add_argument("--storage-datadb-no-sync", action="store_true")
-    parser.add_argument("--storage-commitdb-disable-wal", action="store_true")
-    parser.add_argument("--storage-commitdb-no-sync", action="store_true")
-    parser.add_argument("--storage-l0-compaction-file-threshold", type=str)
-    parser.add_argument("--storage-l0-compaction-threshold", type=str)
-    parser.add_argument("--storage-l0-stop-writes-threshold", type=str)
-    parser.add_argument("--storage-l0-target-file-size", type=str)
-    parser.add_argument("--storage-flush-split-bytes", type=str)
-    parser.add_argument("--storage-lbase-max-bytes", type=str)
-    parser.add_argument("--storage-max-open-files", type=str)
-    parser.add_argument("--storage-mem-table-size", type=str)
-    parser.add_argument("--storage-mem-table-stop-writes-threshold", type=str)
-    parser.add_argument("--storage-max-concurrent-compaction", type=str)
-    parser.add_argument("--storage-metrics-log-interval", type=str)
-    parser.add_argument("--storage-verbose", action="store_true")
 
     # logging options
     parser.add_argument("--logtostderr", action="store_true")
