@@ -204,8 +204,8 @@ go.etcd.io/etcd/client/pkg/v3 v3.6.5 h1:Duz9fAzIZFhYWgRjp/FgNq2gO1jId9Yae/rLn3Rr
 go.etcd.io/etcd/client/pkg/v3 v3.6.5/go.mod h1:8Wx3eGRPiy0qOFMZT/hfvdos+DjEaPxdIDiCDUv/FQk=
 go.etcd.io/etcd/pkg/v3 v3.5.21 h1:jUItxeKyrDuVuWhdh0HtjUANwyuzcb7/FAeUfABmQsk=
 go.etcd.io/etcd/pkg/v3 v3.5.21/go.mod h1:wpZx8Egv1g4y+N7JAsqi2zoUiBIUWznLjqJbylDjWgU=
-go.etcd.io/etcd/raft/v3 v3.5.24 h1:2K+J2X21cuyVspdXayfhCxGBRAxMVyRrNr9q1APiHhw=
-go.etcd.io/etcd/raft/v3 v3.5.24/go.mod h1:+YVmA+bHIKxVd8xjql1HngKLic2wpBqXQVY88XyKlJQ=
+go.etcd.io/etcd/raft/v3 v3.5.25 h1:WZZ79MeJodJmQznqQ6bZOaLamelsxPcMCnvsCqRYjE0=
+go.etcd.io/etcd/raft/v3 v3.5.25/go.mod h1:Lo+X66UF2NPamAlswk5HeHdEXMHpBp4nYH7mjCk6p2k=
 go.etcd.io/etcd/server/v3 v3.5.21 h1:9w0/k12majtgarGmlMVuhwXRI2ob3/d1Ik3X5TKo0yU=
 go.etcd.io/etcd/server/v3 v3.5.21/go.mod h1:G1mOzdwuzKT1VRL7SqRchli/qcFrtLBTAQ4lV20sXXo=
 go.opentelemetry.io/auto/sdk v1.1.0 h1:cH53jehLUN6UFLY71z+NDOiNJqDdPRaXzTel0sJySYA=
