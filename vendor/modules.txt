@@ -377,8 +377,8 @@ go.etcd.io/etcd/server/v3/etcdserver/api/snap/snappb
 go.etcd.io/etcd/server/v3/etcdserver/api/v2stats
 go.etcd.io/etcd/server/v3/wal
 go.etcd.io/etcd/server/v3/wal/walpb
-# go.opentelemetry.io/auto/sdk v1.1.0
-## explicit; go 1.22.0
+# go.opentelemetry.io/auto/sdk v1.2.1
+## explicit; go 1.24.0
 go.opentelemetry.io/auto/sdk
 go.opentelemetry.io/auto/sdk/internal/telemetry
 # go.opentelemetry.io/contrib/instrumentation/host v0.63.0
@@ -489,14 +489,14 @@ go.yaml.in/yaml/v3
 golang.org/x/exp/constraints
 golang.org/x/exp/maps
 golang.org/x/exp/rand
-# golang.org/x/mod v0.27.0
-## explicit; go 1.23.0
+# golang.org/x/mod v0.28.0
+## explicit; go 1.24.0
 golang.org/x/mod/internal/lazyregexp
 golang.org/x/mod/modfile
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.43.0
-## explicit; go 1.23.0
+# golang.org/x/net v0.46.1-0.20251013234738-63d1a5100f82
+## explicit; go 1.24.0
 golang.org/x/net/http/httpguts
 golang.org/x/net/http2
 golang.org/x/net/http2/hpack
@@ -504,8 +504,8 @@ golang.org/x/net/idna
 golang.org/x/net/internal/httpcommon
 golang.org/x/net/internal/timeseries
 golang.org/x/net/trace
-# golang.org/x/oauth2 v0.30.0
-## explicit; go 1.23.0
+# golang.org/x/oauth2 v0.32.0
+## explicit; go 1.24.0
 golang.org/x/oauth2
 golang.org/x/oauth2/internal
 # golang.org/x/sync v0.18.0
@@ -519,11 +519,17 @@ golang.org/x/sys/plan9
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 golang.org/x/sys/windows/registry
-# golang.org/x/term v0.34.0
-## explicit; go 1.23.0
+# golang.org/x/telemetry v0.0.0-20250908211612-aef8a434d053
+## explicit; go 1.24.0
+golang.org/x/telemetry/counter
+golang.org/x/telemetry/internal/counter
+golang.org/x/telemetry/internal/mmap
+golang.org/x/telemetry/internal/telemetry
+# golang.org/x/term v0.36.0
+## explicit; go 1.24.0
 golang.org/x/term
-# golang.org/x/text v0.28.0
-## explicit; go 1.23.0
+# golang.org/x/text v0.30.0
+## explicit; go 1.24.0
 golang.org/x/text/cases
 golang.org/x/text/internal
 golang.org/x/text/internal/language
@@ -537,8 +543,8 @@ golang.org/x/text/unicode/norm
 # golang.org/x/time v0.9.0
 ## explicit; go 1.18
 golang.org/x/time/rate
-# golang.org/x/tools v0.36.0
-## explicit; go 1.23.0
+# golang.org/x/tools v0.37.0
+## explicit; go 1.24.0
 golang.org/x/tools/cmd/goimports
 golang.org/x/tools/go/ast/astutil
 golang.org/x/tools/go/gcexportdata
@@ -562,14 +568,14 @@ golang.org/x/tools/internal/stdlib
 golang.org/x/tools/internal/typeparams
 golang.org/x/tools/internal/typesinternal
 golang.org/x/tools/internal/versions
-# google.golang.org/genproto/googleapis/api v0.0.0-20250825161204-c5933d9347a5
-## explicit; go 1.23.0
+# google.golang.org/genproto/googleapis/api v0.0.0-20251022142026-3a174f9686a8
+## explicit; go 1.24.0
 google.golang.org/genproto/googleapis/api/httpbody
-# google.golang.org/genproto/googleapis/rpc v0.0.0-20250825161204-c5933d9347a5
-## explicit; go 1.23.0
+# google.golang.org/genproto/googleapis/rpc v0.0.0-20251022142026-3a174f9686a8
+## explicit; go 1.24.0
 google.golang.org/genproto/googleapis/rpc/errdetails
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.76.0
+# google.golang.org/grpc v1.77.0
 ## explicit; go 1.24.0
 google.golang.org/grpc
 google.golang.org/grpc/attributes
@@ -580,7 +586,6 @@ google.golang.org/grpc/balancer/endpointsharding
 google.golang.org/grpc/balancer/grpclb/state
 google.golang.org/grpc/balancer/pickfirst
 google.golang.org/grpc/balancer/pickfirst/internal
-google.golang.org/grpc/balancer/pickfirst/pickfirstleaf
 google.golang.org/grpc/balancer/roundrobin
 google.golang.org/grpc/binarylog/grpc_binarylog_v1
 google.golang.org/grpc/channelz
@@ -590,6 +595,7 @@ google.golang.org/grpc/credentials
 google.golang.org/grpc/credentials/insecure
 google.golang.org/grpc/encoding
 google.golang.org/grpc/encoding/gzip
+google.golang.org/grpc/encoding/internal
 google.golang.org/grpc/encoding/proto
 google.golang.org/grpc/experimental/stats
 google.golang.org/grpc/grpclog
